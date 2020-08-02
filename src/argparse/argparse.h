@@ -186,7 +186,7 @@ class TypeUserCallback : public UserCallback {
       : UserCallback(typeid(std::declval<T>())),
         callback_(std::move(callback)) {}
 
-private:
+ private:
   Status RunImpl(const Context& ctx) override {
     return callback_(ctx, reinterpret_cast<T*>(dest_ptr_));
   }
@@ -449,10 +449,6 @@ class Argument {
 
   void SetRequired(bool required) { is_required_ = required; }
   void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
-  // void SetGroup(std::string header) {
-  //   is_group_ = true;
-  //   help_doc_ = std::move(header);
-  // }
 
   int key() const { return key_; }
   bool is_option() const { return is_option_; }
@@ -470,7 +466,6 @@ class Argument {
     return meta_var_.c_str();
   }
 
-  // bool is_group() const { return is_group_; }
   const std::vector<std::string>& long_names() const { return long_names_; }
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
@@ -502,7 +497,6 @@ class Argument {
   std::string meta_var_;
   bool is_option_ = false;
   bool is_required_ = false;
-  // bool is_group_ = false;
 };
 
 class ArgumentBuilder {
@@ -569,51 +563,6 @@ class ArgumentHolder {
 
   ArgumentGroup add_argument_group(const char* header);
 
-  // TODO: use just-in-time compile -- done in add_argument().
-  // But the ArgumentBuilder may mutate it!
-  // Status Compile(std::vector<ArgpOption>* out) {
-  //   out->clear();
-  //   out->reserve(arguments_.size());
-
-  //   for (auto& arg : arguments_) {
-  //     auto status = arg.Finalize();
-  //     if (!status)
-  //       return status;
-  //     if (arg.is_group()) {
-  //       ArgpOption opt{};
-  //       opt.doc = arg.doc();
-  //       out->push_back(opt);
-  //       continue;
-  //     }
-
-  //     // positional isn't managed by argp.
-  //     if (!arg.is_option())
-  //       continue;
-
-  //     ArgpOption opt{};
-  //     opt.key = arg.key();
-  //     opt.name = arg.name();
-  //     opt.doc = arg.doc();
-  //     opt.arg = arg.arg();
-  //     if (!arg.is_required())
-  //       opt.flags |= OPTION_ARG_OPTIONAL;
-  //     out->push_back(opt);
-
-  //     // Handle alias.
-  //     const auto& long_names = arg.long_names();
-  //     for (auto iter = long_names.begin() + 1, end = long_names.end();
-  //          iter != end; ++iter) {
-  //       ArgpOption opt{};
-  //       opt.name = iter->c_str();
-  //       opt.flags |= OPTION_ALIAS;
-  //       out->push_back(opt);
-  //     }
-  //   }
-  //   // Ends with an empty option.
-  //   out->push_back(ArgpOption{});
-  //   return true;
-  // }
-
   const std::map<int, Argument*>& key_index() const { return key_index_; }
   const std::vector<Argument*>& positionals() const { return positionals_; }
 
@@ -654,13 +603,6 @@ class ArgumentHolder {
       options_.pop_back();
   }
 
-  // if (arg.is_group()) {
-  //   ArgpOption opt{};
-  //   opt.doc = arg.doc();
-  //   out->push_back(opt);
-  //   continue;
-  // }
-
   Status CompileSingle(Argument* arg) {
     auto status = arg->Finalize();
     if (!status)
@@ -694,7 +636,7 @@ class ArgumentHolder {
   Status CompileUntil(int limit) {
     if (next_to_compile_ >= limit || limit > arguments_.size())
       return true;
-    // list isn't random access.
+    // TODO: list isn't random access.
     auto iter = std::next(arguments_.begin(), next_to_compile_);
     for (; next_to_compile_ < limit; ++next_to_compile_, ++iter) {
       auto status = CompileSingle(&(*iter));
@@ -727,7 +669,9 @@ class ArgumentHolder {
   std::vector<Argument*> positionals_;
   // indexed by their key.
   std::map<int, Argument*> key_index_;
+  // Conflicts checking.
   std::set<std::string> name_set_;
+  // Compile result.
   std::vector<ArgpOption> options_;
   int next_to_compile_ = 0;
   bool frozen_ = false;
@@ -752,8 +696,6 @@ ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
   ArgpOption opt{};
   opt.doc = header;
   options_.push_back(opt);
-  // Argument& arg = arguments_.emplace_back();
-  // arg.SetGroup(header);
   return ArgumentGroup(this);
 }
 
@@ -766,21 +708,9 @@ class ArgpParser {
   using ArgpErrorType = ::error_t;
   using ArgpHelpFilterCallback = decltype(Argp::help_filter);
 
-  ArgpParser(ArgumentHolder* holder) : holder_(holder) {
+  explicit ArgpParser(ArgumentHolder* holder) : holder_(holder) {
     argp_.parser = &ArgpParser::Callback;
   }
-
-  // // Must be called before ParseArgs() can be called.
-  // Status Init(ArgumentHolder* holder) {
-  //   std::vector<ArgpOption> options;
-  //   auto rv = holder->Compile(&options);
-  //   if (!rv)
-  //     return rv;
-  //   options_ = std::move(options);
-  //   holder_ = holder;
-  //   argp_.options = options_.data();
-  //   return true;
-  // }
 
   // These storage is managed by caller to save a lot of strings.
   // If the user makes no demand, then all of these field is null.
@@ -799,6 +729,7 @@ class ArgpParser {
     int arg_index = -1;
     ArgumentHolder::FrozenScope scope(holder_);
     argp_.options = holder_->frozen_options();
+    // TODO: error handling.
     auto err =
         ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
   }
@@ -868,7 +799,6 @@ class ArgpParser {
   // Holder tell us everythings about user's arguments.
   ArgumentHolder* holder_ = {};
   Argp argp_ = {};
-  // std::vector<ArgpOption> options_;
   int parser_flags_ = 0;
 };
 
@@ -969,7 +899,7 @@ class ArgumentParser : private ArgumentHolder {
   // TODO: parse_known_args()
 
  private:
-  ArgpParser parser_ = {this};
+  ArgpParser parser_ = ArgpParser{this};
   std::string program_doc_;
 };
 
