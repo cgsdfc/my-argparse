@@ -449,10 +449,10 @@ class Argument {
 
   void SetRequired(bool required) { is_required_ = required; }
   void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
-  void SetGroup(std::string header) {
-    is_group_ = true;
-    help_doc_ = std::move(header);
-  }
+  // void SetGroup(std::string header) {
+  //   is_group_ = true;
+  //   help_doc_ = std::move(header);
+  // }
 
   int key() const { return key_; }
   bool is_option() const { return is_option_; }
@@ -470,7 +470,7 @@ class Argument {
     return meta_var_.c_str();
   }
 
-  bool is_group() const { return is_group_; }
+  // bool is_group() const { return is_group_; }
   const std::vector<std::string>& long_names() const { return long_names_; }
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
@@ -481,7 +481,7 @@ class Argument {
 
   Status Finalize() {
     // No dest provided, but still can have UserCallback. No need to Bind().
-    if (is_group() || !dest_.has_value())
+    if (!dest_.has_value())
       return true;
     if (!user_callback_)
       return Status(
@@ -496,13 +496,13 @@ class Argument {
   int key_ = -1;
   std::optional<Dest> dest_;                     // Maybe null.
   std::unique_ptr<UserCallback> user_callback_;  // Maybe null.
-  std::string help_doc_; // If this is a group, help_doc_ stores group header.
+  std::string help_doc_;
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
   std::string meta_var_;
   bool is_option_ = false;
   bool is_required_ = false;
-  bool is_group_ = false;
+  // bool is_group_ = false;
 };
 
 class ArgumentBuilder {
@@ -545,6 +545,10 @@ class ArgumentHolder {
                                Action action = {}) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
+    // Compile as much as possible.
+    auto status = CompileUntil(arguments_.size());
+    DCHECK2(status, "CompileUtil() failed when add_argument()");
+
     Argument& arg = arguments_.emplace_back();
     arg.SetDest(std::move(dest));
     arg.SetHelpDoc(help);
@@ -567,53 +571,139 @@ class ArgumentHolder {
 
   // TODO: use just-in-time compile -- done in add_argument().
   // But the ArgumentBuilder may mutate it!
-  Status Compile(std::vector<ArgpOption>* out) {
-    out->clear();
-    out->reserve(arguments_.size());
+  // Status Compile(std::vector<ArgpOption>* out) {
+  //   out->clear();
+  //   out->reserve(arguments_.size());
 
-    for (auto& arg : arguments_) {
-      auto status = arg.Finalize();
-      if (!status)
-        return status;
-      if (arg.is_group()) {
-        ArgpOption opt{};
-        opt.doc = arg.doc();
-        out->push_back(opt);
-        continue;
-      }
+  //   for (auto& arg : arguments_) {
+  //     auto status = arg.Finalize();
+  //     if (!status)
+  //       return status;
+  //     if (arg.is_group()) {
+  //       ArgpOption opt{};
+  //       opt.doc = arg.doc();
+  //       out->push_back(opt);
+  //       continue;
+  //     }
 
-      // positional isn't managed by argp.
-      if (!arg.is_option())
-        continue;
+  //     // positional isn't managed by argp.
+  //     if (!arg.is_option())
+  //       continue;
 
-      ArgpOption opt{};
-      opt.key = arg.key();
-      opt.name = arg.name();
-      opt.doc = arg.doc();
-      opt.arg = arg.arg();
-      if (!arg.is_required())
-        opt.flags |= OPTION_ARG_OPTIONAL;
-      out->push_back(opt);
+  //     ArgpOption opt{};
+  //     opt.key = arg.key();
+  //     opt.name = arg.name();
+  //     opt.doc = arg.doc();
+  //     opt.arg = arg.arg();
+  //     if (!arg.is_required())
+  //       opt.flags |= OPTION_ARG_OPTIONAL;
+  //     out->push_back(opt);
 
-      // Handle alias.
-      const auto& long_names = arg.long_names();
-      for (auto iter = long_names.begin() + 1, end = long_names.end();
-           iter != end; ++iter) {
-        ArgpOption opt{};
-        opt.name = iter->c_str();
-        opt.flags |= OPTION_ALIAS;
-        out->push_back(opt);
-      }
-    }
-    // Ends with an empty option.
-    out->push_back(ArgpOption{});
-    return true;
-  }
+  //     // Handle alias.
+  //     const auto& long_names = arg.long_names();
+  //     for (auto iter = long_names.begin() + 1, end = long_names.end();
+  //          iter != end; ++iter) {
+  //       ArgpOption opt{};
+  //       opt.name = iter->c_str();
+  //       opt.flags |= OPTION_ALIAS;
+  //       out->push_back(opt);
+  //     }
+  //   }
+  //   // Ends with an empty option.
+  //   out->push_back(ArgpOption{});
+  //   return true;
+  // }
 
   const std::map<int, Argument*>& key_index() const { return key_index_; }
   const std::vector<Argument*>& positionals() const { return positionals_; }
 
+  class FrozenScope {
+   public:
+    explicit FrozenScope(ArgumentHolder* holder) : holder_(holder) {
+      holder_->EnterFrozenScope();
+    }
+    ~FrozenScope() { holder_->LeaveFrozenScope(); }
+
+   private:
+    ArgumentHolder* holder_;
+  };
+
+  const ArgpOption* frozen_options() const {
+    DCHECK(frozen_);
+    return options_.data();
+  }
+
  private:
+  void EnterFrozenScope() {
+    if (frozen_)
+      return;
+    frozen_ = true;
+    // If nothing added..
+    if (arguments_.empty()) {
+      DCHECK(options_.data() == nullptr);
+      return;
+    }
+    // Compile all args.
+    CompileUntil(arguments_.size());
+    options_.push_back(ArgpOption{});
+  }
+
+  void LeaveFrozenScope() {
+    frozen_ = false;
+    if (!options_.empty())
+      options_.pop_back();
+  }
+
+  // if (arg.is_group()) {
+  //   ArgpOption opt{};
+  //   opt.doc = arg.doc();
+  //   out->push_back(opt);
+  //   continue;
+  // }
+
+  Status CompileSingle(Argument* arg) {
+    auto status = arg->Finalize();
+    if (!status)
+      return status;
+    // positional isn't managed by argp.
+    if (!arg->is_option())
+      return true;
+
+    ArgpOption opt{};
+    opt.key = arg->key();
+    opt.name = arg->name();
+    opt.doc = arg->doc();
+    opt.arg = arg->arg();
+    if (!arg->is_required())
+      opt.flags |= OPTION_ARG_OPTIONAL;
+    options_.push_back(opt);
+
+    // Handle alias.
+    const auto& long_names = arg->long_names();
+    for (auto iter = long_names.begin() + 1, end = long_names.end();
+         iter != end; ++iter) {
+      ArgpOption opt{};
+      opt.name = iter->c_str();
+      opt.flags |= OPTION_ALIAS;
+      options_.push_back(opt);
+    }
+    return true;
+  }
+
+  // Compile args [next_to_compile_, limit) to options_.
+  Status CompileUntil(int limit) {
+    if (next_to_compile_ >= limit || limit > arguments_.size())
+      return true;
+    // list isn't random access.
+    auto iter = std::next(arguments_.begin(), next_to_compile_);
+    for (; next_to_compile_ < limit; ++next_to_compile_, ++iter) {
+      auto status = CompileSingle(&(*iter));
+      if (!status)
+        return status;
+    }
+    return true;
+  }
+
   int NextKey(const Names& names) {
     return names.short_names.empty() ? next_key_++ : names.short_names[0];
   }
@@ -638,9 +728,9 @@ class ArgumentHolder {
   // indexed by their key.
   std::map<int, Argument*> key_index_;
   std::set<std::string> name_set_;
-  // TODO: compile result may be cached.
-  // Whether recompilation is needed.
-  // bool dirty_ = true;
+  std::vector<ArgpOption> options_;
+  int next_to_compile_ = 0;
+  bool frozen_ = false;
 };
 
 // Impl add_group() call.
@@ -658,8 +748,12 @@ class ArgumentGroup {
 };
 
 ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
-  Argument& arg = arguments_.emplace_back();
-  arg.SetGroup(header);
+  // Generate a group entry in the options. group id is automatically generated.
+  ArgpOption opt{};
+  opt.doc = header;
+  options_.push_back(opt);
+  // Argument& arg = arguments_.emplace_back();
+  // arg.SetGroup(header);
   return ArgumentGroup(this);
 }
 
@@ -672,19 +766,21 @@ class ArgpParser {
   using ArgpErrorType = ::error_t;
   using ArgpHelpFilterCallback = decltype(Argp::help_filter);
 
-  ArgpParser() { argp_.parser = &ArgpParser::Callback; }
-
-  // Must be called before ParseArgs() can be called.
-  Status Init(ArgumentHolder* holder) {
-    std::vector<ArgpOption> options;
-    auto rv = holder->Compile(&options);
-    if (!rv)
-      return rv;
-    options_ = std::move(options);
-    holder_ = holder;
-    argp_.options = options_.data();
-    return true;
+  ArgpParser(ArgumentHolder* holder) : holder_(holder) {
+    argp_.parser = &ArgpParser::Callback;
   }
+
+  // // Must be called before ParseArgs() can be called.
+  // Status Init(ArgumentHolder* holder) {
+  //   std::vector<ArgpOption> options;
+  //   auto rv = holder->Compile(&options);
+  //   if (!rv)
+  //     return rv;
+  //   options_ = std::move(options);
+  //   holder_ = holder;
+  //   argp_.options = options_.data();
+  //   return true;
+  // }
 
   // These storage is managed by caller to save a lot of strings.
   // If the user makes no demand, then all of these field is null.
@@ -700,8 +796,9 @@ class ArgpParser {
   void RemoveParserFlags(int flags) { parser_flags_ &= ~flags; }
 
   void ParseArgs(int argc, char** argv) {
-    DCHECK2(holder_, "Init() must be called before ParseArgs()");
     int arg_index = -1;
+    ArgumentHolder::FrozenScope scope(holder_);
+    argp_.options = holder_->frozen_options();
     auto err =
         ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
   }
@@ -769,9 +866,9 @@ class ArgpParser {
   }
 
   // Holder tell us everythings about user's arguments.
-  const ArgumentHolder* holder_ = {};
+  ArgumentHolder* holder_ = {};
   Argp argp_ = {};
-  std::vector<ArgpOption> options_;
+  // std::vector<ArgpOption> options_;
   int parser_flags_ = 0;
 };
 
@@ -857,7 +954,7 @@ class ArgumentParser : private ArgumentHolder {
   using ArgumentHolder::add_argument_group;
 
   void parse_args(int argc, const char** argv) {
-    parser_.Init(this);
+    // parser_.Init(this);
     // argp wants a char**, but most user don't expect argv being changed. So
     // cheat them.
     parser_.ParseArgs(argc, const_cast<char**>(argv));
@@ -872,7 +969,7 @@ class ArgumentParser : private ArgumentHolder {
   // TODO: parse_known_args()
 
  private:
-  ArgpParser parser_;
+  ArgpParser parser_ = {this};
   std::string program_doc_;
 };
 
