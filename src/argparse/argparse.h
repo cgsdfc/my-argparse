@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <stdexcept>  // to define ArgumentError.
 #include <type_traits>
 #include <typeindex>  // We use type_index since it is copyable.
@@ -107,17 +108,26 @@ class UserCallback {
   void* dest_ptr_ = nullptr;
 };
 
+// Why we need a default version?
+// During type-erasure of dest, a DestUserCallback will always be created, which
+// makes use of this struct. When user actually use type or action, this isn't
+// needed logically but needed syntatically.
 template <typename T>
 struct DefaultConverter {
   // Return typename of T.
-  static const char* type_name();
+  static const char* type_name() { return nullptr; }
   // Parse in, put the result into out, return error indicator.
-  static bool Parse(const std::string& in, T* out);
+  static bool Parse(const std::string& in, T* out) { return true; }
 };
 
 // This will format an error string saying that:
 // cannot parse `value' into `type_name'.
-std::string ReportError(const std::string& value, const char* type_name);
+inline std::string ReportError(const std::string& value,
+                               const char* type_name) {
+  std::ostringstream os;
+  os << "Cannot convert `" << value << "' into a value of type " << type_name;
+  return os.str();
+}
 
 // When the user merely provides a dest, we will infer from the type of the
 // pointer and provide this callback, which parses the string into the value of
