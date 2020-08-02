@@ -157,25 +157,24 @@ template <typename T>
 class TypeUserCallback : public UserCallback {
  public:
   // Report error by throwing exception.
-  using CallbackMayThrow = CallbackMayThrow<T>;
+  using TypeCallbackMayThrow = CallbackMayThrow<T>;
   // Report error by returning status.
-  using CallbackNoExcept = CallbackNoExcept<T>;
+  using TypeCallbackNoExcept = CallbackNoExcept<T>;
 
-  explicit TypeUserCallback(CallbackMayThrow callback)
+  explicit TypeUserCallback(TypeCallbackMayThrow callback)
       : TypeUserCallback(MayThrowToNoExceptAdapter{std::move(callback)}) {}
 
-  // : TypeUserCallback()
-
-  explicit TypeUserCallback(CallbackNoExcept callback)
+  explicit TypeUserCallback(TypeCallbackNoExcept callback)
       : UserCallback(typeid(std::declval<T>())),
         callback_(std::move(callback)) {}
 
+private:
   Status RunImpl(const Context& ctx) override {
     return callback_(ctx, reinterpret_cast<T*>(dest_ptr_));
   }
 
   struct MayThrowToNoExceptAdapter {
-    CallbackMayThrow callback;
+    TypeCallbackMayThrow callback;
     Status operator()(const Context& ctx, T* out) {
       try {
         *out = callback(ctx);
@@ -190,7 +189,7 @@ class TypeUserCallback : public UserCallback {
   };
 
   // We default use non-throwing callback.
-  CallbackNoExcept callback_;
+  TypeCallbackNoExcept callback_;
 };
 
 // Finally, if the user wants to do arbitray things not limited by the pattern
@@ -201,28 +200,26 @@ template <typename T>
 class ActionUserCallback : public UserCallback {
  public:
   // Report error by throwing exception.
-  using CallbackMayThrow = CallbackMayThrowVoid<T>;
+  using ActionCallbackMayThrow = CallbackMayThrowVoid<T>;
   // Report error by returning status.
-  using CallbackNoExcept = CallbackNoExcept<T>;
+  using ActionCallbackNoExcept = CallbackNoExcept<T>;
   /// XXX: It is worthy to provide two signatures?
 
-  explicit ActionUserCallback(CallbackMayThrow callback)
-      : ActionUserCallback(MayThrowToNoExceptAdapter{std::move(callback)}) {}
+  explicit ActionUserCallback(ActionCallbackMayThrow callback)
+      : ActionUserCallback(ActionCallbackNoExcept(
+            MayThrowToNoExceptAdapter{std::move(callback)})) {}
 
-  explicit ActionUserCallback(CallbackNoExcept callback)
-      : ActionUserCallback(std::move(callback)) {}
-
- private:
-  explicit ActionUserCallback(CallbackNoExcept&& callback)
+  explicit ActionUserCallback(ActionCallbackNoExcept callback)
       : UserCallback(typeid(std::declval<T>())),
         callback_(std::move(callback)) {}
 
+ private:
   Status RunImpl(const Context& ctx) override {
     return callback_(ctx, reinterpret_cast<T*>(dest_ptr_));
   }
 
   struct MayThrowToNoExceptAdapter {
-    CallbackMayThrow callback;
+    ActionCallbackMayThrow callback;
     Status operator()(const Context& ctx, T* out) {
       try {
         callback(ctx, out);
@@ -236,7 +233,7 @@ class ActionUserCallback : public UserCallback {
     }
   };
 
-  CallbackNoExcept callback_;
+  ActionCallbackNoExcept callback_;
 };
 
 namespace detail {
@@ -253,7 +250,7 @@ template <typename F> struct strip_function_object {
 };
 
 // Extracts the function signature from a function, function pointer or lambda.
-template <typename Function, typename F = std::remove_reference_t<Function>>
+template <typename Func, typename F = std::remove_reference_t<Func>>
 using function_signature_t = std::conditional_t<
     std::is_function<F>::value,
     F,
@@ -267,61 +264,29 @@ using function_signature_t = std::conditional_t<
 // clang-format on
 }  // namespace detail
 
-template <typename F>
-struct TargetTypeFromSignature;
-
-template <typename T>
-struct TargetTypeFromSignature<void(const Context&, T*)> {
-  using type = T;
-};
-
-template <typename T>
-struct TargetTypeFromSignature<Status(const Context&, T*)> {
-  using type = T;
-};
-
-template <typename T>
-struct TargetTypeFromSignature<T(const Context&)> {
-  using type = T;
-};
-
-template <typename T>
-using TargetTypeFromCallback =
-    typename TargetTypeFromSignature<detail::function_signature_t<T>>::type;
-
-// template <typename Container>
-// Status append(const Context& ctx, Container* out) {
-//   using value_type = typename Container::value_type;
-//   using Converter = DefaultConverter<value_type>;
-//   value_type item;
-//   bool rv = Converter::Parse(ctx.value, &item);
-//   if (!rv)
-//     return ReportError(ctx.value, Converter::type_name());
-//   out->push_back(std::move(item));
-//   return true;
-// }
-
 // Type-erasured
 struct Action {
   std::unique_ptr<UserCallback> callback;
   Action() = default;
-  // Action(Action&&) = default;
-  template <typename T>
-  Action(void(*cb)(const Context&, T*));
+  Action(Action&&) = default;
 
-  template <typename Func,
-            typename = std::enable_if_t<
-                std::is_class<std::remove_reference_t<Func>>{}>>
-  Action(Func&& func)
-      : callback(new ActionUserCallback<TargetTypeFromCallback<Func>>(
-            std::forward<Func>(func))) {}
+  template <typename Func, typename T>
+  void Init(Func&& func, Status (*)(const Context&, T*)) {
+    callback.reset(new ActionUserCallback<T>(
+        CallbackNoExcept<T>(std::forward<Func>(func))));
+  }
 
-  // template <typename F, typename T = TargetTypeFromCallback<F>>
-  // /* implicit */ Action(F cb)
-  //     : callback(new ActionUserCallback<T>(std::move(cb))) {}
-  // template <typename T>
-  // /* implicit */ Action(CallbackMayThrowVoid<T> cb)
-  //     : callback(new ActionUserCallback<T>(std::move(cb))) {}
+  template <typename Func, typename T>
+  void Init(Func&& func, void (*)(const Context&, T*)) {
+    callback.reset(new ActionUserCallback<T>(
+        CallbackMayThrowVoid<T>(std::forward<Func>(func))));
+  }
+
+  template <typename Func>
+  /* implicit */ Action(Func&& func) {
+    Init(std::forward<Func>(func),
+         (detail::function_signature_t<Func>*)nullptr);
+  }
 };
 
 struct Destination {
@@ -335,24 +300,25 @@ struct Destination {
   }
 };
 
-
 struct Type {
   std::unique_ptr<UserCallback> callback;
   Type() = default;
   Type(Type&&) = default;
 
-  template <typename Function>
-  /* implicit */ Type(Function&& cb) {
-    Init(std::forward<Function>(cb),
-         (detail::function_signature_t<Function>*)nullptr);
+  template <typename Func>
+  /* implicit */ Type(Func&& cb) {
+    Init(std::forward<Func>(cb), (detail::function_signature_t<Func>*)nullptr);
   }
 
-  template <typename Function, typename T>
-  void Init(Function&& cb, T (*) (const Context&)) {
-    callback.reset(new TypeUserCallback<T>(std::forward<Function>(cb)));
+  template <typename Func, typename T>
+  void Init(Func&& cb, Status (*)(const Context&, T*)) {
+    callback.reset(new TypeUserCallback<T>(std::forward<Func>(cb)));
   }
 
-  // : callback(new TypeUserCallback<T>(std::move(cb))) {}
+  template <typename Func, typename T>
+  void Init(Func&& cb, T (*)(const Context&)) {
+    callback.reset(new TypeUserCallback<T>(std::forward<Func>(cb)));
+  }
 };
 
 // A valid option name is long or short option name and not '--', '-'.
