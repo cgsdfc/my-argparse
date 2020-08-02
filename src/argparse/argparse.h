@@ -3,7 +3,7 @@
 #include <argp.h>
 #include <algorithm>
 #include <cassert>
-#include <cstring>
+#include <cstring>  // strlen()
 #include <functional>
 #include <list>
 #include <map>
@@ -14,6 +14,7 @@
 #include <stdexcept>  // to define ArgumentError.
 #include <type_traits>
 #include <typeindex>  // We use type_index since it is copyable.
+#include <vector>
 
 #define DCHECK(expr) assert(expr)
 #define DCHECK2(expr, msg) assert(expr&& msg)
@@ -564,6 +565,8 @@ class ArgumentHolder {
 
   ArgumentGroup add_argument_group(const char* header);
 
+  // TODO: use just-in-time compile -- done in add_argument().
+  // But the ArgumentBuilder may mutate it!
   Status Compile(std::vector<ArgpOption>* out) {
     out->clear();
     out->reserve(arguments_.size());
@@ -826,7 +829,11 @@ class Options {
 
 class ArgumentParser : private ArgumentHolder {
  public:
-  explicit ArgumentParser(const Options& options = {}) {
+  ArgumentParser() = default;
+
+  explicit ArgumentParser(const Options& options) { set_options(options); }
+
+  void set_options(const Options& options) {
     argp_program_version = options.program_version_;
     argp_program_bug_address = options.bug_address_;
     // TODO: may check domain?
@@ -834,8 +841,9 @@ class ArgumentParser : private ArgumentHolder {
     parser_.AddParserFlags(static_cast<int>(options.flags_));
 
     // Generate the program doc.
-    if (options.description_)
-      program_doc_.append(options.description_);
+    if (options.description_) {
+      program_doc_ = options.description_;
+    }
     if (options.after_doc_) {
       program_doc_.append({'\v'});
       program_doc_.append(options.after_doc_);
@@ -844,9 +852,6 @@ class ArgumentParser : private ArgumentHolder {
       parser_.set_doc(program_doc_.c_str());
     // args_doc is generated later.
   }
-
-  // Add a --version flag.
-  // void add_version(const char* v) { argp_program_version = v; }
 
   using ArgumentHolder::add_argument;
   using ArgumentHolder::add_argument_group;
@@ -864,6 +869,7 @@ class ArgumentParser : private ArgumentHolder {
     args_copy.push_back(nullptr);
     return parse_args(args.size(), args_copy.data());
   }
+  // TODO: parse_known_args()
 
  private:
   ArgpParser parser_;
