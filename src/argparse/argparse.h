@@ -11,6 +11,7 @@
 #include <optional>
 #include <set>
 #include <stdexcept>  // to define ArgumentError.
+#include <type_traits>
 #include <typeindex>  // We use type_index since it is copyable.
 
 #define DCHECK(expr) assert(expr)
@@ -74,12 +75,16 @@ class UserCallback {
  public:
   // Run this callback within the Context and return a status.
   Status Run(const Context& ctx) {
-    DCHECK2(dest_ptr_, "Bind() must be called before Run() can be called!");
+    // DCHECK2(dest_ptr_, "Bind() must be called before Run() can be called!");
+    // dest is optional, if no dest given, the callback will be run with a
+    // nullptr, if the user wishes so. This mostly happens with action, the user
+    // may use void as T to avoid inconvenience.
+    DCHECK2(dest_ptr_ || type_ == typeid(void),
+            "If no dest was provided, you must use void as T");
     return RunImpl(ctx);
   }
 
-  // Bind to a Dest. Make sure type matches. Bind() must be called before Run()
-  // can be called.
+  // Bind to a Dest. Make sure type matches.
   bool Bind(const Dest& dest) {
     DCHECK2(!dest_ptr_, "A UserCallback cannot be bound twice");
     if (dest.type != type_)
@@ -159,11 +164,9 @@ class TypeUserCallback : public UserCallback {
   explicit TypeUserCallback(CallbackMayThrow callback)
       : TypeUserCallback(MayThrowToNoExceptAdapter{std::move(callback)}) {}
 
-  explicit TypeUserCallback(CallbackNoExcept callback)
-      : TypeUserCallback(std::move(callback)) {}
+  // : TypeUserCallback()
 
- private:
-  explicit TypeUserCallback(CallbackNoExcept&& callback)
+  explicit TypeUserCallback(CallbackNoExcept callback)
       : UserCallback(typeid(std::declval<T>())),
         callback_(std::move(callback)) {}
 
@@ -236,6 +239,56 @@ class ActionUserCallback : public UserCallback {
   CallbackNoExcept callback_;
 };
 
+namespace detail {
+// clang-format off
+
+// Copied from pybind11.
+/// Strip the class from a method type
+template <typename T> struct remove_class { };
+template <typename C, typename R, typename... A> struct remove_class<R (C::*)(A...)> { typedef R type(A...); };
+template <typename C, typename R, typename... A> struct remove_class<R (C::*)(A...) const> { typedef R type(A...); };
+
+template <typename F> struct strip_function_object {
+    using type = typename remove_class<decltype(&F::operator())>::type;
+};
+
+// Extracts the function signature from a function, function pointer or lambda.
+template <typename Function, typename F = std::remove_reference_t<Function>>
+using function_signature_t = std::conditional_t<
+    std::is_function<F>::value,
+    F,
+    typename std::conditional_t<
+        std::is_pointer<F>::value || std::is_member_pointer<F>::value,
+        std::remove_pointer<F>,
+        strip_function_object<F>
+    >::type
+>;
+
+// clang-format on
+}  // namespace detail
+
+template <typename F>
+struct TargetTypeFromSignature;
+
+template <typename T>
+struct TargetTypeFromSignature<void(const Context&, T*)> {
+  using type = T;
+};
+
+template <typename T>
+struct TargetTypeFromSignature<Status(const Context&, T*)> {
+  using type = T;
+};
+
+template <typename T>
+struct TargetTypeFromSignature<T(const Context&)> {
+  using type = T;
+};
+
+template <typename T>
+using TargetTypeFromCallback =
+    typename TargetTypeFromSignature<detail::function_signature_t<T>>::type;
+
 // template <typename Container>
 // Status append(const Context& ctx, Container* out) {
 //   using value_type = typename Container::value_type;
@@ -252,12 +305,23 @@ class ActionUserCallback : public UserCallback {
 struct Action {
   std::unique_ptr<UserCallback> callback;
   Action() = default;
+  // Action(Action&&) = default;
   template <typename T>
-  /* implicit */ Action(CallbackNoExcept<T> cb)
-      : callback(new ActionUserCallback<T>(std::move(cb))) {}
-  template <typename T>
-  /* implicit */ Action(CallbackMayThrowVoid<T> cb)
-      : callback(new ActionUserCallback<T>(std::move(cb))) {}
+  Action(void(*cb)(const Context&, T*));
+
+  template <typename Func,
+            typename = std::enable_if_t<
+                std::is_class<std::remove_reference_t<Func>>{}>>
+  Action(Func&& func)
+      : callback(new ActionUserCallback<TargetTypeFromCallback<Func>>(
+            std::forward<Func>(func))) {}
+
+  // template <typename F, typename T = TargetTypeFromCallback<F>>
+  // /* implicit */ Action(F cb)
+  //     : callback(new ActionUserCallback<T>(std::move(cb))) {}
+  // template <typename T>
+  // /* implicit */ Action(CallbackMayThrowVoid<T> cb)
+  //     : callback(new ActionUserCallback<T>(std::move(cb))) {}
 };
 
 struct Destination {
@@ -271,15 +335,24 @@ struct Destination {
   }
 };
 
+
 struct Type {
   std::unique_ptr<UserCallback> callback;
   Type() = default;
-  template <typename T>
-  /* implicit */ Type(CallbackNoExcept<T> cb)
-      : callback(new TypeUserCallback<T>(std::move(cb))) {}
-  template <typename T>
-  /* implicit */ Type(CallbackMayThrow<T> cb)
-      : callback(new TypeUserCallback<T>(std::move(cb))) {}
+  Type(Type&&) = default;
+
+  template <typename Function>
+  /* implicit */ Type(Function&& cb) {
+    Init(std::forward<Function>(cb),
+         (detail::function_signature_t<Function>*)nullptr);
+  }
+
+  template <typename Function, typename T>
+  void Init(Function&& cb, T (*) (const Context&)) {
+    callback.reset(new TypeUserCallback<T>(std::forward<Function>(cb)));
+  }
+
+  // : callback(new TypeUserCallback<T>(std::move(cb))) {}
 };
 
 // A valid option name is long or short option name and not '--', '-'.
@@ -326,6 +399,8 @@ inline std::string ToUpper(const std::string& in) {
 
 struct Names {
   std::vector<std::string> long_names;
+
+  // TODO: Ban short name alias.
   std::vector<char> short_names;
   bool is_option;
   std::string meta_var;
@@ -390,6 +465,7 @@ class Argument {
   }
 
   void SetKey(int key) {
+    DCHECK2(is_option_, "Only option can be SetKey()");
     DCHECK(short_names_.empty() || short_names_[0] == key);
     key_ = key;
   }
@@ -401,13 +477,28 @@ class Argument {
   bool is_option() const { return is_option_; }
   bool is_required() const { return is_required_; }
   UserCallback* user_callback() const { return user_callback_.get(); }
+
   const std::string& help_doc() const { return help_doc_; }
+  const char* doc() const {
+    return help_doc_.empty() ? nullptr : help_doc_.c_str();
+  }
+
   const std::string& meta_var() const { return meta_var_; }
+  const char* arg() const {
+    DCHECK(!meta_var_.empty());
+    return meta_var_.c_str();
+  }
+
+  const std::vector<std::string>& long_names() const { return long_names_; }
+  const char* name() const {
+    return long_names_.empty() ? nullptr : long_names_[0].c_str();
+  }
 
  private:
   friend class ArgumentHolder;
 
   Status Finalize() {
+    // No dest provided, but still can have UserCallback. No need to Bind().
     if (!dest_.has_value())
       return true;
     if (!user_callback_)
@@ -419,9 +510,10 @@ class Argument {
     return true;
   }
 
+  // For positional, this is -1.
   int key_ = -1;
-  std::optional<Dest> dest_;
-  std::unique_ptr<UserCallback> user_callback_;
+  std::optional<Dest> dest_;                     // Maybe null.
+  std::unique_ptr<UserCallback> user_callback_;  // Maybe null.
   std::string help_doc_;
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
@@ -459,6 +551,8 @@ class ArgumentBuilder {
   Argument* arg_;
 };
 
+using ArgpOption = ::argp_option;
+
 class ArgumentHolder {
  public:
   ArgumentBuilder add_argument(Names names,
@@ -473,11 +567,50 @@ class ArgumentHolder {
     arg.SetHelpDoc(help);
     arg.SetType(std::move(type));
     arg.SetAction(std::move(action));
-    arg.SetKey(NextKey(names));
 
-    bool inserted = key_index_.emplace(arg.key_, &arg).second;
-    DCHECK(inserted);
+    // option/positional handling.
+    if (arg.is_option()) {
+      arg.SetKey(NextKey(names));
+      bool inserted = key_index_.emplace(arg.key_, &arg).second;
+      DCHECK(inserted);
+    } else {
+      positionals_.push_back(&arg);
+    }
+
     return ArgumentBuilder(&arg);
+  }
+
+  Status Compile(std::vector<ArgpOption>* out) {
+    for (auto& arg : arguments_) {
+      auto status = arg.Finalize();
+      if (!status)
+        return status;
+      // positional isn't managed by argp.
+      if (!arg.is_option())
+        continue;
+
+      ArgpOption opt{};
+      opt.key = arg.key();
+      opt.name = arg.name();
+      opt.doc = arg.doc();
+      opt.arg = arg.arg();
+      if (!arg.is_required())
+        opt.flags |= OPTION_ARG_OPTIONAL;
+      out->push_back(opt);
+
+      // Handle alias.
+      const auto& long_names = arg.long_names();
+      for (auto iter = long_names.begin() + 1, end = long_names.end();
+           iter != end; ++iter) {
+        ArgpOption opt{};
+        opt.name = iter->c_str();
+        opt.flags |= OPTION_ALIAS;
+        out->push_back(opt);
+      }
+    }
+    // Ends with an empty option.
+    out->push_back(ArgpOption{});
+    return true;
   }
 
  private:
@@ -497,7 +630,11 @@ class ArgumentHolder {
 
   static constexpr int kFirstIntOutsideChar = 128;
   unsigned next_key_ = kFirstIntOutsideChar;
+  // Hold the storage of all args.
   std::list<Argument> arguments_;
+  // indexed by their define-order.
+  std::vector<Argument*> positionals_;
+  // indexed by their key.
   std::map<int, Argument*> key_index_;
   std::set<std::string> name_set_;
 };
