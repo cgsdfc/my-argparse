@@ -270,8 +270,30 @@ using function_signature_t = std::conditional_t<
         strip_function_object<F>
     >::type
 >;
-
 // clang-format on
+
+// For a function type, extract its T.
+template <typename Func>
+struct extract_target_type;
+
+template <typename T>
+struct extract_target_type<T(const Context&)> {
+  using type = T;
+};
+
+template <typename T>
+struct extract_target_type<Status(const Context&, T*)> {
+  using type = T;
+};
+
+template <typename T>
+struct extract_target_type<void(const Context&, T*)> {
+  using type = T;
+};
+
+template <typename T>
+using extract_target_type_t = typename extract_target_type<T>::type;
+
 }  // namespace detail
 
 // Type-erasured
@@ -280,22 +302,12 @@ struct Action {
   Action() = default;
   Action(Action&&) = default;
 
-  template <typename Func, typename T>
-  void Init(Func&& func, Status (*)(const Context&, T*)) {
-    callback.reset(new ActionUserCallback<T>(
-        CallbackNoExcept<T>(std::forward<Func>(func))));
-  }
-
-  template <typename Func, typename T>
-  void Init(Func&& func, void (*)(const Context&, T*)) {
-    callback.reset(new ActionUserCallback<T>(
-        CallbackMayThrowVoid<T>(std::forward<Func>(func))));
-  }
-
   template <typename Func>
   /* implicit */ Action(Func&& func) {
-    Init(std::forward<Func>(func),
-         (detail::function_signature_t<Func>*)nullptr);
+    using Signature = detail::function_signature_t<Func>;
+    using T = detail::extract_target_type_t<Signature>;
+    callback.reset(new ActionUserCallback<T>(
+        std::function<Signature>(std::forward<Func>(func))));
   }
 };
 
@@ -316,18 +328,11 @@ struct Type {
   Type(Type&&) = default;
 
   template <typename Func>
-  /* implicit */ Type(Func&& cb) {
-    Init(std::forward<Func>(cb), (detail::function_signature_t<Func>*)nullptr);
-  }
-
-  template <typename Func, typename T>
-  void Init(Func&& cb, Status (*)(const Context&, T*)) {
-    callback.reset(new TypeUserCallback<T>(std::forward<Func>(cb)));
-  }
-
-  template <typename Func, typename T>
-  void Init(Func&& cb, T (*)(const Context&)) {
-    callback.reset(new TypeUserCallback<T>(std::forward<Func>(cb)));
+  /* implicit */ Type(Func&& func) {
+    using Signature = detail::function_signature_t<Func>;
+    using T = detail::extract_target_type_t<Signature>;
+    callback.reset(new TypeUserCallback<T>(
+        std::function<Signature>(std::forward<Func>(func))));
   }
 };
 

@@ -26,8 +26,13 @@ int main(int argc, char const* argv[]) {
   using Function = detail::function_signature_t<decltype(&bar)>;
 
   ArgumentHolder holder;
+
   bool all = false;
-  holder.add_argument({"--all"}).dest(&all).type(
-      [](const Context& ctx) -> bool { return true; });
+  holder.add_argument({"--all"})
+      .dest(&all)
+      .help("whether or not to do it all")
+      .required(true)
+      .type([](const Context& ctx) -> bool { return true; });
+
   return 0;
 }
