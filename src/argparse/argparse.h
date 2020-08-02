@@ -25,19 +25,12 @@ class ArgumentError final : public std::runtime_error {
 };
 
 struct Dest {
-  //  public:
-  //   template <typename T>
-  //   explicit Dest(T* ptr) : type_(typeid(*ptr)), ptr_(ptr) {}
+  template <typename T>
+  explicit Dest(T* ptr) : type(typeid(*ptr)), ptr(ptr) {}
 
-  //  private:
-  std::type_index type_;
-  void* ptr_;
+  std::type_index type;
+  void* ptr;
 };
-
-// template <typename T>
-// Dest dest(T* ptr) {
-//   return Dest(ptr);
-// }
 
 class Status {
  public:
@@ -83,22 +76,16 @@ class UserCallback {
   Status Run(const Context& ctx) {
     DCHECK2(dest_ptr_, "Bind() must be called before Run() can be called!");
     return RunImpl(ctx);
-    // TODO: How Run() link with RunImpl() ??
-    //   try {
-    //       return RunImpl(ctx);
-    //   } catch (...) {
-
-    //   }
   }
 
   // Bind to a Dest. Make sure type matches. Bind() must be called before Run()
   // can be called.
   bool Bind(const Dest& dest) {
     DCHECK2(!dest_ptr_, "A UserCallback cannot be bound twice");
-    if (dest.type_ != type_)
+    if (dest.type != type_)
       return false;
-    DCHECK(dest.ptr_);
-    dest_ptr_ = dest.ptr_;
+    DCHECK(dest.ptr);
+    dest_ptr_ = dest.ptr;
     return true;
   }
 
@@ -107,6 +94,7 @@ class UserCallback {
  protected:
   virtual Status RunImpl(const Context& ctx) = 0;
 
+  // subclass must call this.
   explicit UserCallback(std::type_index type) : type_(type) {}
 
   std::type_index type_;
@@ -276,10 +264,9 @@ struct Destination {
   std::optional<Dest> dest;
   std::unique_ptr<UserCallback> callback;
   Destination() = default;
-
   template <typename T>
   /* implicit */ Destination(T* ptr)
-      : dest(ptr), callback(new DestUserCallback<T>()) {
+      : dest(Dest(ptr)), callback(new DestUserCallback<T>()) {
     DCHECK2(ptr, "nullptr passed to Destination()!");
   }
 };
@@ -318,26 +305,37 @@ inline bool IsLongOptionName(const char* name, std::size_t len) {
   return len > 2;
 }
 
-inline bool IsLongOptionName(const std::string& name) {
-  return IsLongOptionName(name.c_str(), name.size());
-}
+// inline bool IsLongOptionName(const std::string& name) {
+//   return IsLongOptionName(name.c_str(), name.size());
+// }
 
 inline bool IsShortOptionName(const char* name, std::size_t len) {
   DCHECK(IsValidOptionName(name, len));
   return len == 2;
 }
 
-inline bool IsLongOptionName(const std::string& name);
+// inline bool IsLongOptionName(const std::string& name) {
+//   return Is
+// }
+
+inline std::string ToUpper(const std::string& in) {
+  std::string out(in);
+  std::transform(in.begin(), in.end(), out.begin(), ::toupper);
+  return out;
+}
 
 struct Names {
   std::vector<std::string> long_names;
   std::vector<char> short_names;
   bool is_option;
+  std::string meta_var;
 
   // For positinal argument, only one name is allowed.
-  Names(std::string positional) {
-    long_names.push_back(std::move(positional));
+  Names(const char* positional) {
     is_option = false;
+    std::string name(positional);
+    meta_var = ToUpper(name);
+    long_names.push_back(std::move(name));
   }
 
   // For optional argument, a couple of names are allowed, including alias.
@@ -353,6 +351,10 @@ struct Names {
       else
         short_names.emplace_back(*name++);
     }
+    if (long_names.size())
+      meta_var = ToUpper(long_names[0]);
+    else
+      meta_var = ToUpper({&short_names[0], 1});
   }
 };
 
@@ -361,11 +363,11 @@ class ArgumentHolder;
 // Holds all meta-info about an argument.
 class Argument {
  public:
-  Argument(unsigned* key_generator) : key_generator_(key_generator) {}
-
   void SetDest(Destination dest) {
-    dest_ = dest.dest;
-    user_callback_ = std::move(dest.callback);
+    if (dest.callback) {
+      dest_ = dest.dest;
+      user_callback_ = std::move(dest.callback);
+    }
   }
 
   void SetAction(Action action) {
@@ -378,16 +380,32 @@ class Argument {
       user_callback_ = std::move(type.callback);
   }
 
-  void SetHelpDoc(std::string help_doc) {
-      help_doc_ = std::move(help_doc);
-  }
+  void SetHelpDoc(std::string help_doc) { help_doc_ = std::move(help_doc); }
 
   void SetNames(Names names) {
     is_option_ = names.is_option;
     long_names_ = std::move(names.long_names);
     short_names_ = std::move(names.short_names);
-    GenerateKey();
+    meta_var_ = std::move(names.meta_var);
   }
+
+  void SetKey(int key) {
+    DCHECK(short_names_.empty() || short_names_[0] == key);
+    key_ = key;
+  }
+
+  void SetRequired(bool required) { is_required_ = required; }
+  void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
+
+  int key() const { return key_; }
+  bool is_option() const { return is_option_; }
+  bool is_required() const { return is_required_; }
+  UserCallback* user_callback() const { return user_callback_.get(); }
+  const std::string& help_doc() const { return help_doc_; }
+  const std::string& meta_var() const { return meta_var_; }
+
+ private:
+  friend class ArgumentHolder;
 
   Status Finalize() {
     if (!dest_.has_value())
@@ -401,67 +419,61 @@ class Argument {
     return true;
   }
 
- private:
-  friend class ArgumentHolder;
-
-  void GenerateKey() {
-    DCHECK(key_ == -1);
-    if (short_names_.size())
-      key_ = short_names_[0];
-    else
-      key_ = *key_generator_++;
-  }
-
   int key_ = -1;
-  unsigned* key_generator_;
-
   std::optional<Dest> dest_;
   std::unique_ptr<UserCallback> user_callback_;
   std::string help_doc_;
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
-  bool is_option_;
+  std::string meta_var_;
+  bool is_option_ = false;
+  bool is_required_ = false;
 };
 
 class ArgumentBuilder {
-public:
- explicit ArgumentBuilder(Argument* arg) : arg_(arg) {}
+ public:
+  explicit ArgumentBuilder(Argument* arg) : arg_(arg) {}
 
- ArgumentBuilder& dest(Destination d) {
-   arg_->SetDest(std::move(d));
-   return *this;
- }
- ArgumentBuilder& action(Action a) {
-   arg_->SetAction(std::move(a));
-   return *this;
- }
- ArgumentBuilder& type(Type t) {
-   arg_->SetType(std::move(t));
-   return *this;
- }
- ArgumentBuilder& help(const char* h) {
-   arg_->SetHelpDoc(h);
-   return *this;
- }
+  ArgumentBuilder& dest(Destination d) {
+    arg_->SetDest(std::move(d));
+    return *this;
+  }
+  ArgumentBuilder& action(Action a) {
+    arg_->SetAction(std::move(a));
+    return *this;
+  }
+  ArgumentBuilder& type(Type t) {
+    arg_->SetType(std::move(t));
+    return *this;
+  }
+  ArgumentBuilder& help(const char* h) {
+    arg_->SetHelpDoc(h);
+    return *this;
+  }
+  ArgumentBuilder& required(bool b) {
+    arg_->SetRequired(b);
+    return *this;
+  }
 
-private:
- Argument* arg_;
+ private:
+  Argument* arg_;
 };
 
 class ArgumentHolder {
  public:
-  ArgumentBuilder AddArgument(Names names,
-                              Destination dest = {},
-                              const char* help = {},
-                              Type type = {},
-                              Action action = {}) {
+  ArgumentBuilder add_argument(Names names,
+                               Destination dest = {},
+                               const char* help = {},
+                               Type type = {},
+                               Action action = {}) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
-    Argument& arg = arguments_.emplace_back(&key_generator_);
+    Argument& arg = arguments_.emplace_back();
     arg.SetDest(std::move(dest));
     arg.SetHelpDoc(help);
     arg.SetType(std::move(type));
     arg.SetAction(std::move(action));
+    arg.SetKey(NextKey(names));
 
     bool inserted = key_index_.emplace(arg.key_, &arg).second;
     DCHECK(inserted);
@@ -469,6 +481,10 @@ class ArgumentHolder {
   }
 
  private:
+  int NextKey(const Names& names) {
+    return names.short_names.empty() ? next_key_++ : names.short_names[0];
+  }
+
   bool CheckNamesConflict(const Names& names) {
     for (auto&& long_name : names.long_names)
       if (!name_set_.insert(long_name).second)
@@ -480,7 +496,7 @@ class ArgumentHolder {
   }
 
   static constexpr int kFirstIntOutsideChar = 128;
-  unsigned key_generator_ = kFirstIntOutsideChar;
+  unsigned next_key_ = kFirstIntOutsideChar;
   std::list<Argument> arguments_;
   std::map<int, Argument*> key_index_;
   std::set<std::string> name_set_;
