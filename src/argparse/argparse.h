@@ -20,6 +20,13 @@
 
 namespace argparse {
 
+class Argument;
+class ArgumentHolder;
+class ArgumentGroup;
+class ArgumentBuilder;
+class ArgumentParser;
+class ArgpParser;
+
 // Throw this exception will cause an error msg to be printed (via what()).
 class ArgumentError final : public std::runtime_error {
  public:
@@ -61,9 +68,6 @@ class Status {
   bool success_;
   std::string message_;
 };
-
-// Primary info about an argument.
-class Argument;
 
 struct Context {
   // The Argument being parsed.
@@ -355,25 +359,15 @@ inline bool IsValidOptionName(const char* name, std::size_t len) {
   return true;
 }
 
-// inline bool IsValidOptionName(const std::string& name);
-
 inline bool IsLongOptionName(const char* name, std::size_t len) {
   DCHECK(IsValidOptionName(name, len));
   return len > 2;
 }
 
-// inline bool IsLongOptionName(const std::string& name) {
-//   return IsLongOptionName(name.c_str(), name.size());
-// }
-
 inline bool IsShortOptionName(const char* name, std::size_t len) {
   DCHECK(IsValidOptionName(name, len));
   return len == 2;
 }
-
-// inline bool IsLongOptionName(const std::string& name) {
-//   return Is
-// }
 
 inline std::string ToUpper(const std::string& in) {
   std::string out(in);
@@ -417,8 +411,6 @@ struct Names {
   }
 };
 
-class ArgumentHolder;
-
 // Holds all meta-info about an argument.
 class Argument {
  public:
@@ -456,6 +448,10 @@ class Argument {
 
   void SetRequired(bool required) { is_required_ = required; }
   void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
+  void SetGroup(std::string header) {
+    is_group_ = true;
+    help_doc_ = std::move(header);
+  }
 
   int key() const { return key_; }
   bool is_option() const { return is_option_; }
@@ -473,6 +469,7 @@ class Argument {
     return meta_var_.c_str();
   }
 
+  bool is_group() const { return is_group_; }
   const std::vector<std::string>& long_names() const { return long_names_; }
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
@@ -483,7 +480,7 @@ class Argument {
 
   Status Finalize() {
     // No dest provided, but still can have UserCallback. No need to Bind().
-    if (!dest_.has_value())
+    if (is_group() || !dest_.has_value())
       return true;
     if (!user_callback_)
       return Status(
@@ -498,12 +495,13 @@ class Argument {
   int key_ = -1;
   std::optional<Dest> dest_;                     // Maybe null.
   std::unique_ptr<UserCallback> user_callback_;  // Maybe null.
-  std::string help_doc_;
+  std::string help_doc_; // If this is a group, help_doc_ stores group header.
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
   std::string meta_var_;
   bool is_option_ = false;
   bool is_required_ = false;
+  bool is_group_ = false;
 };
 
 class ArgumentBuilder {
@@ -564,6 +562,8 @@ class ArgumentHolder {
     return ArgumentBuilder(&arg);
   }
 
+  ArgumentGroup add_argument_group(const char* header);
+
   Status Compile(std::vector<ArgpOption>* out) {
     out->clear();
     out->reserve(arguments_.size());
@@ -572,6 +572,13 @@ class ArgumentHolder {
       auto status = arg.Finalize();
       if (!status)
         return status;
+      if (arg.is_group()) {
+        ArgpOption opt{};
+        opt.doc = arg.doc();
+        out->push_back(opt);
+        continue;
+      }
+
       // positional isn't managed by argp.
       if (!arg.is_option())
         continue;
@@ -620,6 +627,7 @@ class ArgumentHolder {
 
   static constexpr int kFirstIntOutsideChar = 128;
   unsigned next_key_ = kFirstIntOutsideChar;
+
   // Hold the storage of all args.
   std::list<Argument> arguments_;
   // indexed by their define-order.
@@ -632,9 +640,29 @@ class ArgumentHolder {
   // bool dirty_ = true;
 };
 
+// Impl add_group() call.
+class ArgumentGroup {
+ public:
+  explicit ArgumentGroup(ArgumentHolder* holder) : holder_(holder) {}
+
+  template <typename... Args>
+  ArgumentBuilder add_argument(Args&&... args) {
+    return holder_->add_argument(std::forward<Args>(args)...);
+  }
+
+ private:
+  ArgumentHolder* holder_;
+};
+
+ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
+  Argument& arg = arguments_.emplace_back();
+  arg.SetGroup(header);
+  return ArgumentGroup(this);
+}
+
 // This handles the argp_parser_t function.
 class ArgpParser {
-public:
+ public:
   using Argp = ::argp;
   using ArgpParserCallback = ::argp_parser_t;
   using ArgpState = ::argp_state;
@@ -669,9 +697,10 @@ public:
   void RemoveParserFlags(int flags) { parser_flags_ &= ~flags; }
 
   void ParseArgs(int argc, char** argv) {
-    DCHECK(holder_);
+    DCHECK2(holder_, "Init() must be called before ParseArgs()");
     int arg_index = -1;
-    auto err = ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
+    auto err =
+        ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
   }
 
  private:
@@ -703,14 +732,7 @@ public:
       return 0;
     }
 
-    // No more commandline args, do some post-processing.
-    if (key == ARGP_KEY_END) {
-      // No enough args.
-      if (state->arg_num < positionals.size())
-        argp_error(state, "No enough positional arguments. Expected %d, got %d",
-                   (int)positionals.size(), (int)state->arg_num);
-    }
-
+    // Next most frequent handling is options.
     const auto& key_index = holder_->key_index();
 
     if ((key & kSpecialKeyMask) == 0) {
@@ -718,8 +740,16 @@ public:
       auto iter = key_index.find(key);
       if (iter == key_index.end())
         return ARGP_ERR_UNKNOWN;
-      InvokeUserCallback(iter->second, arg, state); 
+      InvokeUserCallback(iter->second, arg, state);
       return 0;
+    }
+
+    // No more commandline args, do some post-processing.
+    if (key == ARGP_KEY_END) {
+      // No enough args.
+      if (state->arg_num < positionals.size())
+        argp_error(state, "No enough positional arguments. Expected %d, got %d",
+                   (int)positionals.size(), (int)state->arg_num);
     }
 
     // Remaining args (not parsed). Collect them or turn it into an error.
@@ -742,6 +772,102 @@ public:
   int parser_flags_ = 0;
 };
 
-class ArgumentParser {};
+// Public flags user can use. These are corresponding to the ARGP_XXX flags
+// passed to argp_parse().
+enum Flags {
+  kNoFlags = 0,            // The default.
+  kNoHelp = ARGP_NO_HELP,  // Don't produce --help.
+  kLongOnly = ARGP_LONG_ONLY,
+  kNoExit = ARGP_NO_EXIT,
+};
+
+// Options to ArgumentParser constructor.
+class Options {
+ public:
+  // Only the most common options are listed in this list.
+  Options(const char* version = nullptr, const char* description = nullptr)
+      : program_version_(version), description_(description) {}
+  // Options() = default;
+
+  Options& version(const char* v) {
+    program_version_ = v;
+    return *this;
+  }
+  Options& description(const char* d) {
+    description_ = d;
+    return *this;
+  }
+  Options& after_doc(const char* a) {
+    after_doc_ = a;
+    return *this;
+  }
+  Options& domain(const char* d) {
+    domain_ = d;
+    return *this;
+  }
+  Options& bug_address(const char* b) {
+    bug_address_ = b;
+    return *this;
+  }
+  Options& flags(Flags f) {
+    flags_ = f;
+    return *this;
+  }
+
+ private:
+  friend class ArgumentParser;
+  const char* program_version_ = {};
+  const char* description_ = {};
+  const char* after_doc_ = {};
+  const char* domain_ = {};
+  const char* bug_address_ = {};
+  Flags flags_ = kNoFlags;
+};
+
+class ArgumentParser : private ArgumentHolder {
+ public:
+  explicit ArgumentParser(const Options& options = {}) {
+    argp_program_version = options.program_version_;
+    argp_program_bug_address = options.bug_address_;
+    // TODO: may check domain?
+    parser_.set_argp_domain(options.domain_);
+    parser_.AddParserFlags(static_cast<int>(options.flags_));
+
+    // Generate the program doc.
+    if (options.description_)
+      program_doc_.append(options.description_);
+    if (options.after_doc_) {
+      program_doc_.append({'\v'});
+      program_doc_.append(options.after_doc_);
+    }
+    if (!program_doc_.empty())
+      parser_.set_doc(program_doc_.c_str());
+    // args_doc is generated later.
+  }
+
+  // Add a --version flag.
+  // void add_version(const char* v) { argp_program_version = v; }
+
+  using ArgumentHolder::add_argument;
+  using ArgumentHolder::add_argument_group;
+
+  void parse_args(int argc, const char** argv) {
+    parser_.Init(this);
+    // argp wants a char**, but most user don't expect argv being changed. So
+    // cheat them.
+    parser_.ParseArgs(argc, const_cast<char**>(argv));
+  }
+  // Helper for demo and testing.
+  void parse_args(std::initializer_list<const char*> args) {
+    // init-er is not mutable.
+    std::vector<const char*> args_copy(args.begin(), args.end());
+    args_copy.push_back(nullptr);
+    return parse_args(args.size(), args_copy.data());
+  }
+
+ private:
+  ArgpParser parser_;
+  std::string program_doc_;
+};
 
 }  // namespace argparse

@@ -34,5 +34,15 @@ int main(int argc, char const* argv[]) {
       .required(true)
       .type([](const Context& ctx) -> bool { return true; });
 
+  ArgumentParser parser(Options()
+                            .version("1.2.3")
+                            .description("a short program")
+                            .bug_address("cgsdfc@126.com")
+                            .flags(Flags::kLongOnly));
+
+  parser.add_argument("name");
+  auto group = parser.add_argument_group("header");
+  group.add_argument("help-me");
+
   return 0;
 }
