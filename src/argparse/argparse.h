@@ -51,6 +51,9 @@ class Status {
   Status(bool success, const std::string& message)
       : success_(success), message_(message) {}
 
+  // Default to success.
+  Status() : Status(true) {}
+
   explicit operator bool() const { return success_; }
   const std::string& message() const { return message_; }
 
@@ -562,6 +565,9 @@ class ArgumentHolder {
   }
 
   Status Compile(std::vector<ArgpOption>* out) {
+    out->clear();
+    out->reserve(arguments_.size());
+
     for (auto& arg : arguments_) {
       auto status = arg.Finalize();
       if (!status)
@@ -594,6 +600,9 @@ class ArgumentHolder {
     return true;
   }
 
+  const std::map<int, Argument*>& key_index() const { return key_index_; }
+  const std::vector<Argument*>& positionals() const { return positionals_; }
+
  private:
   int NextKey(const Names& names) {
     return names.short_names.empty() ? next_key_++ : names.short_names[0];
@@ -618,6 +627,119 @@ class ArgumentHolder {
   // indexed by their key.
   std::map<int, Argument*> key_index_;
   std::set<std::string> name_set_;
+  // TODO: compile result may be cached.
+  // Whether recompilation is needed.
+  // bool dirty_ = true;
+};
+
+// This handles the argp_parser_t function.
+class ArgpParser {
+public:
+  using Argp = ::argp;
+  using ArgpParserCallback = ::argp_parser_t;
+  using ArgpState = ::argp_state;
+  using ArgpErrorType = ::error_t;
+  using ArgpHelpFilterCallback = decltype(Argp::help_filter);
+
+  ArgpParser() { argp_.parser = &ArgpParser::Callback; }
+
+  // Must be called before ParseArgs() can be called.
+  Status Init(ArgumentHolder* holder) {
+    std::vector<ArgpOption> options;
+    auto rv = holder->Compile(&options);
+    if (!rv)
+      return rv;
+    options_ = std::move(options);
+    holder_ = holder;
+    argp_.options = options_.data();
+    return true;
+  }
+
+  // These storage is managed by caller to save a lot of strings.
+  // If the user makes no demand, then all of these field is null.
+  // No std::string is stored.
+  // Caller may store some of them as string, and requires others to be
+  // immorable strings.
+  void set_doc(const char* doc) { argp_.doc = doc; }
+  void set_argp_domain(const char* domain) { argp_.argp_domain = domain; }
+  void set_args_doc(const char* args_doc) { argp_.args_doc = args_doc; }
+  void set_help_filter(ArgpHelpFilterCallback cb) { argp_.help_filter = cb; }
+
+  void AddParserFlags(int flags) { parser_flags_ |= flags; }
+  void RemoveParserFlags(int flags) { parser_flags_ &= ~flags; }
+
+  void ParseArgs(int argc, char** argv) {
+    DCHECK(holder_);
+    int arg_index = -1;
+    auto err = ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
+  }
+
+ private:
+  static void InvokeUserCallback(const Argument* arg,
+                                 char* value,
+                                 ArgpState* state) {
+    UserCallback* cb = arg->user_callback();
+    if (!cb)  // User doesn't provide any.
+      return;
+    auto status = cb->Run(Context{arg, std::string(value)});
+    // If the user said no, just die with a msg.
+    if (status)
+      return;
+    argp_error(state, "%s", status.message().c_str());
+  }
+
+  static constexpr unsigned kSpecialKeyMask = 0x1000000;
+
+  ArgpErrorType ParseImpl(int key, char* arg, ArgpState* state) {
+    const auto& positionals = holder_->positionals();
+
+    // Positional argument.
+    if (key == ARGP_KEY_ARG) {
+      // Too many arguments.
+      if (state->arg_num >= positionals.size())
+        argp_error(state, "Too many positional arguments. Expected %d, got %d",
+                   (int)positionals.size(), (int)state->arg_num);
+      InvokeUserCallback(positionals[state->arg_num], arg, state);
+      return 0;
+    }
+
+    // No more commandline args, do some post-processing.
+    if (key == ARGP_KEY_END) {
+      // No enough args.
+      if (state->arg_num < positionals.size())
+        argp_error(state, "No enough positional arguments. Expected %d, got %d",
+                   (int)positionals.size(), (int)state->arg_num);
+    }
+
+    const auto& key_index = holder_->key_index();
+
+    if ((key & kSpecialKeyMask) == 0) {
+      // This isn't a special key, but rather an option.
+      auto iter = key_index.find(key);
+      if (iter == key_index.end())
+        return ARGP_ERR_UNKNOWN;
+      InvokeUserCallback(iter->second, arg, state); 
+      return 0;
+    }
+
+    // Remaining args (not parsed). Collect them or turn it into an error.
+    if (key == ARGP_KEY_ARGS) {
+      return 0;
+    }
+
+    return 0;
+  }
+
+  static ArgpErrorType Callback(int key, char* arg, ArgpState* state) {
+    auto* self = reinterpret_cast<ArgpParser*>(state->input);
+    return self->ParseImpl(key, arg, state);
+  }
+
+  // Holder tell us everythings about user's arguments.
+  const ArgumentHolder* holder_ = {};
+  Argp argp_ = {};
+  std::vector<ArgpOption> options_;
+  int parser_flags_ = 0;
 };
 
 class ArgumentParser {};
