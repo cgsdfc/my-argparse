@@ -539,10 +539,7 @@ class ArgumentHolder {
                                Action action = {}) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
-    // Compile as much as possible.
-    auto status = CompileUntil(arguments_.size());
-    DCHECK2(status, "CompileUtil() failed when add_argument()");
-
+    FlushCompile();
     Argument& arg = arguments_.emplace_back();
     arg.SetDest(std::move(dest));
     arg.SetHelpDoc(help);
@@ -593,7 +590,7 @@ class ArgumentHolder {
       return;
     }
     // Compile all args.
-    CompileUntil(arguments_.size());
+    FlushCompile();
     options_.push_back(ArgpOption{});
   }
 
@@ -646,6 +643,18 @@ class ArgumentHolder {
     return true;
   }
 
+  void FlushCompile() {
+    // Compile as much as possible.
+    auto status = CompileUntil(arguments_.size());
+    DCHECK2(status, "CompileUtil() failed when add_argument()");
+  }
+
+  void CompileGroup(const char* header) {
+    ArgpOption opt{};
+    opt.doc = header;
+    options_.push_back(opt);
+  }
+
   int NextKey(const Names& names) {
     return names.short_names.empty() ? next_key_++ : names.short_names[0];
   }
@@ -693,9 +702,8 @@ class ArgumentGroup {
 
 ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
   // Generate a group entry in the options. group id is automatically generated.
-  ArgpOption opt{};
-  opt.doc = header;
-  options_.push_back(opt);
+  FlushCompile();
+  CompileGroup(header);
   return ArgumentGroup(this);
 }
 
