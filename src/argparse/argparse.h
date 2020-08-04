@@ -224,6 +224,15 @@ template <typename Callback,
           typename Signature = detail::function_signature_t<Callback>>
 struct UserCallbackTraits;
 
+template <typename Callback, typename T>
+struct UserCallbackTraits<Callback, Status(const Context&, T*) noexcept> {
+  using type = T;
+  static constexpr CallbackSupportMask kMask = kSupportedByAll;
+  static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
+    return cb(ctx, out);
+  }
+};
+
 // If the user have the right signature (but may throw), we still catch any
 // exception.
 template <typename Callback, typename T>
