@@ -35,8 +35,7 @@ int main(int argc, char const* argv[]) {
       .dest(&all)
       .help("whether or not to do it all")
       .required(true)
-      .type([](const Context& ctx) -> bool { return true; })
-      .action([all](const Context&) { return all; });
+      .type([](const Context& ctx) -> bool { return true; });
 
   ArgumentParser parser(Options()
                             .version("1.2.3")

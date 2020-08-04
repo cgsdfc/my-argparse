@@ -212,18 +212,25 @@ class CustomUserCallback : public UserCallback {
 // std::function<Status(const Context&, T*)> as the actual storage and further
 // erase its T using UserCallback.
 
+enum CallbackSupportMask {
+  kSupportedByAction = 0x1,
+  kSupportedByType = 0x2,
+  kSupportedByAll = 0xffff,
+};
+
 // Policy layer: for non-internal format, define a Policy function doing the
 // actual adaption.
 template <typename Callback,
           typename Signature = detail::function_signature_t<Callback>>
-struct UserCallbackAdapterPolicy;
+struct UserCallbackTraits;
 
 // If the user have the right signature (but may throw), we still catch any
 // exception.
 template <typename Callback, typename T>
-struct UserCallbackAdapterPolicy<Callback, Status(const Context&, T*)> {
+struct UserCallbackTraits<Callback, Status(const Context&, T*)> {
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
+  static constexpr CallbackSupportMask kMask = kSupportedByAll;
+  static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
     try {
       return cb(ctx, out);
     } catch (const ArgumentError& e) {
@@ -235,9 +242,10 @@ struct UserCallbackAdapterPolicy<Callback, Status(const Context&, T*)> {
 // If the user just convert things, we store his result
 // and catch any exception.
 template <typename Callback, typename T>
-struct UserCallbackAdapterPolicy<Callback, T(const Context&)> {
+struct UserCallbackTraits<Callback, T(const Context&)> {
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
+  static constexpr CallbackSupportMask kMask = kSupportedByType;
+  static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
     try {
       *out = cb(ctx);
       return true;
@@ -250,9 +258,10 @@ struct UserCallbackAdapterPolicy<Callback, T(const Context&)> {
 // If the user just convert things and force noexcept, we store his result
 // assuming no error can happen.
 template <typename Callback, typename T>
-struct UserCallbackAdapterPolicy<Callback, void(const Context&, T*)> {
+struct UserCallbackTraits<Callback, void(const Context&, T*)> {
+  static constexpr CallbackSupportMask kMask = kSupportedByAction;
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
+  static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
     try {
       cb(ctx, out);
       return true;
@@ -265,9 +274,10 @@ struct UserCallbackAdapterPolicy<Callback, void(const Context&, T*)> {
 // If the user just convert things and force noexcept, we store his result
 // assuming no error can happen.
 template <typename Callback, typename T>
-struct UserCallbackAdapterPolicy<Callback, T(const Context&) noexcept> {
+struct UserCallbackTraits<Callback, T(const Context&) noexcept> {
+  static constexpr CallbackSupportMask kMask = kSupportedByType;
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
+  static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
     *out = cb(ctx);
     return true;
   }
@@ -277,14 +287,14 @@ struct UserCallbackAdapterPolicy<Callback, T(const Context&) noexcept> {
 template <typename Callback,
           typename Signature = detail::function_signature_t<Callback>>
 struct UserCallbackAdapter {
-  using Policy = UserCallbackAdapterPolicy<Callback>;
-  using type = typename Policy::type;
+  using Traits = UserCallbackTraits<Callback>;
+  using type = typename Traits::type;
   struct Helper {
     // Store a copy of Callback.
     std::decay_t<Callback> cb_;
 
     Status operator()(const Context& ctx, type* out) {
-      return Policy::Policy(ctx, out, std::forward<Callback>(cb_));
+      return Traits::RunCallback(ctx, out, std::forward<Callback>(cb_));
     }
   };
   static InternalUserCallback<type> Adapt(Callback&& cb) {
@@ -307,14 +317,22 @@ std::unique_ptr<UserCallback> CreateCustomUserCallback(Callback&& cb) {
       Adapter::Adapt(std::forward<Callback>(cb)));
 }
 
+// Check if Callback is supported by Whom.
+template <typename Callback, CallbackSupportMask kMask>
+struct CallbackIsSupported
+    : std::bool_constant<(UserCallbackTraits<Callback>::kMask & kMask) != 0> {};
+
 // Type-erasured
 struct Action {
   std::unique_ptr<UserCallback> callback;
   Action() = default;
   Action(Action&&) = default;
 
+  // TODO:: restrict signature.
   template <typename Callback>
   /* implicit */ Action(Callback&& cb) {
+    static_assert(CallbackIsSupported<Callback, kSupportedByAction>{},
+                  "Callback was not supported by Action");
     callback = CreateCustomUserCallback(std::forward<Callback>(cb));
   }
 };
@@ -337,6 +355,8 @@ struct Type {
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
+    static_assert(CallbackIsSupported<Callback, kSupportedByType>{},
+                  "Callback was not supported by Type");
     callback = CreateCustomUserCallback(std::forward<Callback>(cb));
   }
 };
