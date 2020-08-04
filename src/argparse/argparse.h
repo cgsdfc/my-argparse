@@ -157,7 +157,7 @@ class DestUserCallback : public UserCallback {
 };
 
 template <typename T>
-using InternalUserCallback = std::function<Status(const Context&, T*) noexcept>;
+using InternalUserCallback = std::function<Status(const Context&, T*)>;
 
 // Report error by returning status.
 template <typename T>
@@ -284,7 +284,7 @@ using function_signature_t = std::conditional_t<
 // clang-format on
 
 // For a function type, extract its T.
-template <typename Func>
+template <typename Callback>
 struct extract_target_type;
 
 template <typename T>
@@ -307,6 +307,44 @@ using extract_target_type_t = typename extract_target_type<T>::type;
 
 }  // namespace detail
 
+template <typename T>
+std::type_index TypeIndex() {
+  return typeid(std::declval<T>());
+}
+
+// When the user merely provides a dest, we will infer from the type of the
+// pointer and provide this callback, which parses the string into the value of
+// the type and store into the user's pointer.
+template <typename T>
+class DefaultUserCallback : public UserCallback {
+ public:
+  DefaultUserCallback() : UserCallback(TypeIndex<T>()) {}
+
+ private:
+  Status RunImpl(const Context& ctx) override {
+    using Converter = DefaultConverter<T>;
+    bool rv = Converter::Parse(ctx.value, reinterpret_cast<T*>(dest_ptr_));
+    if (rv)
+      return true;
+    // Error reporting.
+    return ReportError(ctx.value, Converter::type_name());
+  }
+};
+
+template <typename T>
+class CustomUserCallback : public UserCallback {
+ public:
+  using Callback = InternalUserCallback<T>;
+  explicit CustomUserCallback(Callback cb)
+      : UserCallback(TypeIndex<T>()), callback_(std::move(cb)) {}
+
+ private:
+  Status RunImpl(const Context& ctx) override {
+    return std::invoke(callback_, ctx, reinterpret_cast<T*>(dest_ptr_));
+  }
+  Callback callback_;
+};
+
 // introduce a layer to generally adapt user's callback to our internal
 // signature. To obtain an adapter, you use
 // UserCallbackAdapter<decltype(cb)>::type. Upon this layer we use
@@ -319,37 +357,14 @@ template <typename Callback,
           typename Signature = detail::function_signature_t<Callback>>
 struct UserCallbackAdapterPolicy;
 
-// // TODO: use std::bind()?
-// template <typename T,
-//           typename Callback,
-//           Status (*Policy)(const Context&, T*, Callback*) noexcept>
-// class AdapterHelper {
-//  public:
-//   explicit AdapterHelper(Callback cb) : cb_(std::move(cb)) {}
-//   Status operator()(const Context& ctx, T* out) noexcept {
-//     return Policy(ctx, out, &cb_);
-//   }
-
-//  protected:
-//   Callback cb_;
-// };
-
-// template <typename T,
-//           typename Callback,
-//           Status (*Policy)(const Context&, T*, Callback*) noexcept>
-// InternalUserCallback<T> DoAdapt(Callback&& cb) {
-//   return std::bind(Policy, std::placeholders::_1 /* ctx */,
-//                    std::placeholders::_2 /* out */, std::move(cb));
-// }
-
 // If the user have the right signature (but may throw), we still catch any
 // exception.
 template <typename Callback, typename T>
 struct UserCallbackAdapterPolicy<Callback, Status(const Context&, T*)> {
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback* cb) noexcept {
+  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
     try {
-      return (*cb)(ctx, out);
+      return cb(ctx, out);
     } catch (const ArgumentError& e) {
       return Status(e.what());
     }
@@ -361,9 +376,24 @@ struct UserCallbackAdapterPolicy<Callback, Status(const Context&, T*)> {
 template <typename Callback, typename T>
 struct UserCallbackAdapterPolicy<Callback, T(const Context&)> {
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback* cb) noexcept {
+  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
     try {
-      *out = (*cb)(ctx);
+      *out = cb(ctx);
+      return true;
+    } catch (const ArgumentError& e) {
+      return Status(e.what());
+    }
+  }
+};
+
+// If the user just convert things and force noexcept, we store his result
+// assuming no error can happen.
+template <typename Callback, typename T>
+struct UserCallbackAdapterPolicy<Callback, void(const Context&, T*)> {
+  using type = T;
+  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
+    try {
+      cb(ctx, out);
       return true;
     } catch (const ArgumentError& e) {
       return Status(e.what());
@@ -376,28 +406,45 @@ struct UserCallbackAdapterPolicy<Callback, T(const Context&)> {
 template <typename Callback, typename T>
 struct UserCallbackAdapterPolicy<Callback, T(const Context&) noexcept> {
   using type = T;
-  static Status Policy(const Context& ctx, T* out, Callback* cb) noexcept {
-    *out = (*cb)(ctx);
+  static Status Policy(const Context& ctx, T* out, Callback&& cb) {
+    *out = cb(ctx);
     return true;
   }
 };
 
 // Adapter layer: If the signature is not standard, call the policy layer.
-template <typename Callback, typename Signature>
+template <typename Callback,
+          typename Signature = detail::function_signature_t<Callback>>
 struct UserCallbackAdapter {
   using Policy = UserCallbackAdapterPolicy<Callback>;
-  using T = typename Policy::type;
-  static InternalUserCallback<T> Adapt(Callback&& cb) {
-    return std::bind(&Policy::Policy, std::placeholders::_1 /* ctx */,
-                     std::placeholders::_2 /* out */, std::move(cb));
+  using type = typename Policy::type;
+  struct Helper {
+    // Store a copy of Callback.
+    std::decay_t<Callback> cb_;
+
+    Status operator()(const Context& ctx, type* out) {
+      return Policy::Policy(ctx, out, std::forward<Callback>(cb_));
+    }
+  };
+  static InternalUserCallback<type> Adapt(Callback&& cb) {
+    return Helper{std::forward<Callback>(cb)};
   }
 };
 
 // If the user have the right signature, do nothing.
 template <typename Callback, typename T>
 struct UserCallbackAdapter<Callback, Status(const Context&, T*) noexcept> {
+  using type = T;
   static Callback&& Adapt(Callback&& cb) { return std::forward<Callback>(cb); }
 };
+
+template <typename Callback>
+std::unique_ptr<UserCallback> CreateCustomUserCallback(Callback&& cb) {
+  using Adapter = UserCallbackAdapter<Callback>;
+  using type = typename Adapter::type;
+  return std::make_unique<CustomUserCallback<type>>(
+      Adapter::Adapt(std::forward<Callback>(cb)));
+}
 
 // Type-erasured
 struct Action {
@@ -405,12 +452,9 @@ struct Action {
   Action() = default;
   Action(Action&&) = default;
 
-  template <typename Func>
-  /* implicit */ Action(Func&& func) {
-    using Signature = detail::function_signature_t<Func>;
-    using T = detail::extract_target_type_t<Signature>;
-    callback.reset(new ActionUserCallback<T>(
-        std::function<Signature>(std::forward<Func>(func))));
+  template <typename Callback>
+  /* implicit */ Action(Callback&& cb) {
+    callback = CreateCustomUserCallback(std::forward<Callback>(cb));
   }
 };
 
@@ -430,12 +474,9 @@ struct Type {
   Type() = default;
   Type(Type&&) = default;
 
-  template <typename Func>
-  /* implicit */ Type(Func&& func) {
-    using Signature = detail::function_signature_t<Func>;
-    using T = detail::extract_target_type_t<Signature>;
-    callback.reset(new TypeUserCallback<T>(
-        std::function<Signature>(std::forward<Func>(func))));
+  template <typename Callback>
+  /* implicit */ Type(Callback&& cb) {
+    callback = CreateCustomUserCallback(std::forward<Callback>(cb));
   }
 };
 

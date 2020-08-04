@@ -27,12 +27,16 @@ int main(int argc, char const* argv[]) {
 
   ArgumentHolder holder;
 
+  auto x = [](const Context& ctx) -> bool { return true; };
+  std::cout << noexcept(x(Context{}));
+
   bool all = false;
   holder.add_argument({"--all"})
       .dest(&all)
       .help("whether or not to do it all")
       .required(true)
-      .type([](const Context& ctx) -> bool { return true; });
+      .type([](const Context& ctx) -> bool { return true; })
+      .action([all](const Context&) { return all; });
 
   ArgumentParser parser(Options()
                             .version("1.2.3")
