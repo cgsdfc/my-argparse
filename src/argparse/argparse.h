@@ -137,125 +137,8 @@ inline std::string ReportError(const std::string& value,
   return os.str();
 }
 
-// When the user merely provides a dest, we will infer from the type of the
-// pointer and provide this callback, which parses the string into the value of
-// the type and store into the user's pointer.
-template <typename T>
-class DestUserCallback : public UserCallback {
- public:
-  DestUserCallback() : UserCallback(typeid(std::declval<T>())) {}
-
- private:
-  Status RunImpl(const Context& ctx) override {
-    using Converter = DefaultConverter<T>;
-    bool rv = Converter::Parse(ctx.value, reinterpret_cast<T*>(dest_ptr_));
-    if (rv)
-      return true;
-    // Error reporting.
-    return ReportError(ctx.value, Converter::type_name());
-  }
-};
-
 template <typename T>
 using InternalUserCallback = std::function<Status(const Context&, T*)>;
-
-// Report error by returning status.
-template <typename T>
-using CallbackNoExcept = std::function<Status(const Context&, T*)>;
-
-template <typename T>
-using CallbackMayThrow = std::function<T(const Context&)>;
-
-// Report error by throwing exception.
-template <typename T>
-using CallbackMayThrowVoid = std::function<void(const Context&, T*)>;
-
-// Optionally, user may parse user-defined types by providing a type argument.
-// It can have two forms of signature:
-// 1. T callback(const Context& ctx) throw(ArgumentError);
-// 2. Status callback(const Context& ctx, T* out) noexcept;
-template <typename T>
-class TypeUserCallback : public UserCallback {
- public:
-  // Report error by throwing exception.
-  using TypeCallbackMayThrow = CallbackMayThrow<T>;
-  // Report error by returning status.
-  using TypeCallbackNoExcept = CallbackNoExcept<T>;
-
-  explicit TypeUserCallback(TypeCallbackMayThrow callback)
-      : TypeUserCallback(MayThrowToNoExceptAdapter{std::move(callback)}) {}
-
-  explicit TypeUserCallback(TypeCallbackNoExcept callback)
-      : UserCallback(typeid(std::declval<T>())),
-        callback_(std::move(callback)) {}
-
- private:
-  Status RunImpl(const Context& ctx) override {
-    return callback_(ctx, reinterpret_cast<T*>(dest_ptr_));
-  }
-
-  struct MayThrowToNoExceptAdapter {
-    TypeCallbackMayThrow callback;
-    Status operator()(const Context& ctx, T* out) {
-      try {
-        *out = callback(ctx);
-        return true;
-      } catch (const ArgumentError& e) {
-        return Status(e.what());
-      } catch (...) {
-        // If some random thing gets thrown, report it.
-        return Status("Unknown thing got thrown from UserCallback");
-      }
-    }
-  };
-
-  // We default use non-throwing callback.
-  TypeCallbackNoExcept callback_;
-};
-
-// Finally, if the user wants to do arbitray things not limited by the pattern
-// of converting and storing, he can provide an action, which is a callback with
-// this signature: Status callback(const Context& ctx, T* out) Or void
-// callback(const Context& ctx, T* out), which may throw an exception.
-template <typename T>
-class ActionUserCallback : public UserCallback {
- public:
-  // Report error by throwing exception.
-  using ActionCallbackMayThrow = CallbackMayThrowVoid<T>;
-  // Report error by returning status.
-  using ActionCallbackNoExcept = CallbackNoExcept<T>;
-  /// XXX: It is worthy to provide two signatures?
-
-  explicit ActionUserCallback(ActionCallbackMayThrow callback)
-      : ActionUserCallback(ActionCallbackNoExcept(
-            MayThrowToNoExceptAdapter{std::move(callback)})) {}
-
-  explicit ActionUserCallback(ActionCallbackNoExcept callback)
-      : UserCallback(typeid(std::declval<T>())),
-        callback_(std::move(callback)) {}
-
- private:
-  Status RunImpl(const Context& ctx) override {
-    return callback_(ctx, reinterpret_cast<T*>(dest_ptr_));
-  }
-
-  struct MayThrowToNoExceptAdapter {
-    ActionCallbackMayThrow callback;
-    Status operator()(const Context& ctx, T* out) {
-      try {
-        callback(ctx, out);
-        return true;
-      } catch (const ArgumentError& e) {
-        return Status(e.what());
-      } catch (...) {
-        // If some random thing gets thrown, report it.
-        return Status("Unknown thing got thrown from UserCallback");
-      }
-    }
-  };
-
-  ActionCallbackNoExcept callback_;
-};
 
 namespace detail {
 // clang-format off
@@ -282,28 +165,6 @@ using function_signature_t = std::conditional_t<
     >::type
 >;
 // clang-format on
-
-// For a function type, extract its T.
-template <typename Callback>
-struct extract_target_type;
-
-template <typename T>
-struct extract_target_type<T(const Context&)> {
-  using type = T;
-};
-
-template <typename T>
-struct extract_target_type<Status(const Context&, T*)> {
-  using type = T;
-};
-
-template <typename T>
-struct extract_target_type<void(const Context&, T*)> {
-  using type = T;
-};
-
-template <typename T>
-using extract_target_type_t = typename extract_target_type<T>::type;
 
 }  // namespace detail
 
@@ -464,7 +325,7 @@ struct Destination {
   Destination() = default;
   template <typename T>
   /* implicit */ Destination(T* ptr)
-      : dest(Dest(ptr)), callback(new DestUserCallback<T>()) {
+      : dest(Dest(ptr)), callback(new DefaultUserCallback<T>()) {
     DCHECK2(ptr, "nullptr passed to Destination()!");
   }
 };
