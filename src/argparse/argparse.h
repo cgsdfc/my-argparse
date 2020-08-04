@@ -304,6 +304,84 @@ using extract_target_type_t = typename extract_target_type<T>::type;
 
 }  // namespace detail
 
+// introduce a layer to generally adapt user's callback to our internal
+// signature. To obtain an adapter, you use
+// UserCallbackAdapter<decltype(cb)>::type. Upon this layer we use
+// std::function<Status(const Context&, T*)> as the actual storage and further
+// erase its T using UserCallback.
+template <typename Callback,
+          typename Signature = detail::function_signature_t<Callback>>
+struct UserCallbackAdapter {
+  // By default use Callback itself.
+  using type = Callback;
+};
+
+// TODO: use std::bind()?
+template <typename T,
+          typename Callback,
+          Status (*Policy)(const Context&, T*, Callback*) noexcept>
+class AdapterHelper {
+ public:
+  explicit AdapterHelper(Callback cb) : cb_(std::move(cb)) {}
+  Status operator()(const Context& ctx, T* out) noexcept {
+    return Policy(ctx, out, &cb_);
+  }
+
+ protected:
+  Callback cb_;
+};
+
+// If the user have the right signature (but may throw), we still catch any
+// exception.
+template <typename Callback, typename T>
+struct UserCallbackAdapter<Callback, Status(const Context&, T*)> {
+  static Status Policy(const Context& ctx, T* out, Callback* cb) noexcept {
+    try {
+      return (*cb)(ctx, out);
+    } catch (const ArgumentError& e) {
+      return Status(e.what());
+    }
+  }
+  using type = AdapterHelper<T, Callback, &Policy>;
+};
+
+// If the user have the right signature, we put it into an std::function.
+template <typename Callback, typename T>
+struct UserCallbackAdapter<Callback, Status(const Context&, T*) noexcept> {
+  using type = std::function<Status(const Context&, T*) noexcept>;
+};
+
+// If the user just convert things, we store his result
+// and catch any exception.
+template <typename Callback, typename T>
+struct UserCallbackAdapter<Callback, T(const Context&)> {
+  static Status Policy(const Context& ctx, T* out, Callback* cb) noexcept {
+    try {
+      *out = (*cb)(ctx);
+      return true;
+    } catch (const ArgumentError& e) {
+      return Status(e.what());
+    }
+  }
+  using type = AdapterHelper<T, Callback, Policy>;
+};
+
+// If the user just convert things and force noexcept, we store his result
+// assuming no error can happen.
+template <typename Callback, typename T>
+struct UserCallbackAdapter<Callback, T(const Context&) noexcept> {
+  static Status Policy(const Context& ctx, T* out, Callback* cb) noexcept {
+    *out = (*cb)(ctx);
+    return true;
+  }
+  // using type = AdapterHelper<T, Callback, Policy>;
+  using type =
+      AdapterHelper<T, Callback, [](const Context& ctx, T* out, Callback* cb) {
+        *out = (*cb)(ctx);
+        return true;
+      }>;
+};
+
 // Type-erasured
 struct Action {
   std::unique_ptr<UserCallback> callback;

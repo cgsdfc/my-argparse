@@ -40,9 +40,9 @@ int main(int argc, char const* argv[]) {
                             .bug_address("cgsdfc@126.com")
                             .flags(Flags::kLongOnly));
 
-  parser.add_argument("name");
+  std::string name;
+  parser.add_argument("name", &name, "what's your name?");
   auto group = parser.add_argument_group("header");
-  group.add_argument("help-me");
 
   return 0;
 }
