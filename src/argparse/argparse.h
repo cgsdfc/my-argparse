@@ -1,6 +1,12 @@
 #pragma once
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <argp.h>
+#undef _GNU_SOURCE
+
 #include <algorithm>
 #include <cassert>
 #include <cstring>  // strlen()
@@ -27,6 +33,9 @@ class ArgumentGroup;
 class ArgumentBuilder;
 class ArgumentParser;
 class ArgpParser;
+
+using ArgpOption = ::argp_option;
+using ArgpState = ::argp_state;
 
 // Throw this exception will cause an error msg to be printed (via what()).
 class ArgumentError final : public std::runtime_error {
@@ -370,6 +379,17 @@ struct Type {
   }
 };
 
+inline bool IsValidPositionalName(const char* name, std::size_t len) {
+  if (!name || !len || !std::isalpha(name[0]))
+    return false;
+  for (++name, --len; len > 0; ++name, --len) {
+    if (std::isalnum(*name) || *name == '-' || *name == '_')
+      continue;  // allowed.
+    return false;
+  }
+  return true;
+}
+
 // A valid option name is long or short option name and not '--', '-'.
 // This is only checked once and true for good.
 inline bool IsValidOptionName(const char* name, std::size_t len) {
@@ -410,16 +430,25 @@ struct Names {
   bool is_option;
   std::string meta_var;
 
+  // TODO: this should allow a single option.
   // For positinal argument, only one name is allowed.
-  Names(const char* positional) {
+  Names(const char* name) {
+    if (name[0] == '-') {
+      InitOptions({name});
+      return;
+    }
+    auto len = std::strlen(name);
+    DCHECK2(IsValidPositionalName(name, len), "Not a valid positional name!");
     is_option = false;
-    std::string name(positional);
-    meta_var = ToUpper(name);
-    long_names.push_back(std::move(name));
+    std::string positional(name, len);
+    meta_var = ToUpper(positional);
+    long_names.push_back(std::move(positional));
   }
 
   // For optional argument, a couple of names are allowed, including alias.
-  Names(std::initializer_list<const char*> names) {
+  Names(std::initializer_list<const char*> names) { InitOptions(names); }
+
+  void InitOptions(std::initializer_list<const char*> names) {
     DCHECK2(names.size(), "At least one name must be provided");
     is_option = true;
 
@@ -473,6 +502,12 @@ class Argument {
     key_ = key;
   }
 
+  // void SetKey(int* next_key) {
+  //   DCHECK2(is_option_, "Only option can be SetKey()");
+  //   DCHECK(key_ == -1);
+  //   key_ = short_names_.empty() ? *next_key++ : short_names_.front();
+  // }
+
   void SetRequired(bool required) { is_required_ = required; }
   void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
 
@@ -493,12 +528,15 @@ class Argument {
   }
 
   const std::vector<std::string>& long_names() const { return long_names_; }
+  const std::vector<char>& short_names() const { return short_names_; }
+
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
  private:
   friend class ArgumentHolder;
+  friend class ArgpParser;
 
   Status Finalize() {
     // No dest provided, but still can have UserCallback. No need to Bind().
@@ -511,6 +549,13 @@ class Argument {
       return Status(
           "The type of dest is inconsistent with that of UserCallback!");
     return true;
+  }
+
+  // Put here to record some metics.
+  Status RunUserCallback(char* value, ArgpState* state) {
+    if (!user_callback_)  // User doesn't provide any.
+      return true;
+    return user_callback_->Run(Context{this, std::string(value)});
   }
 
   // For positional, this is -1.
@@ -550,11 +595,12 @@ class ArgumentBuilder {
     return *this;
   }
 
+  // for test:
+  Argument* arg() const { return arg_; }
+
  private:
   Argument* arg_;
 };
-
-using ArgpOption = ::argp_option;
 
 class ArgumentHolder {
  public:
@@ -567,6 +613,7 @@ class ArgumentHolder {
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
     FlushCompile();
     Argument& arg = arguments_.emplace_back();
+    arg.SetNames(std::move(names));
     arg.SetDest(std::move(dest));
     arg.SetHelpDoc(help);
     arg.SetType(std::move(type));
@@ -574,7 +621,7 @@ class ArgumentHolder {
 
     // option/positional handling.
     if (arg.is_option()) {
-      arg.SetKey(NextKey(names));
+      arg.SetKey(NextKey(arg.short_names()));
       bool inserted = key_index_.emplace(arg.key_, &arg).second;
       DCHECK(inserted);
     } else {
@@ -630,17 +677,34 @@ class ArgumentHolder {
     auto status = arg->Finalize();
     if (!status)
       return status;
-    // positional isn't managed by argp.
-    if (!arg->is_option())
-      return true;
 
     ArgpOption opt{};
+    if (!arg->is_option()) {
+      // Use an OptinoDoc to display the help-doc of this pos.
+      // TODO: we may need to sort the optional and positional args to add two
+      // groups.
+      opt.name = arg->name();
+      opt.doc = arg->doc();
+      opt.arg = arg->arg();
+      opt.flags |= OPTION_DOC;
+      if (positionals_.size() == 1) {
+        // The first positional, add a positional header.
+        CompileGroup("positional arguments");
+      }
+      options_.push_back(opt);
+      return true;
+    }
+
     opt.key = arg->key();
     opt.name = arg->name();
     opt.doc = arg->doc();
     opt.arg = arg->arg();
     if (!arg->is_required())
       opt.flags |= OPTION_ARG_OPTIONAL;
+    if (key_index_.size() == 1) {
+      // The first optional, add a optional header.
+      CompileGroup("optional arguments");
+    }
     options_.push_back(opt);
 
     // Handle alias.
@@ -681,8 +745,9 @@ class ArgumentHolder {
     options_.push_back(opt);
   }
 
-  int NextKey(const Names& names) {
-    return names.short_names.empty() ? next_key_++ : names.short_names[0];
+  // We may not need multiple short names.
+  int NextKey(const std::vector<char>& short_names) {
+    return short_names.empty() ? next_key_++ : short_names[0];
   }
 
   bool CheckNamesConflict(const Names& names) {
@@ -738,7 +803,6 @@ class ArgpParser {
  public:
   using Argp = ::argp;
   using ArgpParserCallback = ::argp_parser_t;
-  using ArgpState = ::argp_state;
   using ArgpErrorType = ::error_t;
   using ArgpHelpFilterCallback = decltype(Argp::help_filter);
 
@@ -769,13 +833,8 @@ class ArgpParser {
   }
 
  private:
-  static void InvokeUserCallback(const Argument* arg,
-                                 char* value,
-                                 ArgpState* state) {
-    UserCallback* cb = arg->user_callback();
-    if (!cb)  // User doesn't provide any.
-      return;
-    auto status = cb->Run(Context{arg, std::string(value)});
+  static void InvokeUserCallback(Argument* arg, char* value, ArgpState* state) {
+    auto status = arg->RunUserCallback(value, state);
     // If the user said no, just die with a msg.
     if (status)
       return;
@@ -931,6 +990,12 @@ class ArgumentParser : private ArgumentHolder {
     return parse_args(args.size(), args_copy.data());
   }
   // TODO: parse_known_args()
+
+  const char* program_name(bool long_name = false) const {
+    // Pretend to have this attribute.
+    return long_name ? ::program_invocation_name
+                     : ::program_invocation_short_name;
+  }
 
  private:
   ArgpParser parser_ = ArgpParser{this};

@@ -13,3 +13,7 @@ endif()
 include_directories(src)
 
 add_executable(test_main test_main.cc)
+
+find_package(GTest)
+add_executable(argparse_unittests src/argparse/argparse_unittests.cc)
+target_link_libraries(argparse_unittests gtest_main)
