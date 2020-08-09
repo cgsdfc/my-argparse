@@ -1,12 +1,6 @@
 #pragma once
 
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
 #include <argp.h>
-#undef _GNU_SOURCE
-
 #include <algorithm>
 #include <cassert>
 #include <cstring>  // strlen()
@@ -36,6 +30,7 @@ class ArgpParser;
 
 using ArgpOption = ::argp_option;
 using ArgpState = ::argp_state;
+using ArgpProgramVersionCallback = decltype(::argp_program_version_hook);
 
 // Throw this exception will cause an error msg to be printed (via what()).
 class ArgumentError final : public std::runtime_error {
@@ -916,6 +911,10 @@ class Options {
     program_version_ = v;
     return *this;
   }
+  Options& version(ArgpProgramVersionCallback callback) {
+    program_version_callback_ = callback;
+    return *this;
+  }
   Options& description(const char* d) {
     description_ = d;
     return *this;
@@ -933,18 +932,19 @@ class Options {
     return *this;
   }
   Options& flags(Flags f) {
-    flags_ = f;
+    flags_ |= f;
     return *this;
   }
 
  private:
   friend class ArgumentParser;
   const char* program_version_ = {};
+  ArgpProgramVersionCallback program_version_callback_ = {};
   const char* description_ = {};
   const char* after_doc_ = {};
   const char* domain_ = {};
   const char* bug_address_ = {};
-  Flags flags_ = kNoFlags;
+  int flags_ = kNoFlags;
 };
 
 class ArgumentParser : private ArgumentHolder {
@@ -954,8 +954,11 @@ class ArgumentParser : private ArgumentHolder {
   explicit ArgumentParser(const Options& options) { set_options(options); }
 
   void set_options(const Options& options) {
-    argp_program_version = options.program_version_;
-    argp_program_bug_address = options.bug_address_;
+    ::argp_program_version = options.program_version_;
+    if (options.program_version_callback_)
+      ::argp_program_version_hook = options.program_version_callback_;
+
+    ::argp_program_bug_address = options.bug_address_;
     // TODO: may check domain?
     parser_.set_argp_domain(options.domain_);
     parser_.AddParserFlags(static_cast<int>(options.flags_));
@@ -970,7 +973,7 @@ class ArgumentParser : private ArgumentHolder {
     }
     if (!program_doc_.empty())
       parser_.set_doc(program_doc_.c_str());
-    // args_doc is generated later.
+    // TODO args_doc is generated later.
   }
 
   using ArgumentHolder::add_argument;
@@ -991,11 +994,12 @@ class ArgumentParser : private ArgumentHolder {
   }
   // TODO: parse_known_args()
 
-  const char* program_name(bool long_name = false) const {
-    // Pretend to have this attribute.
-    return long_name ? ::program_invocation_name
-                     : ::program_invocation_short_name;
+  const char* program_name() const { return ::program_invocation_name; }
+  const char* program_short_name() const {
+    return ::program_invocation_short_name;
   }
+  const char* program_version() const { return ::argp_program_version; }
+  const char* program_bug_address() const { return ::argp_program_bug_address; }
 
  private:
   ArgpParser parser_ = ArgpParser{this};
