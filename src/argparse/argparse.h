@@ -172,18 +172,13 @@ using function_signature_t = std::conditional_t<
 
 }  // namespace detail
 
-template <typename T>
-std::type_index TypeIndex() {
-  return typeid(std::declval<T>());
-}
-
 // When the user merely provides a dest, we will infer from the type of the
 // pointer and provide this callback, which parses the string into the value of
 // the type and store into the user's pointer.
 template <typename T>
 class DefaultUserCallback : public UserCallback {
  public:
-  DefaultUserCallback() : UserCallback(TypeIndex<T>()) {}
+  DefaultUserCallback() : UserCallback(typeid(T)) {}
 
  private:
   Status RunImpl(const Context& ctx) override {
@@ -201,7 +196,7 @@ class CustomUserCallback : public UserCallback {
  public:
   using Callback = InternalUserCallback<T>;
   explicit CustomUserCallback(Callback cb)
-      : UserCallback(TypeIndex<T>()), callback_(std::move(cb)) {}
+      : UserCallback(typeid(T)), callback_(std::move(cb)) {}
 
  private:
   Status RunImpl(const Context& ctx) override {
@@ -463,8 +458,39 @@ struct Names {
 };
 
 // Holds all meta-info about an argument.
+// For now this is a union of Option, Positional and Group.
+// In the future this can be three classes.
 class Argument {
  public:
+  // Initialize as an option.
+  void InitAsOptions(Names names, int key, int group) {
+    DCHECK(!initialized());
+    DCHECK2(key > 0, "key for option must be greater than 0");
+    SetNames(std::move(names));
+    SetKey(key);
+    SetGroup(group);
+  }
+
+  // Initialize as a group.
+  void InitAsGroup(const char* group_header, int group) {
+    DCHECK(!initialized());
+    DCHECK(group_header);
+    std::string header(group_header);
+    DCHECK(!header.empty());
+    if (!header.back() == ':')
+      header.append(':');
+    SetHelpDoc(std::move(header));
+    SetKey(kKeyForGroup);
+  }
+
+  // Initialize as a positional.
+  void InitAsPositional(Names names, int group) {
+    DCHECK(!initialized());
+    SetNames(std::move(names));
+    SetKey(kKeyForPositional);
+    SetGroup(group);
+  }
+
   void SetDest(Destination dest) {
     if (dest.callback) {
       dest_ = dest.dest;
@@ -497,16 +523,13 @@ class Argument {
     key_ = key;
   }
 
-  // void SetKey(int* next_key) {
-  //   DCHECK2(is_option_, "Only option can be SetKey()");
-  //   DCHECK(key_ == -1);
-  //   key_ = short_names_.empty() ? *next_key++ : short_names_.front();
-  // }
-
+  void SetGroup(int group_id) { group_id_ = group_id; }
   void SetRequired(bool required) { is_required_ = required; }
   void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
 
+  bool initialized() const { return key_ != 0; }
   int key() const { return key_; }
+  int group() const { return group_id_; }
   bool is_option() const { return is_option_; }
   bool is_required() const { return is_required_; }
   UserCallback* user_callback() const { return user_callback_.get(); }
@@ -528,10 +551,54 @@ class Argument {
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
+  bool is_group() const { return key_ == kKeyForGroup; }
+
+  void CompileToArgpOptions(std::vector<ArgpOption>* options) const {
+    ArgpOption opt{};
+    opt.doc = doc();
+    opt.group = group();
+    if (is_group()) {
+      // group means both 0 in key and name.
+      DCHECK(opt.key == 0 && opt.name == 0);
+      return options->push_back(opt);
+    }
+    opt.name = name();
+    if (!is_option()) {
+      // positional means none-zero in only doc and name, and flag should be
+      // OPTION_DOC.
+      opt.doc = OPTION_DOC;
+      return options->push_back(opt);
+    }
+    opt.arg = arg();
+    opt.key = key();
+    options->push_back(opt);
+    // Add all aliases.
+    for (const auto& alias : long_names()) {
+      ArgpOption opt{};
+      opt.flags = OPTION_ALIAS;
+      options->push_back(opt);
+    }
+  }
+
+  // void FillOption(ArgpOption* opt) const {
+  //   opt->name = name();
+  //   opt->arg = arg();
+  //   opt->doc = doc();
+  //   opt->group = group();
+  //   if (is_option()) {
+  //     opt->key = key();
+  //   } else {
+  //     opt->flags |= OPTION_DOC;
+  //   }
+  // }
 
  private:
   friend class ArgumentHolder;
   friend class ArgpParser;
+
+  static constexpr int kKeyForNothing = 0;
+  static constexpr int kKeyForPositional = -1;
+  static constexpr int kKeyForGroup = -2;
 
   Status Finalize() {
     // No dest provided, but still can have UserCallback. No need to Bind().
@@ -553,14 +620,16 @@ class Argument {
     return user_callback_->Run(Context{this, std::string(value)});
   }
 
-  // For positional, this is -1.
-  int key_ = -1;
+  // For positional, this is -1, for group-header, this is -2.
+  int key_ = kKeyForNothing;
+  int group_id_ = 0;
   std::optional<Dest> dest_;                     // Maybe null.
   std::unique_ptr<UserCallback> user_callback_;  // Maybe null.
   std::string help_doc_;
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
   std::string meta_var_;
+  // TODO: This is encoded in key_, can be rm'ed.
   bool is_option_ = false;
   bool is_required_ = false;
 };
@@ -597,23 +666,48 @@ class ArgumentBuilder {
   Argument* arg_;
 };
 
+// This is an interface that provides add_argument() and other common things.
+class ArgumentContainer {
+ public:
+  ArgumentBuilder add_argument(Names names,
+                               Destination dest = {},
+                               const char* help = {},
+                               Type type = {});
+
+ private:
+  virtual Argument* AddArgument(Names names) = 0;
+};
+
 class ArgumentHolder {
  public:
+  ArgumentHolder() {
+    // Add 2 builtin group headers first.
+    AddOptionForGroup("optional arguments");
+  }
+
+  // TODO: this may not be the public interface directly.
   ArgumentBuilder add_argument(Names names,
                                Destination dest = {},
                                const char* help = {},
                                Type type = {},
                                Action action = {}) {
+    Argument* arg = AddArgument(std::move(names));
+    arg->SetDest(std::move(dest));
+    arg->SetHelpDoc(help);
+    arg->SetType(std::move(type));
+    arg->SetAction(std::move(action));
+    return ArgumentBuilder(arg);
+  }
+
+  Argument* AddArgument(Names names) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
+    // TODO: since in most cases, parse_args() is only called once, we may
+    // compile all the options in one shot before parse_args() is called and
+    // throw the options array away after using it.
     FlushCompile();
     Argument& arg = arguments_.emplace_back();
     arg.SetNames(std::move(names));
-    arg.SetDest(std::move(dest));
-    arg.SetHelpDoc(help);
-    arg.SetType(std::move(type));
-    arg.SetAction(std::move(action));
-
     // option/positional handling.
     if (arg.is_option()) {
       arg.SetKey(NextKey(arg.short_names()));
@@ -622,8 +716,7 @@ class ArgumentHolder {
     } else {
       positionals_.push_back(&arg);
     }
-
-    return ArgumentBuilder(&arg);
+    return &arg;
   }
 
   ArgumentGroup add_argument_group(const char* header);
@@ -631,6 +724,7 @@ class ArgumentHolder {
   const std::map<int, Argument*>& key_index() const { return key_index_; }
   const std::vector<Argument*>& positionals() const { return positionals_; }
 
+  // TODO: not need this.
   class FrozenScope {
    public:
     explicit FrozenScope(ArgumentHolder* holder) : holder_(holder) {
@@ -684,7 +778,7 @@ class ArgumentHolder {
       opt.flags |= OPTION_DOC;
       if (positionals_.size() == 1) {
         // The first positional, add a positional header.
-        CompileGroup("positional arguments");
+        AddOptionForGroup("positional arguments");
       }
       options_.push_back(opt);
       return true;
@@ -698,7 +792,6 @@ class ArgumentHolder {
       opt.flags |= OPTION_ARG_OPTIONAL;
     if (key_index_.size() == 1) {
       // The first optional, add a optional header.
-      CompileGroup("optional arguments");
     }
     options_.push_back(opt);
 
@@ -734,7 +827,7 @@ class ArgumentHolder {
     DCHECK2(status, "CompileUtil() failed when add_argument()");
   }
 
-  void CompileGroup(const char* header) {
+  void AddOptionForGroup(const char* header) {
     ArgpOption opt{};
     opt.doc = header;
     options_.push_back(opt);
@@ -744,6 +837,8 @@ class ArgumentHolder {
   int NextKey(const std::vector<char>& short_names) {
     return short_names.empty() ? next_key_++ : short_names[0];
   }
+
+  int NextGroupID() { return next_group_id_++; }
 
   bool CheckNamesConflict(const Names& names) {
     for (auto&& long_name : names.long_names)
@@ -755,8 +850,17 @@ class ArgumentHolder {
     return true;
   }
 
-  static constexpr int kFirstIntOutsideChar = 128;
-  unsigned next_key_ = kFirstIntOutsideChar;
+  static constexpr unsigned kFirstArgumentKey = 128;
+
+  // Gid for two builtin groups.
+  static constexpr unsigned kOptionGroupID = 1;
+  static constexpr unsigned kPositionalGroupID = 2;
+
+  // We have to explicitly manage group_id (instead of using 0 to inherit the
+  // gid from the preivous entry) since the user can add option and positionals
+  // in any order. Automatical inheriting gid will mess up.
+  unsigned next_group_id_;
+  unsigned next_key_ = kFirstArgumentKey;
 
   // Hold the storage of all args.
   std::list<Argument> arguments_;
@@ -766,6 +870,7 @@ class ArgumentHolder {
   std::map<int, Argument*> key_index_;
   // Conflicts checking.
   std::set<std::string> name_set_;
+  // TODO: compile result may not be stored here?
   // Compile result.
   std::vector<ArgpOption> options_;
   int next_to_compile_ = 0;
@@ -775,7 +880,8 @@ class ArgumentHolder {
 // Impl add_group() call.
 class ArgumentGroup {
  public:
-  explicit ArgumentGroup(ArgumentHolder* holder) : holder_(holder) {}
+  ArgumentGroup(ArgumentHolder* holder, int group_id)
+      : holder_(holder), group_id_(group_id) {}
 
   template <typename... Args>
   ArgumentBuilder add_argument(Args&&... args) {
@@ -783,14 +889,14 @@ class ArgumentGroup {
   }
 
  private:
+  int group_id_;
   ArgumentHolder* holder_;
 };
 
 ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
-  // Generate a group entry in the options. group id is automatically generated.
   FlushCompile();
-  CompileGroup(header);
-  return ArgumentGroup(this);
+  AddOptionForGroup(header);
+  return ArgumentGroup(this, NextGroupID());
 }
 
 // This handles the argp_parser_t function.
