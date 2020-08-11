@@ -76,6 +76,7 @@ class Status {
 
 struct Context {
   // The Argument being parsed.
+  // TODO: maynot let user see this.
   const Argument* argument;
   // The command-line value to this argument.
   std::string value;
@@ -518,7 +519,7 @@ class Argument {
   }
 
   void SetKey(int key) {
-    DCHECK2(is_option_, "Only option can be SetKey()");
+    // DCHECK2(is_option_, "Only option can be SetKey()");
     DCHECK(short_names_.empty() || short_names_[0] == key);
     key_ = key;
   }
@@ -675,23 +676,27 @@ class ArgumentContainer {
 class ArgumentHolder : public ArgumentContainer {
  public:
   ArgumentHolder() {
-    // Add 2 builtin group headers first.
-    // AddGroup("optional arguments", kOptionGroup);
-    // AddGroup("positional arguments", kPositionalGroup);
+    AddGroup("optional arguments");
+    AddGroup("positional arguments");
   }
 
-  int AddGroup(const char* header, int id) {
-    DCHECK(id > 0);
-    Argument& arg = arguments_.emplace_back();
-    arg.InitAsGroup(header, id);
-    return id;
+  // groups_[i].group_ == i + 1.
+  // Create a new group.
+  int AddGroup(const char* header) {
+    int group = groups_.size() + 1;
+    groups_.emplace_back(group, header);
+    return group;
   }
 
   // Add an arg to a specific group.
   Argument* AddArgumentToGroup(Names names, int group) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
+    DCHECK(group < groups_.size());
+
     Argument& arg = arguments_.emplace_back();
+    GroupFromID(group)->AddMember();
+
     if (names.is_option) {
       arg.InitAsOptions(std::move(names), NextKey(names.short_names), group);
       bool inserted = optional_arguments_.emplace(arg.key_, &arg).second;
@@ -707,8 +712,8 @@ class ArgumentHolder : public ArgumentContainer {
   // compile all the options in one shot before parse_args() is called and
   // throw the options array away after using it.
   Argument* AddArgument(Names names) override {
-    return AddArgumentToGroup(
-        std::move(names), names.is_option ? kOptionGroup : kPositionalGroup);
+    int group = names.is_option ? kOptionGroup : kPositionalGroup;
+    return AddArgumentToGroup(std::move(names), group);
   }
 
   ArgumentGroup add_argument_group(const char* header);
@@ -721,32 +726,76 @@ class ArgumentHolder : public ArgumentContainer {
   }
 
   static constexpr int kAverageAliasCount = 4;
+
   Status CompileAllToArgpOptions(std::vector<ArgpOption>* options) {
-    options->reserve(arguments_.size() + kAverageAliasCount + 1);
-    for (const auto& arg : arguments_) {
+    if (arguments_.empty())
+      return true;
+
+    const unsigned option_size =
+        arguments_.size() + groups_.size() + kAverageAliasCount + 1;
+    options->reserve(option_size);
+
+    for (const Group& group : groups_) {
+      group.CompileToArgpOption(options);
+    }
+
+    // TODO: if there is not pos/opt at all but there are two groups, will argp
+    // still print these empty groups?
+    for (const Argument& arg : arguments_) {
       arg.CompileToArgpOptions(options);
     }
     // Only when at least one opt/pos presents should we generate their groups.
-    if (optional_arguments_.size())
-      AddGroup("optional arguments", kOptionGroup);
-    if (positional_arguments_.size())
-      AddGroup("positional arguments", kPositionalGroup);
     options->push_back({});
     return true;
   }
 
  private:
+  // If there is a group, but it has no member, it will not be added to
+  // argp_options. This class manages the logic above. It also frees the
+  // Argument class from managing groups as well as option and positional.
+  class Group {
+   public:
+    Group(int group, const char* header) : group_(group), header_(header) {
+      DCHECK(group_ > 0);
+      DCHECK(header_.size());
+      if (header_.back() != ':')
+        header_.push_back(':');
+    }
+
+    void AddMember() { ++members_; }
+
+    void CompileToArgpOption(std::vector<ArgpOption>* options) const {
+      if (!members_)
+        return;
+      ArgpOption opt{};
+      opt.group = group_;
+      opt.doc = header_.c_str();
+      return options->push_back(opt);
+    }
+
+   private:
+    unsigned group_;        // The group id.
+    std::string header_;    // the text provided by user plus a ':'.
+    unsigned members_ = 0;  // If this is 0, no header will be gen'ed.
+  };
+
+  Group* GroupFromID(int group) {
+    DCHECK(group <= groups_.size());
+    return &groups_[group - 1];
+  }
+
   // We may not need multiple short names.
   int NextKey(const std::vector<char>& short_names) {
     return short_names.empty() ? next_key_++ : short_names[0];
   }
 
-  int NextGroupID() { return next_group_id_++; }
+  // int NextGroupID() { return next_group_id_++; }
 
   bool CheckNamesConflict(const Names& names) {
     for (auto&& long_name : names.long_names)
       if (!name_set_.insert(long_name).second)
         return false;
+    // May not use multiple short names.
     for (char short_name : names.short_names)
       if (!name_set_.insert(std::string(&short_name, 1)).second)
         return false;
@@ -755,17 +804,17 @@ class ArgumentHolder : public ArgumentContainer {
 
   static constexpr unsigned kFirstArgumentKey = 128;
 
-  // Gid for two builtin groups.
-  enum GroupID {
-    kOptionGroup = 1,
-    kPositionalGroup = 2,
-    kFirstUserGroup = kPositionalGroup + 1,
-  };
+  // // Gid for two builtin groups.
+  // enum GroupID {
+  //   kOptionGroup = 1,
+  //   kPositionalGroup = 2,
+  //   kFirstUserGroup = kPositionalGroup + 1,
+  // };
 
   // We have to explicitly manage group_id (instead of using 0 to inherit the
   // gid from the preivous entry) since the user can add option and positionals
   // in any order. Automatical inheriting gid will mess up.
-  unsigned next_group_id_ = kFirstUserGroup;
+  // unsigned next_group_id_ = kFirstUserGroup;
   unsigned next_key_ = kFirstArgumentKey;
 
   // Hold the storage of all args.
@@ -774,6 +823,8 @@ class ArgumentHolder : public ArgumentContainer {
   std::vector<Argument*> positional_arguments_;
   // indexed by their key.
   std::map<int, Argument*> optional_arguments_;
+  // groups must be random-accessed.
+  std::vector<Group> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;
 };
@@ -794,7 +845,7 @@ class ArgumentGroup : public ArgumentContainer {
 };
 
 ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
-  int group = AddGroup(header, NextGroupID());
+  int group = AddGroup(header);
   return ArgumentGroup(this, group);
 }
 
@@ -963,6 +1014,7 @@ class ArgumentParser : private ArgumentHolder {
 
   explicit ArgumentParser(const Options& options) { set_options(options); }
 
+  // TODO: maynot let user use this.
   void set_options(const Options& options) {
     ::argp_program_version = options.program_version_;
     if (options.program_version_callback_)
