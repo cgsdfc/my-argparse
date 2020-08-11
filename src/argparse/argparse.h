@@ -472,18 +472,6 @@ class Argument {
     SetGroup(group);
   }
 
-  // Initialize as a group.
-  void InitAsGroup(const char* group_header, int group) {
-    DCHECK(!initialized());
-    DCHECK(group_header);
-    std::string header(group_header);
-    DCHECK(!header.empty());
-    if (header.back() != ':')
-      header.push_back(':');
-    SetHelpDoc(std::move(header));
-    SetKey(kKeyForGroup);
-  }
-
   // Initialize as a positional.
   void InitAsPositional(Names names, int group) {
     DCHECK(!initialized());
@@ -552,17 +540,11 @@ class Argument {
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
-  bool is_group() const { return key_ == kKeyForGroup; }
 
   void CompileToArgpOptions(std::vector<ArgpOption>* options) const {
     ArgpOption opt{};
     opt.doc = doc();
     opt.group = group();
-    if (is_group()) {
-      // group means both 0 in key and name.
-      DCHECK(opt.key == 0 && opt.name == 0);
-      return options->push_back(opt);
-    }
     opt.name = name();
     if (!is_option()) {
       // positional means none-zero in only doc and name, and flag should be
@@ -587,7 +569,6 @@ class Argument {
 
   static constexpr int kKeyForNothing = 0;
   static constexpr int kKeyForPositional = -1;
-  static constexpr int kKeyForGroup = -2;
 
   Status Finalize() {
     // No dest provided, but still can have UserCallback. No need to Bind().
@@ -680,7 +661,6 @@ class ArgumentHolder : public ArgumentContainer {
     AddGroup("positional arguments");
   }
 
-  // groups_[i].group_ == i + 1.
   // Create a new group.
   int AddGroup(const char* header) {
     int group = groups_.size() + 1;
@@ -692,7 +672,7 @@ class ArgumentHolder : public ArgumentContainer {
   Argument* AddArgumentToGroup(Names names, int group) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
-    DCHECK(group < groups_.size());
+    DCHECK(group <= groups_.size());
 
     Argument& arg = arguments_.emplace_back();
     GroupFromID(group)->AddMember();
@@ -789,8 +769,6 @@ class ArgumentHolder : public ArgumentContainer {
     return short_names.empty() ? next_key_++ : short_names[0];
   }
 
-  // int NextGroupID() { return next_group_id_++; }
-
   bool CheckNamesConflict(const Names& names) {
     for (auto&& long_name : names.long_names)
       if (!name_set_.insert(long_name).second)
@@ -805,11 +783,10 @@ class ArgumentHolder : public ArgumentContainer {
   static constexpr unsigned kFirstArgumentKey = 128;
 
   // // Gid for two builtin groups.
-  // enum GroupID {
-  //   kOptionGroup = 1,
-  //   kPositionalGroup = 2,
-  //   kFirstUserGroup = kPositionalGroup + 1,
-  // };
+  enum GroupID {
+    kOptionGroup = 1,
+    kPositionalGroup = 2,
+  };
 
   // We have to explicitly manage group_id (instead of using 0 to inherit the
   // gid from the preivous entry) since the user can add option and positionals
