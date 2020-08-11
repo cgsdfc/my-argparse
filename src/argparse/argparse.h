@@ -676,8 +676,8 @@ class ArgumentHolder : public ArgumentContainer {
  public:
   ArgumentHolder() {
     // Add 2 builtin group headers first.
-    AddGroup("optional arguments", kOptionGroup);
-    AddGroup("positional arguments", kPositionalGroup);
+    // AddGroup("optional arguments", kOptionGroup);
+    // AddGroup("positional arguments", kPositionalGroup);
   }
 
   int AddGroup(const char* header, int id) {
@@ -694,11 +694,11 @@ class ArgumentHolder : public ArgumentContainer {
     Argument& arg = arguments_.emplace_back();
     if (names.is_option) {
       arg.InitAsOptions(std::move(names), NextKey(names.short_names), group);
-      bool inserted = key_index_.emplace(arg.key_, &arg).second;
+      bool inserted = optional_arguments_.emplace(arg.key_, &arg).second;
       DCHECK(inserted);
     } else {
       arg.InitAsPositional(std::move(names), group);
-      positionals_.push_back(&arg);
+      positional_arguments_.push_back(&arg);
     }
     return &arg;
   }
@@ -706,7 +706,6 @@ class ArgumentHolder : public ArgumentContainer {
   // TODO: since in most cases, parse_args() is only called once, we may
   // compile all the options in one shot before parse_args() is called and
   // throw the options array away after using it.
-  // FlushCompile();
   Argument* AddArgument(Names names) override {
     return AddArgumentToGroup(
         std::move(names), names.is_option ? kOptionGroup : kPositionalGroup);
@@ -714,8 +713,12 @@ class ArgumentHolder : public ArgumentContainer {
 
   ArgumentGroup add_argument_group(const char* header);
 
-  const std::map<int, Argument*>& key_index() const { return key_index_; }
-  const std::vector<Argument*>& positionals() const { return positionals_; }
+  const std::map<int, Argument*>& optional_arguments() const {
+    return optional_arguments_;
+  }
+  const std::vector<Argument*>& positional_arguments() const {
+    return positional_arguments_;
+  }
 
   static constexpr int kAverageAliasCount = 4;
   Status CompileAllToArgpOptions(std::vector<ArgpOption>* options) {
@@ -723,6 +726,11 @@ class ArgumentHolder : public ArgumentContainer {
     for (const auto& arg : arguments_) {
       arg.CompileToArgpOptions(options);
     }
+    // Only when at least one opt/pos presents should we generate their groups.
+    if (optional_arguments_.size())
+      AddGroup("optional arguments", kOptionGroup);
+    if (positional_arguments_.size())
+      AddGroup("positional arguments", kPositionalGroup);
     options->push_back({});
     return true;
   }
@@ -763,9 +771,9 @@ class ArgumentHolder : public ArgumentContainer {
   // Hold the storage of all args.
   std::list<Argument> arguments_;
   // indexed by their define-order.
-  std::vector<Argument*> positionals_;
+  std::vector<Argument*> positional_arguments_;
   // indexed by their key.
-  std::map<int, Argument*> key_index_;
+  std::map<int, Argument*> optional_arguments_;
   // Conflicts checking.
   std::set<std::string> name_set_;
 };
@@ -815,12 +823,6 @@ class ArgpParser {
   void AddParserFlags(int flags) { parser_flags_ |= flags; }
   void RemoveParserFlags(int flags) { parser_flags_ &= ~flags; }
 
-  void PrepareArgpOptions() {
-    DCHECK(argp_options_.empty());
-    holder_->CompileAllToArgpOptions(&argp_options_);
-    argp_.options = argp_options_.data();
-  }
-
   void ParseArgs(int argc, char** argv) {
     int arg_index = -1;
     PrepareArgpOptions();
@@ -829,6 +831,12 @@ class ArgpParser {
   }
 
  private:
+  void PrepareArgpOptions() {
+    DCHECK(argp_options_.empty());
+    holder_->CompileAllToArgpOptions(&argp_options_);
+    argp_.options = argp_options_.data();
+  }
+
   static void InvokeUserCallback(Argument* arg, char* value, ArgpState* state) {
     auto status = arg->RunUserCallback(value, state);
     // If the user said no, just die with a msg.
@@ -840,7 +848,7 @@ class ArgpParser {
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
   ArgpErrorType ParseImpl(int key, char* arg, ArgpState* state) {
-    const auto& positionals = holder_->positionals();
+    const auto& positionals = holder_->positional_arguments();
 
     // Positional argument.
     if (key == ARGP_KEY_ARG) {
@@ -853,7 +861,7 @@ class ArgpParser {
     }
 
     // Next most frequent handling is options.
-    const auto& key_index = holder_->key_index();
+    const auto& key_index = holder_->optional_arguments();
 
     if ((key & kSpecialKeyMask) == 0) {
       // This isn't a special key, but rather an option.
