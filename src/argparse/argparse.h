@@ -477,8 +477,8 @@ class Argument {
     DCHECK(group_header);
     std::string header(group_header);
     DCHECK(!header.empty());
-    if (!header.back() == ':')
-      header.append(':');
+    if (header.back() != ':')
+      header.push_back(':');
     SetHelpDoc(std::move(header));
     SetKey(kKeyForGroup);
   }
@@ -566,7 +566,7 @@ class Argument {
     if (!is_option()) {
       // positional means none-zero in only doc and name, and flag should be
       // OPTION_DOC.
-      opt.doc = OPTION_DOC;
+      opt.flags = OPTION_DOC;
       return options->push_back(opt);
     }
     opt.arg = arg();
@@ -672,166 +672,202 @@ class ArgumentContainer {
   ArgumentBuilder add_argument(Names names,
                                Destination dest = {},
                                const char* help = {},
-                               Type type = {});
+                               Type type = {}) {
+    Argument* arg = AddArgument(std::move(names));
+    arg->SetDest(std::move(dest));
+    arg->SetHelpDoc(help);
+    arg->SetType(std::move(type));
+    return ArgumentBuilder(arg);
+  }
 
  private:
   virtual Argument* AddArgument(Names names) = 0;
 };
 
-class ArgumentHolder {
+class ArgumentHolder : public ArgumentContainer {
  public:
   ArgumentHolder() {
     // Add 2 builtin group headers first.
-    AddOptionForGroup("optional arguments");
+    AddGroup("optional arguments", kOptionGroup);
+    AddGroup("positional arguments", kPositionalGroup);
   }
 
   // TODO: this may not be the public interface directly.
-  ArgumentBuilder add_argument(Names names,
-                               Destination dest = {},
-                               const char* help = {},
-                               Type type = {},
-                               Action action = {}) {
-    Argument* arg = AddArgument(std::move(names));
-    arg->SetDest(std::move(dest));
-    arg->SetHelpDoc(help);
-    arg->SetType(std::move(type));
-    arg->SetAction(std::move(action));
-    return ArgumentBuilder(arg);
+  // ArgumentBuilder add_argument(Names names,
+  //                              Destination dest = {},
+  //                              const char* help = {},
+  //                              Type type = {},
+  //                              Action action = {}) {
+  //   Argument* arg = AddArgument(std::move(names));
+  //   arg->SetDest(std::move(dest));
+  //   arg->SetHelpDoc(help);
+  //   arg->SetType(std::move(type));
+  //   arg->SetAction(std::move(action));
+  //   return ArgumentBuilder(arg);
+  // }
+
+  int AddGroup(const char* header, int id) {
+    DCHECK(id > 0);
+    Argument& arg = arguments_.emplace_back();
+    arg.InitAsGroup(header, id);
+    return id;
   }
 
-  Argument* AddArgument(Names names) {
+  // Add an arg to a specific group.
+  Argument* AddArgumentToGroup(Names names, int group) {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
-    // TODO: since in most cases, parse_args() is only called once, we may
-    // compile all the options in one shot before parse_args() is called and
-    // throw the options array away after using it.
-    FlushCompile();
     Argument& arg = arguments_.emplace_back();
-    arg.SetNames(std::move(names));
-    // option/positional handling.
-    if (arg.is_option()) {
-      arg.SetKey(NextKey(arg.short_names()));
+    if (names.is_option) {
+      arg.InitAsOptions(std::move(names), NextKey(names.short_names), group);
       bool inserted = key_index_.emplace(arg.key_, &arg).second;
       DCHECK(inserted);
     } else {
+      arg.InitAsPositional(std::move(names), group);
       positionals_.push_back(&arg);
     }
     return &arg;
   }
 
+  // TODO: since in most cases, parse_args() is only called once, we may
+  // compile all the options in one shot before parse_args() is called and
+  // throw the options array away after using it.
+  // FlushCompile();
+  Argument* AddArgument(Names names) override {
+    return AddArgumentToGroup(
+        std::move(names), names.is_option ? kOptionGroup : kPositionalGroup);
+  }
+
+    // arg.SetNames(std::move(names));
+    // option/positional handling.
+    // if (arg.is_option()) {
+    //   // arg.SetKey(NextKey(arg.short_names()));
+    // } else {
+    // }
   ArgumentGroup add_argument_group(const char* header);
 
   const std::map<int, Argument*>& key_index() const { return key_index_; }
   const std::vector<Argument*>& positionals() const { return positionals_; }
 
-  // TODO: not need this.
-  class FrozenScope {
-   public:
-    explicit FrozenScope(ArgumentHolder* holder) : holder_(holder) {
-      holder_->EnterFrozenScope();
+  // // TODO: not need this.
+  // class FrozenScope {
+  //  public:
+  //   explicit FrozenScope(ArgumentHolder* holder) : holder_(holder) {
+  //     holder_->EnterFrozenScope();
+  //   }
+  //   ~FrozenScope() { holder_->LeaveFrozenScope(); }
+
+  //  private:
+  //   ArgumentHolder* holder_;
+  // };
+
+  // const ArgpOption* frozen_options() const {
+  //   DCHECK(frozen_);
+  //   return options_.data();
+  // }
+
+  static constexpr int kAverageAliasCount = 4;
+  Status CompileAllToArgpOptions(std::vector<ArgpOption>* options) {
+    options->reserve(arguments_.size() + kAverageAliasCount + 1);
+    for (const auto& arg : arguments_) {
+      arg.CompileToArgpOptions(options);
     }
-    ~FrozenScope() { holder_->LeaveFrozenScope(); }
-
-   private:
-    ArgumentHolder* holder_;
-  };
-
-  const ArgpOption* frozen_options() const {
-    DCHECK(frozen_);
-    return options_.data();
+    options->push_back({});
+    return true;
   }
 
  private:
-  void EnterFrozenScope() {
-    if (frozen_)
-      return;
-    frozen_ = true;
-    // If nothing added..
-    if (arguments_.empty()) {
-      DCHECK(options_.data() == nullptr);
-      return;
-    }
-    // Compile all args.
-    FlushCompile();
-    options_.push_back(ArgpOption{});
-  }
+  // void EnterFrozenScope() {
+  //   if (frozen_)
+  //     return;
+  //   frozen_ = true;
+  //   // If nothing added..
+  //   if (arguments_.empty()) {
+  //     DCHECK(options_.data() == nullptr);
+  //     return;
+  //   }
+  //   // Compile all args.
+  //   FlushCompile();
+  //   options_.push_back(ArgpOption{});
+  // }
 
-  void LeaveFrozenScope() {
-    frozen_ = false;
-    if (!options_.empty())
-      options_.pop_back();
-  }
+  // void LeaveFrozenScope() {
+  //   frozen_ = false;
+  //   if (!options_.empty())
+  //     options_.pop_back();
+  // }
 
-  Status CompileSingle(Argument* arg) {
-    auto status = arg->Finalize();
-    if (!status)
-      return status;
+  // Status CompileSingle(Argument* arg) {
+    
+    // auto status = arg->Finalize();
+    // if (!status)
+    //   return status;
 
-    ArgpOption opt{};
-    if (!arg->is_option()) {
-      // Use an OptinoDoc to display the help-doc of this pos.
-      // TODO: we may need to sort the optional and positional args to add two
-      // groups.
-      opt.name = arg->name();
-      opt.doc = arg->doc();
-      opt.arg = arg->arg();
-      opt.flags |= OPTION_DOC;
-      if (positionals_.size() == 1) {
-        // The first positional, add a positional header.
-        AddOptionForGroup("positional arguments");
-      }
-      options_.push_back(opt);
-      return true;
-    }
+    // ArgpOption opt{};
+    // if (!arg->is_option()) {
+    //   // Use an OptinoDoc to display the help-doc of this pos.
+    //   // TODO: we may need to sort the optional and positional args to add two
+    //   // groups.
+    //   opt.name = arg->name();
+    //   opt.doc = arg->doc();
+    //   opt.arg = arg->arg();
+    //   opt.flags |= OPTION_DOC;
+    //   if (positionals_.size() == 1) {
+    //     // The first positional, add a positional header.
+    //     AddOptionForGroup("positional arguments");
+    //   }
+    //   options_.push_back(opt);
+    //   return true;
+    // }
 
-    opt.key = arg->key();
-    opt.name = arg->name();
-    opt.doc = arg->doc();
-    opt.arg = arg->arg();
-    if (!arg->is_required())
-      opt.flags |= OPTION_ARG_OPTIONAL;
-    if (key_index_.size() == 1) {
-      // The first optional, add a optional header.
-    }
-    options_.push_back(opt);
+    // opt.key = arg->key();
+    // opt.name = arg->name();
+    // opt.doc = arg->doc();
+    // opt.arg = arg->arg();
+    // if (!arg->is_required())
+    //   opt.flags |= OPTION_ARG_OPTIONAL;
+    // if (key_index_.size() == 1) {
+    //   // The first optional, add a optional header.
+    // }
+    // options_.push_back(opt);
 
-    // Handle alias.
-    const auto& long_names = arg->long_names();
-    for (auto iter = long_names.begin() + 1, end = long_names.end();
-         iter != end; ++iter) {
-      ArgpOption opt{};
-      opt.name = iter->c_str();
-      opt.flags |= OPTION_ALIAS;
-      options_.push_back(opt);
-    }
-    return true;
-  }
+    // // Handle alias.
+    // const auto& long_names = arg->long_names();
+    // for (auto iter = long_names.begin() + 1, end = long_names.end();
+    //      iter != end; ++iter) {
+    //   ArgpOption opt{};
+    //   opt.name = iter->c_str();
+    //   opt.flags |= OPTION_ALIAS;
+    //   options_.push_back(opt);
+    // }
+    // return true;
+  // }
 
-  // Compile args [next_to_compile_, limit) to options_.
-  Status CompileUntil(int limit) {
-    if (next_to_compile_ >= limit || limit > arguments_.size())
-      return true;
-    // TODO: list isn't random access.
-    auto iter = std::next(arguments_.begin(), next_to_compile_);
-    for (; next_to_compile_ < limit; ++next_to_compile_, ++iter) {
-      auto status = CompileSingle(&(*iter));
-      if (!status)
-        return status;
-    }
-    return true;
-  }
+  // // Compile args [next_to_compile_, limit) to options_.
+  // Status CompileUntil(int limit) {
+  //   if (next_to_compile_ >= limit || limit > arguments_.size())
+  //     return true;
+  //   // TODO: list isn't random access.
+  //   auto iter = std::next(arguments_.begin(), next_to_compile_);
+  //   for (; next_to_compile_ < limit; ++next_to_compile_, ++iter) {
+  //     // auto status = CompileSingle(&(*iter));
+  //     // if (!status)
+  //     //   return status;
+  //   }
+  //   return true;
+  // }
 
-  void FlushCompile() {
-    // Compile as much as possible.
-    auto status = CompileUntil(arguments_.size());
-    DCHECK2(status, "CompileUtil() failed when add_argument()");
-  }
+  // void FlushCompile() {
+  //   // Compile as much as possible.
+  //   auto status = CompileUntil(arguments_.size());
+  //   DCHECK2(status, "CompileUtil() failed when add_argument()");
+  // }
 
-  void AddOptionForGroup(const char* header) {
-    ArgpOption opt{};
-    opt.doc = header;
-    options_.push_back(opt);
-  }
+  // void AddOptionForGroup(const char* header) {
+  //   ArgpOption opt{};
+  //   opt.doc = header;
+  //   options_.push_back(opt);
+  // }
 
   // We may not need multiple short names.
   int NextKey(const std::vector<char>& short_names) {
@@ -853,13 +889,19 @@ class ArgumentHolder {
   static constexpr unsigned kFirstArgumentKey = 128;
 
   // Gid for two builtin groups.
-  static constexpr unsigned kOptionGroupID = 1;
-  static constexpr unsigned kPositionalGroupID = 2;
+  // static constexpr unsigned kOptionGroupID = 1;
+  // static constexpr unsigned kPositionalGroupID = 2;
+  // static constexpr unsigned kFirstGroupID = kPos;
+  enum GroupID {
+    kOptionGroup = 1,
+    kPositionalGroup = 2,
+    kFirstUserGroup = kPositionalGroup + 1,
+  };
 
   // We have to explicitly manage group_id (instead of using 0 to inherit the
   // gid from the preivous entry) since the user can add option and positionals
   // in any order. Automatical inheriting gid will mess up.
-  unsigned next_group_id_;
+  unsigned next_group_id_ = kFirstUserGroup;
   unsigned next_key_ = kFirstArgumentKey;
 
   // Hold the storage of all args.
@@ -873,30 +915,36 @@ class ArgumentHolder {
   // TODO: compile result may not be stored here?
   // Compile result.
   std::vector<ArgpOption> options_;
-  int next_to_compile_ = 0;
-  bool frozen_ = false;
+  // int next_to_compile_ = 0;
+  // bool frozen_ = false;
 };
 
 // Impl add_group() call.
-class ArgumentGroup {
+class ArgumentGroup : public ArgumentContainer {
  public:
-  ArgumentGroup(ArgumentHolder* holder, int group_id)
-      : holder_(holder), group_id_(group_id) {}
-
-  template <typename... Args>
-  ArgumentBuilder add_argument(Args&&... args) {
-    return holder_->add_argument(std::forward<Args>(args)...);
-  }
+  // template <typename... Args>
+  // ArgumentBuilder add_argument(Args&&... args) {
+  //   return holder_->add_argument(std::forward<Args>(args)...);
+  // }
 
  private:
-  int group_id_;
+  Argument* AddArgument(Names names) override {
+    return holder_->AddArgumentToGroup(std::move(names), group_);
+  }
+
+  ArgumentGroup(ArgumentHolder* holder, int group)
+      : holder_(holder), group_(group) {}
+
+  friend class ArgumentHolder;
+  int group_;
   ArgumentHolder* holder_;
 };
 
 ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
-  FlushCompile();
-  AddOptionForGroup(header);
-  return ArgumentGroup(this, NextGroupID());
+  // FlushCompile();
+  // AddOptionForGroup(header);
+  int group = AddGroup(header, NextGroupID());
+  return ArgumentGroup(this, group);
 }
 
 // This handles the argp_parser_t function.
@@ -924,11 +972,15 @@ class ArgpParser {
   void AddParserFlags(int flags) { parser_flags_ |= flags; }
   void RemoveParserFlags(int flags) { parser_flags_ &= ~flags; }
 
+  void PrepareArgpOptions() {
+    DCHECK(argp_options_.empty());
+    holder_->CompileAllToArgpOptions(&argp_options_);
+    argp_.options = argp_options_.data();
+  }
+
   void ParseArgs(int argc, char** argv) {
     int arg_index = -1;
-    ArgumentHolder::FrozenScope scope(holder_);
-    argp_.options = holder_->frozen_options();
-    // TODO: error handling.
+    PrepareArgpOptions();
     auto err =
         ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
   }
@@ -993,6 +1045,7 @@ class ArgpParser {
   // Holder tell us everythings about user's arguments.
   ArgumentHolder* holder_ = {};
   Argp argp_ = {};
+  std::vector<ArgpOption> argp_options_;
   int parser_flags_ = 0;
 };
 
