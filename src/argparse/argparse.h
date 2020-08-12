@@ -501,7 +501,6 @@ class Argument {
       help_doc_ = help_doc;
   }
 
-  void SetGroup(int group_id) { group_ = group_id; }
   void SetRequired(bool required) { is_required_ = required; }
   void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
 
@@ -559,8 +558,10 @@ class Argument {
   friend class ArgumentHolder;
   friend class ArgpParser;
 
-  static constexpr int kKeyForNothing = 0;
-  static constexpr int kKeyForPositional = -1;
+  enum Keys {
+    kKeyForNothing = 0,
+    kKeyForPositional = -1,
+  };
 
   // Fill in members to do with names.
   void InitNames(Names names) {
