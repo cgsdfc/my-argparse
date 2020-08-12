@@ -449,7 +449,7 @@ struct Names {
       if (IsLongOptionName(name, len))
         long_names.emplace_back(name + 2, len - 2);
       else
-        short_names.emplace_back(*name++);
+        short_names.push_back(name[1]);
     }
     if (long_names.size())
       meta_var = ToUpper(long_names[0]);
@@ -458,26 +458,25 @@ struct Names {
   }
 };
 
+// A delegate used by the Argument class.
+class ArgumentDelegate {
+public:
+ // Generate a key for an option.
+ virtual int NextOptionKey() = 0;
+ // Call when an Arg is fully constructed.
+ virtual void OnArgumentCreated(Argument*) = 0;
+};
+
 // Holds all meta-info about an argument.
 // For now this is a union of Option, Positional and Group.
 // In the future this can be three classes.
 class Argument {
  public:
-  // Initialize as an option.
-  void InitAsOptions(Names names, int key, int group) {
-    DCHECK(!initialized());
-    DCHECK2(key > 0, "key for option must be greater than 0");
-    SetNames(std::move(names));
-    SetKey(key);
-    SetGroup(group);
-  }
-
-  // Initialize as a positional.
-  void InitAsPositional(Names names, int group) {
-    DCHECK(!initialized());
-    SetNames(std::move(names));
-    SetKey(kKeyForPositional);
-    SetGroup(group);
+  Argument(ArgumentDelegate* delegate, const Names& names, int group)
+      : delegate_(delegate), group_(group) {
+    InitNames(names);
+    InitKey();
+    delegate_->OnArgumentCreated(this);
   }
 
   void SetDest(Destination dest) {
@@ -497,19 +496,9 @@ class Argument {
       user_callback_ = std::move(type.callback);
   }
 
-  void SetHelpDoc(std::string help_doc) { help_doc_ = std::move(help_doc); }
-
-  void SetNames(Names names) {
-    is_option_ = names.is_option;
-    long_names_ = std::move(names.long_names);
-    short_names_ = std::move(names.short_names);
-    meta_var_ = std::move(names.meta_var);
-  }
-
-  void SetKey(int key) {
-    // DCHECK2(is_option_, "Only option can be SetKey()");
-    DCHECK(short_names_.empty() || short_names_[0] == key);
-    key_ = key;
+  void SetHelpDoc(const char* help_doc) {
+    if (help_doc)
+      help_doc_ = help_doc;
   }
 
   void SetGroup(int group_id) { group_ = group_id; }
@@ -555,11 +544,14 @@ class Argument {
     opt.arg = arg();
     opt.key = key();
     options->push_back(opt);
-    // Add all aliases.
-    for (const auto& alias : long_names()) {
-      ArgpOption opt{};
+    // TODO: handle alias correctly. Add all aliases.
+    for (auto first = long_names_.begin() + 1, last = long_names_.end();
+         first != last; ++first) {
+      ArgpOption opt_alias;
+      std::memcpy(&opt_alias, &opt, sizeof(ArgpOption));
+      opt.name = first->c_str();
       opt.flags = OPTION_ALIAS;
-      options->push_back(opt);
+      options->push_back(opt_alias);
     }
   }
 
@@ -569,6 +561,23 @@ class Argument {
 
   static constexpr int kKeyForNothing = 0;
   static constexpr int kKeyForPositional = -1;
+
+  // Fill in members to do with names.
+  void InitNames(Names names) {
+    is_option_ = names.is_option;
+    long_names_ = std::move(names.long_names);
+    short_names_ = std::move(names.short_names);
+    meta_var_ = std::move(names.meta_var);
+  }
+
+  // Initialize the key member. Must be called after InitNames().
+  void InitKey() {
+    if (!is_option()) {
+      key_ = kKeyForPositional;
+      return;
+    }
+    key_ = short_names_.empty() ? delegate_->NextOptionKey() : short_names_[0];
+  }
 
   Status Finalize() {
     // No dest provided, but still can have UserCallback. No need to Bind().
@@ -590,6 +599,8 @@ class Argument {
     return user_callback_->Run(Context{this, std::string(value)});
   }
 
+  // For extension.
+  ArgumentDelegate* delegate_;
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
@@ -654,7 +665,14 @@ class ArgumentContainer {
   virtual Argument* AddArgument(Names names) = 0;
 };
 
-class ArgumentHolder : public ArgumentContainer {
+inline void PrintArgpOptionArray(const std::vector<ArgpOption>& options) {
+  for (const auto& opt : options) {
+    printf("name=%s, key=%d, arg=%s, doc=%s, group=%d\n", opt.name, opt.key,
+           opt.arg, opt.doc, opt.group);
+  }
+}
+
+class ArgumentHolder : public ArgumentContainer, public ArgumentDelegate {
  public:
   ArgumentHolder() {
     AddGroup("optional arguments");
@@ -674,17 +692,7 @@ class ArgumentHolder : public ArgumentContainer {
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
     DCHECK(group <= groups_.size());
 
-    Argument& arg = arguments_.emplace_back();
-    GroupFromID(group)->AddMember();
-
-    if (names.is_option) {
-      arg.InitAsOptions(std::move(names), NextKey(names.short_names), group);
-      bool inserted = optional_arguments_.emplace(arg.key_, &arg).second;
-      DCHECK(inserted);
-    } else {
-      arg.InitAsPositional(std::move(names), group);
-      positional_arguments_.push_back(&arg);
-    }
+    Argument& arg = arguments_.emplace_back(this, names, group);
     return &arg;
   }
 
@@ -726,6 +734,8 @@ class ArgumentHolder : public ArgumentContainer {
     }
     // Only when at least one opt/pos presents should we generate their groups.
     options->push_back({});
+
+    PrintArgpOptionArray(*options);
     return true;
   }
 
@@ -764,9 +774,18 @@ class ArgumentHolder : public ArgumentContainer {
     return &groups_[group - 1];
   }
 
-  // We may not need multiple short names.
-  int NextKey(const std::vector<char>& short_names) {
-    return short_names.empty() ? next_key_++ : short_names[0];
+  // ArgumentDelegate:
+  int NextOptionKey() override { return next_key_++; }
+
+  void OnArgumentCreated(Argument* arg) override {
+    DCHECK(arg->initialized());
+    GroupFromID(arg->group())->AddMember();
+    if (arg->is_option()) {
+      bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
+      DCHECK(inserted);
+    } else {
+      positional_arguments_.push_back(arg);
+    }
   }
 
   bool CheckNamesConflict(const Names& names) {

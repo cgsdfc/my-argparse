@@ -11,10 +11,13 @@ int main(int argc, char const* argv[]) {
                               std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
                             }));
 
-  // std::string output;
-  // parser.add_argument("output", &output, "output to this file").arg();
+  std::string output;
+  parser.add_argument("output", &output, "output to this file").arg();
   std::string input;
-  parser.add_argument("--input", &input, "input file");
+  parser.add_argument({"--input", "-i"}, &input, "input file");
+
+  auto student = parser.add_argument_group("student");
+  student.add_argument("--sid").help("student id");
 
   parser.parse_args(argc, argv);
 }
