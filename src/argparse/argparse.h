@@ -26,7 +26,7 @@ class ArgumentHolder;
 class ArgumentGroup;
 class ArgumentBuilder;
 class ArgumentParser;
-class ArgpParserImpl;
+// class ArgpParserImpl;
 class Options;
 
 using ArgpOption = ::argp_option;
@@ -671,6 +671,48 @@ class ArgumentBuilder {
   Argument* arg_;
 };
 
+class ArgpParser {
+ public:
+  using Argp = ::argp;
+  using ArgpParserCallback = ::argp_parser_t;
+  using ArgpErrorType = ::error_t;
+  using ArgpHelpFilterCallback = decltype(Argp::help_filter);
+
+  class Delegate {
+   public:
+    virtual Argument* FindOptionalArgument(int key) = 0;
+    virtual Argument* FindPositionalArgument(int index) = 0;
+    virtual std::size_t PositionalArgumentCount() = 0;
+    virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
+    virtual ~Delegate() {}
+  };
+
+  struct Options {
+    const char* program_version = {};
+    const char* description = {};
+    const char* after_doc = {};
+    const char* domain = {};
+    const char* bug_address = {};
+    ArgpProgramVersionCallback program_version_callback = {};
+    int flags = 0;
+  };
+
+  // Initialize from a few options (user's options).
+  virtual void Init(const Options& options) = 0;
+  // Parse args, exit on errors.
+  virtual void ParseArgs(int argc, char** argv) = 0;
+  // Parse args, collect unknown args into rest, don't exit, report error via
+  // Status.
+  virtual Status ParseKnownArgs(int argc,
+                                char** argv,
+                                std::vector<std::string>* rest) {
+    ParseArgs(argc, argv);
+    return true;
+  }
+  virtual ~ArgpParser() {}
+  static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
+};
+
 // This is an interface that provides add_argument() and other common things.
 class ArgumentContainer {
  public:
@@ -698,18 +740,18 @@ inline void PrintArgpOptionArray(const std::vector<ArgpOption>& options) {
   }
 }
 
-// The interface needed by ArgpParser.
-class ArgpParserDelegate {
-public:
- virtual Argument* FindOptionalArgument(int key) = 0;
- virtual Argument* FindPositionalArgument(int index) = 0;
- virtual std::size_t PositionalArgumentCount() = 0;
- virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
-};
+// // The interface needed by ArgpParser.
+// class ArgpParserDelegate {
+// public:
+//  virtual Argument* FindOptionalArgument(int key) = 0;
+//  virtual Argument* FindPositionalArgument(int index) = 0;
+//  virtual std::size_t PositionalArgumentCount() = 0;
+//  virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
+// };
 
 class ArgumentHolder : public ArgumentContainer,
                        public ArgumentDelegate,
-                       public ArgpParserDelegate {
+                       public ArgpParser::Delegate {
  public:
   ArgumentHolder() {
     AddGroup("optional arguments");
@@ -897,41 +939,38 @@ ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
   return ArgumentGroup(this, group);
 }
 
-class ArgpParser {
- public:
-  using Argp = ::argp;
-  using ArgpParserCallback = ::argp_parser_t;
-  using ArgpErrorType = ::error_t;
-  using ArgpHelpFilterCallback = decltype(Argp::help_filter);
-
-  // Initialize from a few options (user's options).
-  virtual void Configure(const Options& options) = 0;
-  virtual void ParseArgs(int argc, char** argv) = 0;
-  virtual ~ArgpParser() {}
-  static std::unique_ptr<ArgpParser> Create(ArgpParserDelegate* delegate);
-};
 
 // This handles the argp_parser_t function.
 class ArgpParserImpl : public ArgpParser {
  public:
-  explicit ArgpParserImpl(ArgpParserDelegate* delegate) : delegate_(delegate) {
+  explicit ArgpParserImpl(Delegate* delegate) : delegate_(delegate) {
     positional_count_ = delegate_->PositionalArgumentCount();
     argp_.parser = &ArgpParserImpl::Callback;
   }
 
-  // These storage is managed by caller to save a lot of strings.
-  // If the user makes no demand, then all of these field is null.
-  // No std::string is stored.
-  // Caller may store some of them as string, and requires others to be
-  // immorable strings.
-  // void RemoveParserFlags(int flags) { parser_flags_ &= ~flags; }
+  void Init(const Options& options) override {
+    if (options.program_version)
+      ::argp_program_version = options.program_version;
+    if (options.program_version_callback)
+      ::argp_program_version_hook = options.program_version_callback;
+    if (options.bug_address)
+      ::argp_program_bug_address = options.bug_address;
+    // TODO: may check domain?
+    set_argp_domain(options.domain);
+    AddFlags(options.flags);
 
-  void Configure(const Options& options) override;
-  //   // argp_.doc = doc;
-  //   // argp_.argp_domain = domain;
-  //   // argp_.args_doc = args_doc;
-  //   // argp_.help_filter = help_filter;
-  // }
+    // Generate the program doc.
+    if (options.description) {
+      program_doc_ = options.description;
+    }
+    if (options.after_doc) {
+      program_doc_.append({'\v'});
+      program_doc_.append(options.after_doc);
+    }
+
+    if (!program_doc_.empty())
+      set_doc(program_doc_.c_str());
+  }
 
   void ParseArgs(int argc, char** argv) override {
     int arg_index = -1;
@@ -1017,9 +1056,7 @@ class ArgpParserImpl : public ArgpParser {
 
   unsigned positional_count() const { return positional_count_; }
 
-  // Holder tell us everythings about user's arguments.
-  // ArgumentHolder* holder_ = {};
-  ArgpParserDelegate* delegate_;
+  Delegate* delegate_;
   std::string program_doc_;
   std::string args_doc_;
   Argp argp_ = {};
@@ -1028,8 +1065,7 @@ class ArgpParserImpl : public ArgpParser {
   unsigned positional_count_ = 0;
 };
 
-inline std::unique_ptr<ArgpParser> ArgpParser::Create(
-    ArgpParserDelegate* delegate) {
+inline std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
   return std::make_unique<ArgpParserImpl>(delegate);
 }
 
@@ -1044,14 +1080,15 @@ enum Flags {
 
 // Options to ArgumentParser constructor.
 struct Options {
-//  public:
   // Only the most common options are listed in this list.
-  Options(const char* version = nullptr, const char* description = nullptr)
-      : program_version_(version), description_(description) {}
+  Options(const char* version = nullptr, const char* description = nullptr) {
+    options.program_version = version;
+    options.description = description;
+  }
   // Options() = default;
 
   Options& version(const char* v) {
-    program_version_ = v;
+    options.program_version = v;
     return *this;
   }
   // Options& version(ArgpProgramVersionCallback callback) {
@@ -1059,71 +1096,34 @@ struct Options {
   //   return *this;
   // }
   Options& description(const char* d) {
-    description_ = d;
+    options.description = d;
     return *this;
   }
   Options& after_doc(const char* a) {
-    after_doc_ = a;
+    options.after_doc = a;
     return *this;
   }
   Options& domain(const char* d) {
-    domain_ = d;
+    options.domain = d;
     return *this;
   }
   Options& bug_address(const char* b) {
-    bug_address_ = b;
+    options.bug_address = b;
     return *this;
   }
   Options& flags(Flags f) {
-    flags_ |= f;
+    options.flags |= f;
     return *this;
   }
 
-//  private:
-//   friend class ArgumentParser;
-  const char* program_version_ = {};
-  ArgpProgramVersionCallback program_version_callback_ = {};
-  const char* description_ = {};
-  const char* after_doc_ = {};
-  const char* domain_ = {};
-  const char* bug_address_ = {};
-  int flags_ = kNoFlags;
+  ArgpParser::Options options;
 };
-
-void ArgpParserImpl::Configure(const Options& options) {
-  ::argp_program_version = options.program_version_;
-  if (options.program_version_callback_)
-    ::argp_program_version_hook = options.program_version_callback_;
-
-  ::argp_program_bug_address = options.bug_address_;
-  // TODO: may check domain?
-  set_argp_domain(options.domain_);
-  AddFlags(options.flags_);
-  // parser_.set_argp_domain(options.domain_);
-  // parser_.AddParserFlags(static_cast<int>(options.flags_));
-
-  // Generate the program doc.
-  if (options.description_) {
-    program_doc_ = options.description_;
-  }
-  if (options.after_doc_) {
-    program_doc_.append({'\v'});
-    program_doc_.append(options.after_doc_);
-  }
-  if (!program_doc_.empty())
-    set_doc(program_doc_.c_str());
-  //   // TODO args_doc is generated later.
-}
 
 class ArgumentParser : private ArgumentHolder {
  public:
   ArgumentParser() = default;
 
   explicit ArgumentParser(const Options& options) : user_options_(options) {}
-
-  // TODO: maynot let user use this.
-  // void set_options(const Options& options) {
-  // }
 
   using ArgumentHolder::add_argument;
   using ArgumentHolder::add_argument_group;
@@ -1132,7 +1132,7 @@ class ArgumentParser : private ArgumentHolder {
   // cheat them.
   void parse_args(int argc, const char** argv) {
     auto parser = ArgpParser::Create(this);
-    parser->Configure(user_options_);
+    parser->Init(user_options_.options);
     return parser->ParseArgs(argc, const_cast<char**>(argv));
   }
 
@@ -1153,8 +1153,6 @@ class ArgumentParser : private ArgumentHolder {
   const char* program_bug_address() const { return ::argp_program_bug_address; }
 
  private:
-  // ArgpParserImpl parser_ = ArgpParserImpl{this};
-  std::string program_doc_;
   Options user_options_;
 };
 
