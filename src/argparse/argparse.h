@@ -566,35 +566,31 @@ class Argument {
   }
 
   // [--name|-n|-whatever=[value]] or output
-  void FormatArgsDoc(std::string* out) const {
+  void FormatArgsDoc(std::ostringstream& os) const {
     if (!is_option()) {
-      out->append(name());
+      os << meta_var();
       return;
     }
-    out->append("[");
-    // join the alias with '|'.
+    os << '[';
     std::size_t i = 0;
     const auto size = long_names_.size() + short_names_.size();
 
     for (; i < size; ++i) {
       if (i < long_names_.size()) {
-        out->append("--");
-        out->append(long_names_[i]);
+        os << "--" << long_names_[i];
       } else {
-        out->append("-");
-        out->push_back(short_names_[i - long_names_.size()]);
+        os<<'-'<<short_names_[i-long_names_.size()];
       }
       if (i < size - 1)
-        out->append("|");
+        os << '|';
     }
 
     if (!is_required())
-      out->append("[");
-    out->append("=");
-    out->append(meta_var());
+      os << '[';
+    os << '=' << meta_var();
     if (!is_required())
-      out->append("]");
-    out->append("]");
+      os << ']';
+    os << ']';
   }
 
   void CompileToArgpOptions(std::vector<ArgpOption>* options) const {
@@ -715,6 +711,16 @@ class ArgumentBuilder {
   Argument* arg_;
 };
 
+// Return value of help filter function.
+enum class HelpFilterResult {
+  kKeep,
+  kDrop,
+  kReplace,
+};
+
+using HelpFilterCallback = std::function<
+    HelpFilterResult(const Argument&, const std::string&, std::string* repl)>;
+
 class ArgpParser {
  public:
   using Argp = ::argp;
@@ -740,6 +746,7 @@ class ArgpParser {
     const char* domain = {};
     const char* bug_address = {};
     ArgpProgramVersionCallback program_version_callback = {};
+    HelpFilterCallback help_filter;
     int flags = 0;
   };
 
@@ -890,10 +897,12 @@ class ArgumentHolder : public ArgumentContainer,
     std::sort(args.begin(), args.end(), &CompareArguments);
 
     // join the dump of each arg with a space.
+    std::ostringstream os;
     for (std::size_t i = 0, size = args.size(); i < size; ++i) {
-      args[i]->FormatArgsDoc(args_doc);
+      args[i]->FormatArgsDoc(os);
       if (i != size - 1)
-        args_doc->push_back(' ');
+        os << ' ';
+      args_doc->assign(os.str());
     }
   }
 
@@ -1040,6 +1049,11 @@ class ArgpParserImpl : public ArgpParser {
       ::argp_program_version_hook = options.program_version_callback;
     if (options.bug_address)
       ::argp_program_bug_address = options.bug_address;
+    if (options.help_filter) {
+      argp_.help_filter = &HelpFilterImpl;
+      help_filter_ = options.help_filter;
+    }
+
     // TODO: may check domain?
     set_argp_domain(options.domain);
     AddFlags(options.flags);
@@ -1131,15 +1145,40 @@ class ArgpParserImpl : public ArgpParser {
     return self->ParseImpl(key, arg, state);
   }
 
+  static char* HelpFilterImpl(int key, const char* text, void* input) {
+    if (!input)
+      return (char*)text;
+    auto* self = reinterpret_cast<ArgpParserImpl*>(input);
+    DCHECK2(self->help_filter_,
+            "should only be called if user install help filter!");
+    auto* arg = self->delegate_->FindOptionalArgument(key);
+    DCHECK2(arg, "argp calls us with unknown key!");
+
+    std::string repl;
+    HelpFilterResult result =
+        std::invoke(self->help_filter_, *arg, text, &repl);
+    switch (result) {
+      case HelpFilterResult::kKeep:
+        return const_cast<char*>(text);
+      case HelpFilterResult::kDrop:
+        return nullptr;
+      case HelpFilterResult::kReplace: {
+        char* s = (char*)std::malloc(1 + repl.size());
+        return std::strcpy(s, repl.c_str());
+      }
+    }
+  }
+
   unsigned positional_count() const { return positional_count_; }
 
   Delegate* delegate_;
-  std::string program_doc_;
-  std::string args_doc_;
-  Argp argp_ = {};
-  std::vector<ArgpOption> argp_options_;
   int parser_flags_ = 0;
   unsigned positional_count_ = 0;
+  Argp argp_ = {};
+  std::string program_doc_;
+  std::string args_doc_;
+  std::vector<ArgpOption> argp_options_;
+  HelpFilterCallback help_filter_;
 };
 
 inline std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
