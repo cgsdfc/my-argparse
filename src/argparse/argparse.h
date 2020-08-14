@@ -411,6 +411,10 @@ inline bool IsValidOptionName(const char* name, std::size_t len) {
   if (len == 2)  // This rules out -?, -* -@ -= --
     return std::isalnum(name[1]);
   // check for long-ness.
+  DCHECK2(name[1] == '-',
+          "Single-dash long option (i.e., -jar) is not supported, please use "
+          "GNU-style long option (double-dash)");
+
   for (name += 2; *name; ++name) {
     if (*name == '-' || *name == '_' || std::isalnum(*name))
       continue;
@@ -419,6 +423,7 @@ inline bool IsValidOptionName(const char* name, std::size_t len) {
   return true;
 }
 
+// These two predicates must be called only when IsValidOptionName() holds.
 inline bool IsLongOptionName(const char* name, std::size_t len) {
   DCHECK(IsValidOptionName(name, len));
   return len > 2;
@@ -560,6 +565,38 @@ class Argument {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
+  // [--name|-n|-whatever=[value]] or output
+  void FormatArgsDoc(std::string* out) const {
+    if (!is_option()) {
+      out->append(name());
+      return;
+    }
+    out->append("[");
+    // join the alias with '|'.
+    std::size_t i = 0;
+    const auto size = long_names_.size() + short_names_.size();
+
+    for (; i < size; ++i) {
+      if (i < long_names_.size()) {
+        out->append("--");
+        out->append(long_names_[i]);
+      } else {
+        out->append("-");
+        out->push_back(short_names_[i - long_names_.size()]);
+      }
+      if (i < size - 1)
+        out->append("|");
+    }
+
+    if (!is_required())
+      out->append("[");
+    out->append("=");
+    out->append(meta_var());
+    if (!is_required())
+      out->append("]");
+    out->append("]");
+  }
+
   void CompileToArgpOptions(std::vector<ArgpOption>* options) const {
     ArgpOption opt{};
     opt.doc = doc();
@@ -586,7 +623,6 @@ class Argument {
   }
 
  private:
-  friend class ArgumentHolder;
   friend class ArgpParserImpl;
 
   enum Keys {
@@ -693,6 +729,7 @@ class ArgpParser {
     virtual Argument* FindPositionalArgument(int index) = 0;
     virtual std::size_t PositionalArgumentCount() = 0;
     virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
+    virtual void GenerateArgsDoc(std::string* args_doc) = 0;
     virtual ~Delegate() {}
   };
 
@@ -792,7 +829,7 @@ class ArgumentHolder : public ArgumentContainer,
     return positional_arguments_;
   }
 
-  // ArgpParserDelegate:
+  // ArgpParser::Delegate:
   static constexpr int kAverageAliasCount = 4;
 
   void CompileToArgpOptions(std::vector<ArgpOption>* options) override {
@@ -816,6 +853,48 @@ class ArgumentHolder : public ArgumentContainer,
     options->push_back({});
 
     // PrintArgpOptionArray(*options);
+  }
+
+  static bool CompareArguments(const Argument* a, const Argument* b) {
+    // options go before positionals.
+    if (a->is_option() != b->is_option())
+      return int(a->is_option()) > int(b->is_option());
+
+    // positional compares on their names.
+    if (!a->is_option() && !b->is_option()) {
+      DCHECK(a->name() && b->name());
+      return std::strcmp(a->name(), b->name()) < 0;
+    }
+
+    // required option goes first.
+    if (a->is_required() != b->is_required())
+      return int(a->is_required()) > int(b->is_required());
+
+    // short-only option goes before the rest.
+    if (bool(a->name()) != bool(b->name()))
+      return bool(a->name()) < bool(b->name());
+
+    // a and b are both short-only option.
+    if (!a->name() && !b->name())
+      return a->key() < b->key();
+
+    // a and b are both long option.
+    DCHECK(a->name() && b->name());
+    return std::strcmp(a->name(), b->name()) < 0;
+  }
+
+  void GenerateArgsDoc(std::string* args_doc) override {
+    std::vector<Argument*> args(arguments_.size());
+    std::transform(arguments_.begin(), arguments_.end(), args.begin(),
+                   [](Argument& arg) { return &arg; });
+    std::sort(args.begin(), args.end(), &CompareArguments);
+
+    // join the dump of each arg with a space.
+    for (std::size_t i = 0, size = args.size(); i < size; ++i) {
+      args[i]->FormatArgsDoc(args_doc);
+      if (i != size - 1)
+        args_doc->push_back(' ');
+    }
   }
 
   Argument* FindOptionalArgument(int key) override {
@@ -929,6 +1008,7 @@ class ArgumentGroup : public ArgumentContainer {
   ArgumentGroup(ArgumentHolder* holder, int group)
       : holder_(holder), group_(group) {}
 
+  // Only ArgumentHolder can create this.
   friend class ArgumentHolder;
   int group_;
   ArgumentHolder* holder_;
@@ -946,7 +1026,11 @@ class ArgpParserImpl : public ArgpParser {
   // When this is constructed, Delegate must have been added options.
   explicit ArgpParserImpl(Delegate* delegate) : delegate_(delegate) {
     argp_.parser = &ArgpParserImpl::Callback;
-    InitArgpOptions();
+    positional_count_ = delegate_->PositionalArgumentCount();
+    delegate_->CompileToArgpOptions(&argp_options_);
+    argp_.options = argp_options_.data();
+    delegate_->GenerateArgsDoc(&args_doc_);
+    argp_.args_doc = args_doc_.c_str();
   }
 
   void Init(const Options& options) override {
@@ -980,13 +1064,6 @@ class ArgpParserImpl : public ArgpParser {
   }
 
  private:
-  void InitArgpOptions() {
-    DCHECK(argp_options_.empty());
-    delegate_->CompileToArgpOptions(&argp_options_);
-    argp_.options = argp_options_.data();
-    positional_count_ = delegate_->PositionalArgumentCount();
-  }
-
   void set_doc(const char* doc) { argp_.doc = doc; }
   void set_argp_domain(const char* domain) { argp_.argp_domain = domain; }
   void set_args_doc(const char* args_doc) { argp_.args_doc = args_doc; }
@@ -998,7 +1075,6 @@ class ArgpParserImpl : public ArgpParser {
     // If the user said no, just die with a msg.
     if (status)
       return;
-    // argp_error(state, "%s", status.message().c_str());
     state.Error(status.message());
   }
 

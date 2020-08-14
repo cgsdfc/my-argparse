@@ -18,7 +18,7 @@ int main(int argc, char const* argv[]) {
 
   auto student = parser.add_argument_group("student");
   student.add_argument("--sid").help("student id");
-  parser.add_argument("-jar");
+  // xxx: this is not supported.
   student.add_argument("--cid");
   parser.add_argument("file");
 
