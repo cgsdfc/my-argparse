@@ -408,7 +408,7 @@ inline bool IsValidPositionalName(const char* name, std::size_t len) {
 inline bool IsValidOptionName(const char* name, std::size_t len) {
   if (!name || len < 2 || name[0] != '-')
     return false;
-  if (len == 2)  // This rules out -?, -* -@ -=
+  if (len == 2)  // This rules out -?, -* -@ -= --
     return std::isalnum(name[1]);
   // check for long-ness.
   for (name += 2; *name; ++name) {
@@ -468,10 +468,16 @@ struct Names {
     for (auto name : names) {
       std::size_t len = std::strlen(name);
       DCHECK2(IsValidOptionName(name, len), "Not a valid option name!");
-      if (IsLongOptionName(name, len))
-        long_names.emplace_back(name + 2, len - 2);
-      else
+      if (IsLongOptionName(name, len)) {
+        // Strip leading '-' at most twice.
+        for (int i = 0; *name == '-' && i < 2; ++i) {
+          ++name;
+          --len;
+        }
+        long_names.emplace_back(name, len);
+      } else {
         short_names.push_back(name[1]);
+      }
     }
     if (long_names.size())
       meta_var = ToUpper(long_names[0]);
@@ -545,6 +551,8 @@ class Argument {
     return meta_var_.c_str();
   }
 
+  // TODO: split the long_names, short_names from Names into name, key and
+  // alias.
   const std::vector<std::string>& long_names() const { return long_names_; }
   const std::vector<char>& short_names() const { return short_names_; }
 
@@ -676,6 +684,7 @@ class ArgpParser {
   using Argp = ::argp;
   using ArgpParserCallback = ::argp_parser_t;
   using ArgpErrorType = ::error_t;
+  // XXX: what is the use of help_filter?
   using ArgpHelpFilterCallback = decltype(Argp::help_filter);
 
   class Delegate {
@@ -739,15 +748,6 @@ inline void PrintArgpOptionArray(const std::vector<ArgpOption>& options) {
            opt.arg, opt.doc, opt.group);
   }
 }
-
-// // The interface needed by ArgpParser.
-// class ArgpParserDelegate {
-// public:
-//  virtual Argument* FindOptionalArgument(int key) = 0;
-//  virtual Argument* FindPositionalArgument(int index) = 0;
-//  virtual std::size_t PositionalArgumentCount() = 0;
-//  virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
-// };
 
 class ArgumentHolder : public ArgumentContainer,
                        public ArgumentDelegate,
@@ -939,13 +939,14 @@ ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
   return ArgumentGroup(this, group);
 }
 
-
-// This handles the argp_parser_t function.
+// This handles the argp_parser_t function and provide a bunch of context during
+// the parsing.
 class ArgpParserImpl : public ArgpParser {
  public:
+  // When this is constructed, Delegate must have been added options.
   explicit ArgpParserImpl(Delegate* delegate) : delegate_(delegate) {
-    positional_count_ = delegate_->PositionalArgumentCount();
     argp_.parser = &ArgpParserImpl::Callback;
+    InitArgpOptions();
   }
 
   void Init(const Options& options) override {
@@ -974,7 +975,6 @@ class ArgpParserImpl : public ArgpParser {
 
   void ParseArgs(int argc, char** argv) override {
     int arg_index = -1;
-    InitArgpOptions();
     auto err =
         ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
   }
@@ -984,6 +984,7 @@ class ArgpParserImpl : public ArgpParser {
     DCHECK(argp_options_.empty());
     delegate_->CompileToArgpOptions(&argp_options_);
     argp_.options = argp_options_.data();
+    positional_count_ = delegate_->PositionalArgumentCount();
   }
 
   void set_doc(const char* doc) { argp_.doc = doc; }
@@ -1124,6 +1125,8 @@ class ArgumentParser : private ArgumentHolder {
   ArgumentParser() = default;
 
   explicit ArgumentParser(const Options& options) : user_options_(options) {}
+
+  Options& options() { return user_options_; }
 
   using ArgumentHolder::add_argument;
   using ArgumentHolder::add_argument_group;
