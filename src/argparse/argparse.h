@@ -26,35 +26,51 @@ class ArgumentHolder;
 class ArgumentGroup;
 class ArgumentBuilder;
 class ArgumentParser;
-// class ArgpParserImpl;
 class Options;
 
 using ArgpOption = ::argp_option;
-// using ArgpState = ::argp_state;
 using ArgpProgramVersionCallback = decltype(::argp_program_version_hook);
+using ::argp_error;
+using ::argp_failure;
+using ::argp_help;
+using ::argp_state_help;
+using ::argp_parser_t;
+using ::argp_parse;
+using ::argp_program_bug_address;
+using ::argp_program_version;
+using ::argp_state;
+using ::program_invocation_name;
+using ::program_invocation_short_name;
+using ::argp_usage;
+using ::argp;
+using ::error_t;
 
 // Wrapper of argp_state.
 class ArgpState {
  public:
-  ArgpState(::argp_state* state) : state_(state) {}
+  ArgpState(argp_state* state) : state_(state) {}
   void Help(FILE* file, unsigned flags) {
-    ::argp_state_help(state_, file, flags);
+    argp_state_help(state_, file, flags);
   }
-  void Usage() { ::argp_usage(state_); }
+  void Usage() { argp_usage(state_); }
 
   template <typename... Args>
-  void Error(const char* fmt, Args... args) {
+  void ErrorF(const char* fmt, Args... args) {
     static_assert(sizeof...(Args) > 0);
-    ::argp_error(state_, fmt, args...);
+    argp_error(state_, fmt, args...);
+  }
+
+  void Error(const std::string& msg) {
+    argp_error(state_, "%s", msg.c_str());
   }
 
   void Failure(int status, int errnum, const std::string& msg) {
-    ::argp_failure(state_, status, errnum, "%s", msg.c_str());
+    argp_failure(state_, status, errnum, "%s", msg.c_str());
   }
-  ::argp_state* operator->() { return state_; }
+  argp_state* operator->() { return state_; }
 
  private:
-  ::argp_state* state_;
+  argp_state* state_;
 };
 
 // Throw this exception will cause an error msg to be printed (via what()).
@@ -740,11 +756,11 @@ class ArgArray {
 
 class ArgpParser {
  public:
-  using Argp = ::argp;
-  using ArgpParserCallback = ::argp_parser_t;
-  using ArgpErrorType = ::error_t;
+  using Argp = argp;
+  // using ArgpParserCallback = ::argp_parser_t;
+  using ArgpErrorType = error_t;
   // XXX: what is the use of help_filter?
-  using ArgpHelpFilterCallback = decltype(Argp::help_filter);
+  // using ArgpHelpFilterCallback = decltype(Argp::help_filter);
 
   class Delegate {
    public:
@@ -1097,7 +1113,7 @@ class ArgpParserImpl : public ArgpParser {
   void set_doc(const char* doc) { argp_.doc = doc; }
   void set_argp_domain(const char* domain) { argp_.argp_domain = domain; }
   void set_args_doc(const char* args_doc) { argp_.args_doc = args_doc; }
-  void set_help_filter(ArgpHelpFilterCallback cb) { argp_.help_filter = cb; }
+  // void set_help_filter(ArgpHelpFilterCallback cb) { argp_.help_filter = cb; }
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
   static void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
@@ -1120,8 +1136,8 @@ class ArgpParserImpl : public ArgpParser {
       }
       // Too many arguments.
       if (state->arg_num >= positional_count())
-        state.Error("Too many positional arguments. Expected %d, got %d",
-                    (int)positional_count(), (int)state->arg_num);
+        state.ErrorF("Too many positional arguments. Expected %d, got %d",
+                     (int)positional_count(), (int)state->arg_num);
       return ARGP_ERR_UNKNOWN;
     }
 
@@ -1139,7 +1155,7 @@ class ArgpParserImpl : public ArgpParser {
     if (key == ARGP_KEY_END) {
       // No enough args.
       if (state->arg_num < positional_count())
-        state.Error("No enough positional arguments. Expected %d, got %d",
+        state.ErrorF("No enough positional arguments. Expected %d, got %d",
                     (int)positional_count(), (int)state->arg_num);
     }
 
@@ -1151,7 +1167,7 @@ class ArgpParserImpl : public ArgpParser {
     return 0;
   }
 
-  static ArgpErrorType Callback(int key, char* arg, ::argp_state* state) {
+  static ArgpErrorType Callback(int key, char* arg, argp_state* state) {
     auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
     return self->ParseImpl(key, arg, state);
   }
@@ -1278,12 +1294,13 @@ class ArgumentParser : private ArgumentHolder {
   }
   // TODO: parse_known_args()
 
-  const char* program_name() const { return ::program_invocation_name; }
+  const char* program_name() const { return program_invocation_name; }
   const char* program_short_name() const {
-    return ::program_invocation_short_name;
+    return program_invocation_short_name;
   }
-  const char* program_version() const { return ::argp_program_version; }
-  const char* program_bug_address() const { return ::argp_program_bug_address; }
+  const char* program_version() const { return argp_program_version; }
+  // TODO: rename to email.
+  const char* program_bug_address() const { return argp_program_bug_address; }
 
  private:
   Options user_options_;
