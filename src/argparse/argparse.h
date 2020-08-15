@@ -56,16 +56,18 @@ class ArgpState {
 
   template <typename... Args>
   void ErrorF(const char* fmt, Args... args) {
-    static_assert(sizeof...(Args) > 0);
-    argp_error(state_, fmt, args...);
+    return argp_error(state_, fmt, args...);
   }
-
   void Error(const std::string& msg) {
-    argp_error(state_, "%s", msg.c_str());
+    return ErrorF("%s", msg.c_str());
   }
 
+  template <typename... Args>
+  void FailureF(int status, int errnum, const char* fmt, Args... args) {
+    return argp_failure(state_, status, errnum, fmt, args...);
+  }
   void Failure(int status, int errnum, const std::string& msg) {
-    argp_failure(state_, status, errnum, "%s", msg.c_str());
+    return FailureF(status, errnum, "%s", msg.c_str());
   }
   argp_state* operator->() { return state_; }
 
@@ -107,6 +109,12 @@ class Status {
   // Default to success.
   Status() : Status(true) {}
 
+  Status(Status&& that)
+      : success_(that.success_), message_(std::move(that.message_)) {}
+  
+  Status(const Status& that) = default;
+  Status& operator=(const Status& that) = default;
+
   explicit operator bool() const { return success_; }
   const std::string& message() const { return message_; }
 
@@ -115,13 +123,36 @@ class Status {
   std::string message_;
 };
 
-struct Context {
+// TODO: make it a class.
+class Context {
+ public:
+  // Issue an error.
+  void error(const std::string& msg) { status_ = Status(msg); }
+  void print_usage() { return state_.Usage(); }
+  std::string& value() { return value_; }
+  const std::string& value() const { return value_; }
+  // Whether a value is passed to this arg.
+  bool has_value() const { return has_value_; }
+  // TODO: impl this by making Argument an interface.
+  bool is_option() const; // Whether this arg is an option.
+
+  Context(const Argument* argument, const char* value, ArgpState state)
+      : has_value_(bool(value)), argument_(argument), state_(state) {
+    if (has_value())
+      value_.assign(value);
+  }
+
+ private:
+  // For checking if user's call succeeded.
+  Status TakeStatus() { return std::move(status_); }
+
   // The Argument being parsed.
-  // TODO: maynot let user see this.
-  const Argument* argument;
+  bool has_value_;
+  const Argument* argument_;
+  ArgpState state_;
   // The command-line value to this argument.
-  std::string value;
-  // More fields may follow.
+  std::string value_;
+  Status status_;  // User's error() call is saved here.
 };
 
 // When an argument is parsed, a UserCallback is fired.
@@ -225,11 +256,11 @@ class DefaultUserCallback : public UserCallback {
  private:
   Status RunImpl(const Context& ctx) override {
     using Converter = DefaultConverter<T>;
-    bool rv = Converter::Parse(ctx.value, reinterpret_cast<T*>(dest_ptr_));
+    bool rv = Converter::Parse(ctx.value(), reinterpret_cast<T*>(dest_ptr_));
     if (rv)
       return true;
     // Error reporting.
-    return ReportError(ctx.value, Converter::type_name());
+    return ReportError(ctx.value(), Converter::type_name());
   }
 };
 
@@ -512,12 +543,12 @@ struct Names {
 
 // A delegate used by the Argument class.
 class ArgumentDelegate {
-public:
- // Generate a key for an option.
- virtual int NextOptionKey() = 0;
- // Call when an Arg is fully constructed.
- virtual void OnArgumentCreated(Argument*) = 0;
- virtual ~ArgumentDelegate() {}
+ public:
+  // Generate a key for an option.
+  virtual int NextOptionKey() = 0;
+  // Call when an Arg is fully constructed.
+  virtual void OnArgumentCreated(Argument*) = 0;
+  virtual ~ArgumentDelegate() {}
 };
 
 // Holds all meta-info about an argument.
@@ -598,7 +629,7 @@ class Argument {
       if (i < long_names_.size()) {
         os << "--" << long_names_[i];
       } else {
-        os<<'-'<<short_names_[i-long_names_.size()];
+        os << '-' << short_names_[i - long_names_.size()];
       }
       if (i < size - 1)
         os << '|';
@@ -676,10 +707,10 @@ class Argument {
   }
 
   // Put here to record some metics.
-  Status RunUserCallback(char* value) {
+  Status RunUserCallback(const Context& ctx) {
     if (!user_callback_)  // User doesn't provide any.
       return true;
-    return user_callback_->Run(Context{this, std::string(value)});
+    return user_callback_->Run(ctx);
   }
 
   // For extension.
@@ -1117,7 +1148,8 @@ class ArgpParserImpl : public ArgpParser {
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
   static void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
-    auto status = arg->RunUserCallback(value);
+    Context ctx(arg, value, state);
+    auto status = arg->RunUserCallback(ctx);
     // If the user said no, just die with a msg.
     if (status)
       return;
@@ -1156,7 +1188,7 @@ class ArgpParserImpl : public ArgpParser {
       // No enough args.
       if (state->arg_num < positional_count())
         state.ErrorF("No enough positional arguments. Expected %d, got %d",
-                    (int)positional_count(), (int)state->arg_num);
+                     (int)positional_count(), (int)state->arg_num);
     }
 
     // Remaining args (not parsed). Collect them or turn it into an error.
