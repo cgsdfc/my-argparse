@@ -42,9 +42,12 @@ class ArgpState {
   }
   void Usage() { ::argp_usage(state_); }
 
-  void Error(const std::string& msg) {
-    ::argp_error(state_, "%s", msg.c_str());
+  template <typename... Args>
+  void Error(const char* fmt, Args... args) {
+    static_assert(sizeof...(Args) > 0);
+    ::argp_error(state_, fmt, args...);
   }
+
   void Failure(int status, int errnum, const std::string& msg) {
     ::argp_failure(state_, status, errnum, "%s", msg.c_str());
   }
@@ -541,7 +544,7 @@ class Argument {
   bool initialized() const { return key_ != 0; }
   int key() const { return key_; }
   int group() const { return group_; }
-  bool is_option() const { return is_option_; }
+  bool is_option() const { return key_ != kKeyForPositional; }
   bool is_required() const { return is_required_; }
   UserCallback* user_callback() const { return user_callback_.get(); }
 
@@ -628,7 +631,7 @@ class Argument {
 
   // Fill in members to do with names.
   void InitNames(Names names) {
-    is_option_ = names.is_option;
+    // is_option_ = names.is_option;
     long_names_ = std::move(names.long_names);
     short_names_ = std::move(names.short_names);
     meta_var_ = std::move(names.meta_var);
@@ -675,7 +678,7 @@ class Argument {
   std::vector<char> short_names_;
   std::string meta_var_;
   // TODO: This is encoded in key_, can be rm'ed.
-  bool is_option_ = false;
+  // bool is_option_ = false;
   bool is_required_ = false;
 };
 
@@ -721,6 +724,20 @@ enum class HelpFilterResult {
 using HelpFilterCallback = std::function<
     HelpFilterResult(const Argument&, const std::string&, std::string* repl)>;
 
+class ArgArray {
+ public:
+  ArgArray(int argc, const char** argv)
+      : argc_(argc), argv_(const_cast<char**>(argv)) {}
+  ArgArray(std::vector<const char*>* v) : ArgArray(v->size(), v->data()) {}
+
+  int argc() const { return argc_; }
+  char** argv() const { return argv_; }
+
+ private:
+  int argc_;
+  char** argv_;
+};
+
 class ArgpParser {
  public:
   using Argp = ::argp;
@@ -753,13 +770,11 @@ class ArgpParser {
   // Initialize from a few options (user's options).
   virtual void Init(const Options& options) = 0;
   // Parse args, exit on errors.
-  virtual void ParseArgs(int argc, char** argv) = 0;
+  virtual void ParseArgs(ArgArray args) = 0;
   // Parse args, collect unknown args into rest, don't exit, report error via
   // Status.
-  virtual Status ParseKnownArgs(int argc,
-                                char** argv,
-                                std::vector<std::string>* rest) {
-    ParseArgs(argc, argv);
+  virtual Status ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
+    ParseArgs(args);
     return true;
   }
   virtual ~ArgpParser() {}
@@ -1071,10 +1086,11 @@ class ArgpParserImpl : public ArgpParser {
       set_doc(program_doc_.c_str());
   }
 
-  void ParseArgs(int argc, char** argv) override {
+  // TODO: impl this.
+  void ParseArgs(ArgArray args) override {
     int arg_index = -1;
-    auto err =
-        ::argp_parse(&argp_, argc, argv, parser_flags_, &arg_index, this);
+    auto err = ::argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
+                            &arg_index, this);
   }
 
  private:
@@ -1089,14 +1105,12 @@ class ArgpParserImpl : public ArgpParser {
     // If the user said no, just die with a msg.
     if (status)
       return;
-    state.Error(status.message());
+    // state.Error("%s", status.message().c_str());
   }
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
   ArgpErrorType ParseImpl(int key, char* arg, ArgpState state) {
-    // const auto& positionals = holder_->positional_arguments();
-
     // Positional argument.
     if (key == ARGP_KEY_ARG) {
       const int arg_num = state->arg_num;
@@ -1105,19 +1119,16 @@ class ArgpParserImpl : public ArgpParser {
         return 0;
       }
       // Too many arguments.
-      // if (state->arg_num >= positional_count())
-      // argp_error(state, "Too many positional arguments. Expected %d, got %d",
-      //            (int)positional_count(), (int)state->arg_num);
+      if (state->arg_num >= positional_count())
+        state.Error("Too many positional arguments. Expected %d, got %d",
+                    (int)positional_count(), (int)state->arg_num);
       return ARGP_ERR_UNKNOWN;
     }
 
     // Next most frequent handling is options.
-    // const auto& key_index = holder_->optional_arguments();
-
     if ((key & kSpecialKeyMask) == 0) {
       // This isn't a special key, but rather an option.
       Argument* argument = delegate_->FindOptionalArgument(key);
-      // auto iter = key_index.find(key);
       if (!argument)
         return ARGP_ERR_UNKNOWN;
       InvokeUserCallback(argument, arg, state);
@@ -1128,8 +1139,8 @@ class ArgpParserImpl : public ArgpParser {
     if (key == ARGP_KEY_END) {
       // No enough args.
       if (state->arg_num < positional_count())
-        state.Error("No enough positional arguments. Expected %d, got %d");
-                  //  (int)positional_count(), (int)state->arg_num);
+        state.Error("No enough positional arguments. Expected %d, got %d",
+                    (int)positional_count(), (int)state->arg_num);
     }
 
     // Remaining args (not parsed). Collect them or turn it into an error.
@@ -1231,6 +1242,10 @@ struct Options {
     options.flags |= f;
     return *this;
   }
+  Options& help_filter(HelpFilterCallback cb) {
+    options.help_filter = std::move(cb);
+    return *this;
+  }
 
   ArgpParser::Options options;
 };
@@ -1251,14 +1266,14 @@ class ArgumentParser : private ArgumentHolder {
   void parse_args(int argc, const char** argv) {
     auto parser = ArgpParser::Create(this);
     parser->Init(user_options_.options);
-    return parser->ParseArgs(argc, const_cast<char**>(argv));
+    return parser->ParseArgs(ArgArray(argc, argv));
   }
 
   // Helper for demo and testing.
   void parse_args(std::initializer_list<const char*> args) {
     // init-er is not mutable.
     std::vector<const char*> args_copy(args.begin(), args.end());
-    args_copy.push_back(nullptr);
+    // args_copy.push_back(nullptr);
     return parse_args(args.size(), args_copy.data());
   }
   // TODO: parse_known_args()
