@@ -541,6 +541,12 @@ struct Names {
   }
 };
 
+class ArgumentInterace {
+public:
+ virtual bool IsOption() = 0;
+ virtual void FormatArgsDoc(std::ostream& os) = 0;
+};
+
 // A delegate used by the Argument class.
 class ArgumentDelegate {
  public:
@@ -678,7 +684,6 @@ class Argument {
 
   // Fill in members to do with names.
   void InitNames(Names names) {
-    // is_option_ = names.is_option;
     long_names_ = std::move(names.long_names);
     short_names_ = std::move(names.short_names);
     meta_var_ = std::move(names.meta_var);
@@ -724,8 +729,6 @@ class Argument {
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
   std::string meta_var_;
-  // TODO: This is encoded in key_, can be rm'ed.
-  // bool is_option_ = false;
   bool is_required_ = false;
 };
 
@@ -778,7 +781,13 @@ class ArgArray {
   ArgArray(std::vector<const char*>* v) : ArgArray(v->size(), v->data()) {}
 
   int argc() const { return argc_; }
+  std::size_t size() const { return argc(); }
+
   char** argv() const { return argv_; }
+  char* operator[](std::size_t i) {
+    DCHECK(i < argc());
+    return argv()[i];
+  }
 
  private:
   int argc_;
@@ -787,11 +796,7 @@ class ArgArray {
 
 class ArgpParser {
  public:
-  using Argp = argp;
-  // using ArgpParserCallback = ::argp_parser_t;
-  using ArgpErrorType = error_t;
   // XXX: what is the use of help_filter?
-  // using ArgpHelpFilterCallback = decltype(Argp::help_filter);
 
   class Delegate {
    public:
@@ -855,6 +860,7 @@ inline void PrintArgpOptionArray(const std::vector<ArgpOption>& options) {
   }
 }
 
+// TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
 class ArgumentHolder : public ArgumentContainer,
                        public ArgumentDelegate,
                        public ArgpParser::Delegate {
@@ -1133,21 +1139,35 @@ class ArgpParserImpl : public ArgpParser {
       set_doc(program_doc_.c_str());
   }
 
-  // TODO: impl this.
   void ParseArgs(ArgArray args) override {
-    int arg_index = -1;
-    auto err = ::argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
-                            &arg_index, this);
+    // If any error happened, just exit the program. No need to check for return
+    // value.
+    argp_parse(&argp_, args.argc(), args.argv(), parser_flags_, nullptr, this);
+  }
+
+  Status ParseKnownArgs(ArgArray args,
+                        std::vector<std::string>* rest) override {
+    int arg_index;
+    error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
+                               &arg_index, this);
+    if (!error)
+      return true;
+    for (int i = arg_index; i < args.argc(); ++i) {
+      rest->emplace_back(args[i]);
+    }
+    // TODO: may just return bool. ctx.error() just call argp_error, don't store
+    // status.
+    return false;
   }
 
  private:
   void set_doc(const char* doc) { argp_.doc = doc; }
   void set_argp_domain(const char* domain) { argp_.argp_domain = domain; }
   void set_args_doc(const char* args_doc) { argp_.args_doc = args_doc; }
-  // void set_help_filter(ArgpHelpFilterCallback cb) { argp_.help_filter = cb; }
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
-  static void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
+  // TODO: Change this scheme.
+  void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
     Context ctx(arg, value, state);
     auto status = arg->RunUserCallback(ctx);
     // If the user said no, just die with a msg.
@@ -1158,7 +1178,7 @@ class ArgpParserImpl : public ArgpParser {
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
-  ArgpErrorType ParseImpl(int key, char* arg, ArgpState state) {
+  error_t ParseImpl(int key, char* arg, ArgpState state) {
     // Positional argument.
     if (key == ARGP_KEY_ARG) {
       const int arg_num = state->arg_num;
@@ -1199,7 +1219,7 @@ class ArgpParserImpl : public ArgpParser {
     return 0;
   }
 
-  static ArgpErrorType Callback(int key, char* arg, argp_state* state) {
+  static error_t Callback(int key, char* arg, argp_state* state) {
     auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
     return self->ParseImpl(key, arg, state);
   }
@@ -1230,10 +1250,11 @@ class ArgpParserImpl : public ArgpParser {
 
   unsigned positional_count() const { return positional_count_; }
 
-  Delegate* delegate_;
   int parser_flags_ = 0;
   unsigned positional_count_ = 0;
-  Argp argp_ = {};
+  Delegate* delegate_;
+  Status status_;
+  argp argp_ = {};
   std::string program_doc_;
   std::string args_doc_;
   std::vector<ArgpOption> argp_options_;
