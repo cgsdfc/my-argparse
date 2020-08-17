@@ -837,7 +837,7 @@ struct Names {
   }
 };
 
-class ArgumentInterace {
+class Argument {
  public:
   class Delegate {
    public:
@@ -848,32 +848,27 @@ class ArgumentInterace {
     virtual ~Delegate() {}
   };
 
+  virtual void SetHelpDoc(const char* help_doc) = 0;
+  virtual void SetRequired(bool required) = 0;
+  virtual void SetMetaVar(const char* meta_var) = 0;
   virtual bool IsOption() = 0;
+  virtual bool IsInitialized() = 0;
+  virtual int GetKey() = 0;
+  virtual int GetGroup() = 0;
   virtual void FormatArgsDoc(std::ostream& os) = 0;
   virtual CallbackResolver* GetCallbackResolver() = 0;
   virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
   virtual void InitCallback() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
+  virtual bool AppearsBefore(const Argument* that) = 0;
 
-  virtual ~ArgumentInterace() {}
-};
-
-// A delegate used by the Argument class.
-class ArgumentDelegate {
- public:
-  // Generate a key for an option.
-  virtual int NextOptionKey() = 0;
-  // Call when an Arg is fully constructed.
-  virtual void OnArgumentCreated(Argument*) = 0;
-  virtual ~ArgumentDelegate() {}
+  virtual ~Argument() {}
 };
 
 // Holds all meta-info about an argument.
-// For now this is a union of Option, Positional and Group.
-// In the future this can be three classes.
-class Argument {
+class ArgumentImpl : public Argument {
  public:
-  Argument(ArgumentDelegate* delegate, const Names& names, int group)
+  ArgumentImpl(Delegate* delegate, const Names& names, int group)
       : callback_resolver_(new CallbackResolverImpl()),
         delegate_(delegate),
         group_(group) {
@@ -882,20 +877,26 @@ class Argument {
     delegate_->OnArgumentCreated(this);
   }
 
-  void SetHelpDoc(const char* help_doc) {
-    if (help_doc)
-      help_doc_ = help_doc;
+  void SetHelpDoc(const char* help_doc) override {
+    DCHECK(help_doc);
+    help_doc_ = help_doc;
   }
 
-  void SetRequired(bool required) { is_required_ = required; }
-  void SetMetaVar(const char* meta_var) { meta_var_ = meta_var; }
+  void SetRequired(bool required) override { is_required_ = required; }
+  void SetMetaVar(const char* meta_var) override {
+    DCHECK(meta_var);
+    meta_var_ = meta_var;
+  }
+  bool IsOption() override { return is_option(); }
+  bool IsInitialized() override { return initialized(); }
+  int GetKey() override { return key(); }
+  int GetGroup() override { return group(); }
 
   bool initialized() const { return key_ != 0; }
   int key() const { return key_; }
   int group() const { return group_; }
   bool is_option() const { return key_ != kKeyForPositional; }
   bool is_required() const { return is_required_; }
-  // UserCallback* user_callback() const { return user_callback_.get(); }
 
   const std::string& help_doc() const { return help_doc_; }
   const char* doc() const {
@@ -917,16 +918,16 @@ class Argument {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
-  CallbackResolver* GetCallbackResolver() {
+  CallbackResolver* GetCallbackResolver() override {
     DCHECK(callback_resolver_);
     return callback_resolver_.get();
   }
-  CallbackRunner* GetCallbackRunner() {
+  CallbackRunner* GetCallbackRunner() override {
     DCHECK(callback_runner_);
     return callback_runner_.get();
   }
   // [--name|-n|-whatever=[value]] or output
-  void FormatArgsDoc(std::ostream& os) {
+  void FormatArgsDoc(std::ostream& os) override {
     if (!is_option()) {
       os << meta_var();
       return;
@@ -953,7 +954,13 @@ class Argument {
     os << ']';
   }
 
-  void CompileToArgpOptions(std::vector<ArgpOption>* options) {
+  void InitCallback() override {
+    DCHECK(!callback_runner_ && callback_resolver_);
+    callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
+    callback_resolver_.reset();
+  }
+
+  void CompileToArgpOptions(std::vector<ArgpOption>* options) override {
     ArgpOption opt{};
     opt.doc = doc();
     opt.group = group();
@@ -976,6 +983,10 @@ class Argument {
       opt.flags = OPTION_ALIAS;
       options->push_back(opt_alias);
     }
+  }
+
+  bool AppearsBefore(const Argument* that) override {
+    return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
  private:
@@ -1002,14 +1013,36 @@ class Argument {
     key_ = short_names_.empty() ? delegate_->NextOptionKey() : short_names_[0];
   }
 
-  void InitCallback() {
-    DCHECK(!callback_runner_ && callback_resolver_);
-    callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
-    callback_resolver_.reset();
+  static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b) {
+    // options go before positionals.
+    if (a->is_option() != b->is_option())
+      return int(a->is_option()) > int(b->is_option());
+
+    // positional compares on their names.
+    if (!a->is_option() && !b->is_option()) {
+      DCHECK(a->name() && b->name());
+      return std::strcmp(a->name(), b->name()) < 0;
+    }
+
+    // required option goes first.
+    if (a->is_required() != b->is_required())
+      return int(a->is_required()) > int(b->is_required());
+
+    // short-only option goes before the rest.
+    if (bool(a->name()) != bool(b->name()))
+      return bool(a->name()) < bool(b->name());
+
+    // a and b are both short-only option.
+    if (!a->name() && !b->name())
+      return a->key() < b->key();
+
+    // a and b are both long option.
+    DCHECK(a->name() && b->name());
+    return std::strcmp(a->name(), b->name()) < 0;
   }
 
   // For extension.
-  ArgumentDelegate* delegate_;
+  Delegate* delegate_;
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
@@ -1186,7 +1219,7 @@ class ArgumentGroup : public ArgumentContainer {
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
 class ArgumentHolderImpl : public ArgumentHolder,
-                           public ArgumentDelegate,
+                           public Argument::Delegate,
                            public ArgpParser::Delegate {
  public:
   ArgumentHolderImpl() {
@@ -1233,7 +1266,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
   void CompileToArgpOptions(std::vector<ArgpOption>* options) override {
     if (arguments_.empty())
-      return;
+      return options->push_back({});
 
     const unsigned option_size =
         arguments_.size() + groups_.size() + kAverageAliasCount + 1;
@@ -1246,6 +1279,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
     // TODO: if there is not pos/opt at all but there are two groups, will argp
     // still print these empty groups?
     for (Argument& arg : arguments_) {
+      arg.InitCallback();
       arg.CompileToArgpOptions(options);
     }
     // Only when at least one opt/pos presents should we generate their groups.
@@ -1254,39 +1288,12 @@ class ArgumentHolderImpl : public ArgumentHolder,
     // PrintArgpOptionArray(*options);
   }
 
-  static bool CompareArguments(const Argument* a, const Argument* b) {
-    // options go before positionals.
-    if (a->is_option() != b->is_option())
-      return int(a->is_option()) > int(b->is_option());
-
-    // positional compares on their names.
-    if (!a->is_option() && !b->is_option()) {
-      DCHECK(a->name() && b->name());
-      return std::strcmp(a->name(), b->name()) < 0;
-    }
-
-    // required option goes first.
-    if (a->is_required() != b->is_required())
-      return int(a->is_required()) > int(b->is_required());
-
-    // short-only option goes before the rest.
-    if (bool(a->name()) != bool(b->name()))
-      return bool(a->name()) < bool(b->name());
-
-    // a and b are both short-only option.
-    if (!a->name() && !b->name())
-      return a->key() < b->key();
-
-    // a and b are both long option.
-    DCHECK(a->name() && b->name());
-    return std::strcmp(a->name(), b->name()) < 0;
-  }
-
   void GenerateArgsDoc(std::string* args_doc) override {
     std::vector<Argument*> args(arguments_.size());
     std::transform(arguments_.begin(), arguments_.end(), args.begin(),
-                   [](Argument& arg) { return &arg; });
-    std::sort(args.begin(), args.end(), &CompareArguments);
+                   [](ArgumentImpl& arg) { return &arg; });
+    std::sort(args.begin(), args.end(),
+              [](Argument* a, Argument* b) { return a->AppearsBefore(b); });
 
     // join the dump of each arg with a space.
     std::ostringstream os;
@@ -1354,14 +1361,14 @@ class ArgumentHolderImpl : public ArgumentHolder,
     return &groups_[group - 1];
   }
 
-  // ArgumentDelegate:
+  // Argument::Delegate:
   int NextOptionKey() override { return next_key_++; }
 
   void OnArgumentCreated(Argument* arg) override {
-    DCHECK(arg->initialized());
-    GroupFromID(arg->group())->AddMember();
-    if (arg->is_option()) {
-      bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
+    DCHECK(arg->IsInitialized());
+    GroupFromID(arg->GetGroup())->AddMember();
+    if (arg->IsOption()) {
+      bool inserted = optional_arguments_.emplace(arg->GetKey(), arg).second;
       DCHECK(inserted);
     } else {
       positional_arguments_.push_back(arg);
@@ -1394,7 +1401,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   unsigned next_key_ = kFirstArgumentKey;
 
   // Hold the storage of all args.
-  std::list<Argument> arguments_;
+  std::list<ArgumentImpl> arguments_;
   // indexed by their define-order.
   std::vector<Argument*> positional_arguments_;
   // indexed by their key.
