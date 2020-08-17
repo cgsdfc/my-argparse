@@ -3,7 +3,21 @@
 
 using namespace argparse;
 
+struct Appendable {};
+
+template <>
+struct AppendTraits<Appendable, int> {
+  using value_type = int;
+  static void Append(Appendable*, int&& i);
+};
+
 int main(int argc, char const* argv[]) {
+  std::cout << ActionIsSupported<std::vector<int>, Actions::kAppend>{};
+  std::cout << ActionIsSupported<int, Actions::kAppend> {};
+  std::cout << ActionIsSupported<std::list<int>, Actions::kAppend> {};
+  std::cout << ActionIsSupported<Appendable, Actions::kAppend> {};
+  using ti = decltype(typeid(int));
+
   ArgumentParser parser(Options()
                             .description("a test program")
                             .bug_address("xxx@xxx.com"));

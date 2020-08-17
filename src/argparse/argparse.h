@@ -2,6 +2,7 @@
 
 #include <argp.h>
 #include <algorithm>
+#include <any>
 #include <cassert>
 #include <cstring>  // strlen()
 #include <functional>
@@ -28,22 +29,25 @@ class ArgumentBuilder;
 class ArgumentParser;
 class Options;
 
+class ActionCallback;
+class TypeCallback;
+
 using ArgpOption = ::argp_option;
 using ArgpProgramVersionCallback = decltype(::argp_program_version_hook);
+using ::argp;
 using ::argp_error;
 using ::argp_failure;
 using ::argp_help;
-using ::argp_state_help;
-using ::argp_parser_t;
 using ::argp_parse;
+using ::argp_parser_t;
 using ::argp_program_bug_address;
 using ::argp_program_version;
 using ::argp_state;
+using ::argp_state_help;
+using ::argp_usage;
+using ::error_t;
 using ::program_invocation_name;
 using ::program_invocation_short_name;
-using ::argp_usage;
-using ::argp;
-using ::error_t;
 
 // Wrapper of argp_state.
 class ArgpState {
@@ -58,9 +62,7 @@ class ArgpState {
   void ErrorF(const char* fmt, Args... args) {
     return argp_error(state_, fmt, args...);
   }
-  void Error(const std::string& msg) {
-    return ErrorF("%s", msg.c_str());
-  }
+  void Error(const std::string& msg) { return ErrorF("%s", msg.c_str()); }
 
   template <typename... Args>
   void FailureF(int status, int errnum, const char* fmt, Args... args) {
@@ -109,9 +111,8 @@ class Status {
   // Default to success.
   Status() : Status(true) {}
 
-  Status(Status&& that)
-      : success_(that.success_), message_(std::move(that.message_)) {}
-  
+  Status(Status&& that) = default;
+
   Status(const Status& that) = default;
   Status& operator=(const Status& that) = default;
 
@@ -127,14 +128,18 @@ class Status {
 class Context {
  public:
   // Issue an error.
-  void error(const std::string& msg) { status_ = Status(msg); }
+  void error(const std::string& msg) {
+    state_.Error(msg);
+    status_ = Status(msg);
+  }
   void print_usage() { return state_.Usage(); }
+  void print_help() { return state_.Help(stderr, 0); }
   std::string& value() { return value_; }
   const std::string& value() const { return value_; }
   // Whether a value is passed to this arg.
   bool has_value() const { return has_value_; }
   // TODO: impl this by making Argument an interface.
-  bool is_option() const; // Whether this arg is an option.
+  bool is_option() const;  // Whether this arg is an option.
 
   Context(const Argument* argument, const char* value, ArgpState state)
       : has_value_(bool(value)), argument_(argument), state_(state) {
@@ -142,10 +147,10 @@ class Context {
       value_.assign(value);
   }
 
- private:
   // For checking if user's call succeeded.
   Status TakeStatus() { return std::move(status_); }
 
+ private:
   // The Argument being parsed.
   bool has_value_;
   const Argument* argument_;
@@ -244,6 +249,308 @@ using function_signature_t = std::conditional_t<
 // clang-format on
 
 }  // namespace detail
+
+template <typename T>
+using ValueTypeOf = typename T::value_type;
+
+// struct ValueTypeOf {
+//   using type = 
+// };
+
+// This struct instructs us how to append Value to T.
+template <typename T, typename Value = typename T::value_type>
+struct AppendTraits {
+  using value_type = Value;
+
+  static void Append(T* obj, value_type&& item) {
+    // By default use the push_back() method of T.
+    obj->push_back(std::forward<value_type>(item));
+  }
+};
+
+// A more complete module to handle user's callbacks.
+enum class Actions {
+  kStore,
+  kStoreConst,
+  kAppend,
+  kAppendConst,
+};
+
+class CallbackFactory {
+ public:
+  virtual ActionCallback* CreateActionCallback() = 0;
+  virtual TypeCallback* CreateTypeCallback() = 0;
+  virtual ~CallbackFactory() {}
+};
+
+// This is a meta-function that tests if A can be performed on T.
+template <typename T, Actions A, typename Enable = void>
+struct ActionIsSupported : std::false_type {};
+
+// Store is always supported if T is copy-assignable.
+template <typename T>
+struct ActionIsSupported<T, Actions::kStore, void>
+    : std::is_copy_assignable<T> {};
+
+// Store Const is supported only if Store is supported.
+template <typename T>
+struct ActionIsSupported<T, Actions::kStoreConst, void>
+    : ActionIsSupported<T, Actions::kStore, void> {};
+
+// Append is supported if AppendTraits<T>::Append() is valid.
+template <typename T>
+struct ActionIsSupported<T,
+                         Actions::kAppend,
+                         std::void_t<decltype(
+                             // static_cast<void (*)(T*, typename
+                             // AppendTraits<T>::value_type&&)>(
+                             &AppendTraits<T>::Append)>> : std::true_type {};
+
+// This is a meta-function that handles static-runtime mix of selecting action
+// factory.
+template <typename T, Actions A, bool Supported = ActionIsSupported<T, A>{}>
+struct CallbackFactorySelector;
+
+template <typename T, Actions A>
+struct CallbackFactorySelector<T, A, false> /* Not supported */ {
+  static CallbackFactory* Select() { return nullptr; }
+};
+
+
+template <typename T>
+std::unique_ptr<CallbackFactory> CreateActionFactory(Actions act) {
+  CallbackFactory* factory;
+  switch (act) {
+    case Actions::kStore:
+      factory = CallbackFactorySelector<T, Actions::kStore>::Select();
+      break;
+    case Actions::kStoreConst:
+      factory = CallbackFactorySelector<T, Actions::kStoreConst>::Select();
+    case Actions::kAppend:
+      factory = CallbackFactorySelector<T, Actions::kAppend>::Select();
+    case Actions::kAppendConst:
+      factory = CallbackFactorySelector<T, Actions::kAppendConst>::Select();
+    default:
+      break;
+  }
+  DCHECK2(factory, "Action is not supported by this type");
+  return std::unique_ptr<CallbackFactory>(factory);
+}
+
+struct UserData {
+  virtual std::type_index GetTypeIndex() = 0;
+  virtual ~UserData() {}
+};
+
+template <typename T>
+struct UserDataImpl : UserData {
+  T data;
+  ~UserDataImpl() override {}
+  std::type_index GetTypeIndex() override { return typeid(T); }
+};
+
+template <typename T>
+T Cast(UserData* data) {
+  DCHECK(data->GetTypeIndex() == typeid(T));
+  return static_cast<UserDataImpl<T>*>(data)->data;
+}
+
+// Perform data conversion..
+class TypeCallback {
+ public:
+  // TODO: may not use Delegate.
+  class Delegate {
+   public:
+    virtual void OnTypeCallbackInvoked(Status status,
+                                       std::unique_ptr<UserData> data) {}
+    virtual ~Delegate() {}
+  };
+  void Run(Context* ctx, Delegate* delegate) {
+    auto data = RunImpl(ctx);
+    delegate->OnTypeCallbackInvoked(ctx->TakeStatus(), std::move(data));
+  }
+  virtual ~TypeCallback() {}
+  virtual std::type_index GetValueType() = 0;
+
+ private:
+  virtual std::unique_ptr<UserData> RunImpl(Context* ctx) = 0;
+};
+
+// Impl a callback with the signature:
+// void action(T* dest, std::optional<V> val);
+// T is called the DestType. V is called the ValueType.
+class ActionCallback {
+ public:
+  void Run(std::unique_ptr<UserData> data) { RunImpl(std::move(data)); }
+  void BindToDest(void* dest, std::type_index type) {
+    DCHECK(GetDestType() == type);
+    dest_ = dest;
+  }
+  virtual ~ActionCallback() {}
+  virtual std::type_index GetDestType() = 0;
+  virtual std::type_index GetValueType() = 0;
+
+ private:
+  virtual void RunImpl(std::unique_ptr<UserData> data) = 0;
+
+ protected:
+  void* dest_ = nullptr;
+};
+
+class CallbackContext : public TypeCallback::Delegate {
+ public:
+  CallbackContext(std::unique_ptr<TypeCallback> type,
+                  std::unique_ptr<ActionCallback> action)
+      : type_callback_(std::move(type)), action_callback_(std::move(action)) {}
+
+  Status Run(Context* ctx) {
+    type_callback_->Run(ctx, this);
+    return std::move(status_);
+  }
+  ~CallbackContext() override {}
+
+ private:
+  void OnTypeCallbackInvoked(Status status,
+                             std::unique_ptr<UserData> data) override {
+    if (status) {
+      action_callback_->Run(std::move(data));
+    } else {
+      status_ = std::move(status);
+    }
+  }
+  Status status_;
+  std::unique_ptr<TypeCallback> type_callback_;
+  std::unique_ptr<ActionCallback> action_callback_;
+};
+
+// A subclass that always return nullptr. Used for actions without a need of
+// value.
+class NullTypeCallback : public TypeCallback {
+ public:
+  NullTypeCallback() = default;
+  std::type_index GetValueType() override { return typeid(void); }
+
+ private:
+  std::unique_ptr<UserData> RunImpl(Context*) override { return nullptr; }
+};
+
+// A subclass that parses string into value using a Traits.
+template <typename T>
+class DefaultTypeCallback : public TypeCallback {
+public:
+ std::type_index GetValueType() override { return typeid(T); }
+
+private:
+ std::unique_ptr<UserData> RunImpl(Context* ctx) override {}
+};
+
+// A subclass that always return a const value. Used for actions like
+// store-const and append-const.
+template <typename T>
+class ConstTypeCallback : public TypeCallback {
+ public:
+  explicit ConstTypeCallback(T value) : value_(value) {}
+  std::type_index GetValueType() override { return typeid(T); }
+
+ private:
+  std::unique_ptr<UserData> RunImpl(Context* ctx) override {
+    return std::make_unique<UserDataImpl<T>>(value_);
+  }
+  T value_;
+};
+
+// A helper subclass that impl dest-type and value-type.
+template <typename T, typename V>
+class ActionCallbackBase : public ActionCallback {
+ public:
+  using DestType = T;
+  using ValueType = V;
+
+  std::type_index GetDestType() override { return typeid(DestType); }
+  std::type_index GetValueType() override { return typeid(ValueType); }
+
+ protected:
+  // Helpers for subclass.
+  DestType* dest() { return reinterpret_cast<DestType*>(dest_); }
+  static ValueType ValueOf(UserData* data) {
+    DCHECK(data);
+    return Cast<ValueType>(data);
+  }
+};
+
+template <typename T, typename V = T>
+class StoreActionCallback : public ActionCallbackBase<T, V> {
+ public:
+ private:
+  void RunImpl(std::unique_ptr<UserData> data) override {
+    if (data) {
+      *(this->dest()) = this->ValueOf(data.get());
+    }
+  }
+};
+
+// Default handling: Parse string into T and store it.
+template <typename T>
+class DefaultCallbackFactory : public CallbackFactory {
+ public:
+  ActionCallback* CreateActionCallback() override {
+    return new StoreActionCallback<T>();
+  }
+  TypeCallback* CreateTypeCallback() override {
+    return new DefaultTypeCallback<T>();
+  }
+};
+
+class DestInfo {
+ public:
+  // virtual std::type_index GetType() = 0;
+  virtual CallbackFactory* CreateDefaultCallbackFactory() = 0;
+
+ protected:
+  explicit DestInfo(void* ptr, std::type_index type)
+      : ptr_(ptr), type_index_(type) {}
+  void* ptr_ = nullptr;
+  std::type_index type_index_;
+};
+
+template <typename T>
+class DestInfoImpl : public DestInfo {
+ public:
+  explicit DestInfoImpl(T* ptr) : DestInfo(ptr, typeid(T)) {}
+  // std::type_index GetType() override { return typeid(T); }
+  CallbackFactory* CreateDefaultCallbackFactory() override {
+    return new DefaultCallbackFactory<T>();
+  }
+  T* ptr() { return reinterpret_cast<T*>(ptr_); }
+};
+
+template <typename T, typename V = ValueTypeOf<T>>
+class AppendActionCallback : public ActionCallbackBase<T, V> {
+ private:
+  using Traits = AppendTraits<T, V>;
+  void RunImpl(std::unique_ptr<UserData> data) override {
+    if (data) {
+      Traits::Append(this->dest(), this->ValueOf(data.get()));
+    }
+  }
+};
+
+template <typename T>
+struct CallbackFactorySelector<T, Actions::kAppend, true> {
+  static CallbackFactory* Select() {
+    class FactoryImpl : public CallbackFactory {
+     public:
+      ~FactoryImpl() override {}
+      ActionCallback* CreateActionCallback() override {
+        return new AppendActionCallback<T>();
+      }
+      TypeCallback* CreateTypeCallback() override {
+        return new DefaultTypeCallback<ValueTypeOf<T>>();
+      }
+    };
+    return new FactoryImpl();
+  }
+};
 
 // When the user merely provides a dest, we will infer from the type of the
 // pointer and provide this callback, which parses the string into the value of
@@ -542,9 +849,9 @@ struct Names {
 };
 
 class ArgumentInterace {
-public:
- virtual bool IsOption() = 0;
- virtual void FormatArgsDoc(std::ostream& os) = 0;
+ public:
+  virtual bool IsOption() = 0;
+  virtual void FormatArgsDoc(std::ostream& os) = 0;
 };
 
 // A delegate used by the Argument class.
