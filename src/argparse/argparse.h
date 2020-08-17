@@ -316,48 +316,45 @@ struct CallbackFactorySelector<T, A, false> /* Not supported */ {
   static CallbackFactory* Select() { return nullptr; }
 };
 
-template <typename T>
-std::unique_ptr<CallbackFactory> CreateActionFactory(Actions act) {
-  CallbackFactory* factory;
-  switch (act) {
-    case Actions::kStore:
-      factory = CallbackFactorySelector<T, Actions::kStore>::Select();
-      break;
-    case Actions::kStoreConst:
-      factory = CallbackFactorySelector<T, Actions::kStoreConst>::Select();
-    case Actions::kAppend:
-      factory = CallbackFactorySelector<T, Actions::kAppend>::Select();
-    case Actions::kAppendConst:
-      factory = CallbackFactorySelector<T, Actions::kAppendConst>::Select();
-    default:
-      break;
-  }
-  DCHECK2(factory, "Action is not supported by this type");
-  return std::unique_ptr<CallbackFactory>(factory);
-}
-
-// struct UserData {
-//   virtual std::type_index GetTypeIndex() = 0;
-//   virtual ~UserData() {}
-// };
-
 // template <typename T>
-// struct UserDataImpl : UserData {
-//   T data;
-//   ~UserDataImpl() override {}
-//   std::type_index GetTypeIndex() override { return typeid(T); }
-// };
-
-// template <typename T>
-// T Cast(UserData* data) {
-//   DCHECK(data->GetTypeIndex() == typeid(T));
-//   return static_cast<UserDataImpl<T>*>(data)->data;
+// std::unique_ptr<CallbackFactory> CreateActionFactory(Actions act) {
+//   CallbackFactory* factory;
+//   switch (act) {
+//     case Actions::kStore:
+//       factory = CallbackFactorySelector<T, Actions::kStore>::Select();
+//       break;
+//     case Actions::kStoreConst:
+//       factory = CallbackFactorySelector<T, Actions::kStoreConst>::Select();
+//     case Actions::kAppend:
+//       factory = CallbackFactorySelector<T, Actions::kAppend>::Select();
+//     case Actions::kAppendConst:
+//       factory = CallbackFactorySelector<T, Actions::kAppendConst>::Select();
+//     default:
+//       break;
+//   }
+//   DCHECK2(factory, "Action is not supported by this type");
+//   return std::unique_ptr<CallbackFactory>(factory);
 // }
+
+class DestInfo {
+ public:
+  // Create a factory that needs no args.
+  virtual CallbackFactory* CreateFactory(Actions action) = 0;
+  // Create a factory with a piece of data.
+  virtual CallbackFactory* CreateFactoryWithValue(Actions action,
+                                                  std::any value) = 0;
+  virtual std::type_index GetDestType() = 0;
+
+  void* ptr() const { return ptr_; }
+
+ protected:
+  explicit DestInfo(void* ptr) : ptr_(ptr) {}
+  void* ptr_ = nullptr;
+};
 
 // Perform data conversion..
 class TypeCallback {
  public:
-  // TODO: may not use Delegate.
   class Delegate {
    public:
     virtual void OnTypeCallbackInvoked(Status status, std::any data) {}
@@ -380,11 +377,12 @@ class TypeCallback {
 class ActionCallback {
  public:
   void Run(std::any data) { RunImpl(std::move(data)); }
-  void BindToDest(void* dest, std::type_index type) {
-    DCHECK(GetDestType() == type);
-    dest_ = dest;
+  void BindToDest(DestInfo* dest_info) {
+    DCHECK(GetDestType() == dest_info->GetDestType());
+    dest_ = dest_info->ptr();
   }
   virtual ~ActionCallback() {}
+  // For performing runtime type check.
   virtual std::type_index GetDestType() = 0;
   virtual std::type_index GetValueType() = 0;
 
@@ -393,31 +391,6 @@ class ActionCallback {
 
  protected:
   void* dest_ = nullptr;
-};
-
-class CallbackContext : public TypeCallback::Delegate {
- public:
-  CallbackContext(std::unique_ptr<TypeCallback> type,
-                  std::unique_ptr<ActionCallback> action)
-      : type_callback_(std::move(type)), action_callback_(std::move(action)) {}
-
-  Status Run(Context* ctx) {
-    type_callback_->Run(ctx, this);
-    return std::move(status_);
-  }
-  ~CallbackContext() override {}
-
- private:
-  void OnTypeCallbackInvoked(Status status, std::any data) override {
-    if (status) {
-      action_callback_->Run(std::move(data));
-    } else {
-      status_ = std::move(status);
-    }
-  }
-  Status status_;
-  std::unique_ptr<TypeCallback> type_callback_;
-  std::unique_ptr<ActionCallback> action_callback_;
 };
 
 // A subclass that always return nullptr. Used for actions without a need of
@@ -450,11 +423,24 @@ class ConstTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(T); }
 
  private:
-  std::any RunImpl(Context* ctx) override {
-    return value_;
-    // return std::make_unique<UserDataImpl<T>>(value_);
-  }
+  std::any RunImpl(Context* ctx) override { return value_; }
   std::any value_;
+};
+
+template <typename T>
+class CustomTypeCallback : public TypeCallback {
+public:
+  using CallbackType = std::function<void(Context*, T*)>;
+  explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
+
+ private:
+  std::any RunImpl(Context* ctx) override {
+    T value;
+    std::invoke(callback_, ctx, &value);
+    return std::make_any(std::move(value));
+  }
+
+  CallbackType callback_;
 };
 
 // A helper subclass that impl dest-type and value-type.
@@ -464,62 +450,29 @@ class ActionCallbackBase : public ActionCallback {
   using DestType = T;
   using ValueType = V;
 
+  // explicit ActionCallbackBase(T* dest) : ActionCallback(dest) {}
   std::type_index GetDestType() override { return typeid(DestType); }
   std::type_index GetValueType() override { return typeid(ValueType); }
 
  protected:
   // Helpers for subclass.
   DestType* dest() { return reinterpret_cast<DestType*>(dest_); }
-  static ValueType ValueOf(std::any data) {
+  ValueType ValueOf(std::any data) {
     DCHECK(data.has_value());
+    DCHECK(data.type() == GetValueType());
     return std::any_cast<ValueType>(data);
   }
 };
 
+// This impls store and store-const.
 template <typename T, typename V = T>
 class StoreActionCallback : public ActionCallbackBase<T, V> {
- public:
  private:
   void RunImpl(std::any data) override {
     if (data.has_value()) {
       *(this->dest()) = this->ValueOf(data);
     }
   }
-};
-
-// Default handling: Parse string into T and store it.
-template <typename T>
-class DefaultCallbackFactory : public CallbackFactory {
- public:
-  ActionCallback* CreateActionCallback() override {
-    return new StoreActionCallback<T>();
-  }
-  TypeCallback* CreateTypeCallback() override {
-    return new DefaultTypeCallback<T>();
-  }
-};
-
-class DestInfo {
- public:
-  // virtual std::type_index GetType() = 0;
-  virtual CallbackFactory* CreateDefaultCallbackFactory() = 0;
-
- protected:
-  explicit DestInfo(void* ptr, std::type_index type)
-      : ptr_(ptr), type_index_(type) {}
-  void* ptr_ = nullptr;
-  std::type_index type_index_;
-};
-
-template <typename T>
-class DestInfoImpl : public DestInfo {
- public:
-  explicit DestInfoImpl(T* ptr) : DestInfo(ptr, typeid(T)) {}
-  // std::type_index GetType() override { return typeid(T); }
-  CallbackFactory* CreateDefaultCallbackFactory() override {
-    return new DefaultCallbackFactory<T>();
-  }
-  T* ptr() { return reinterpret_cast<T*>(ptr_); }
 };
 
 template <typename T, typename V = ValueTypeOf<T>>
@@ -530,6 +483,104 @@ class AppendActionCallback : public ActionCallbackBase<T, V> {
     if (data.has_value()) {
       Traits::Append(this->dest(), this->ValueOf(data));
     }
+  }
+};
+
+// Provided by user's callable obj.
+template <typename T, typename V>
+class CustomActionCallback : public ActionCallbackBase<T, V> {
+ public:
+  using CallbackType = std::function<void(T*, std::optional<V>)>;
+  explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {}
+
+ private:
+  void RunImpl(std::any data) override {
+    std::optional<V> value;
+    if (data.has_value())
+      value.emplace(this->ValueOf(data));
+    DCHECK(callback_);
+    std::invoke(callback_, this->dest(), std::move(value));
+  }
+
+  CallbackType callback_;
+};
+
+// Run TypeCallback and ActionCallback.
+class CallbackRunner : public TypeCallback::Delegate {
+ public:
+  CallbackRunner(CallbackFactory* factory, DestInfo* dest)
+      : type_(factory->CreateTypeCallback()),
+        action_(factory->CreateActionCallback()) {
+    DCHECK(dest->GetDestType() == action_->GetDestType());
+    DCHECK(type_->GetValueType() == action_->GetValueType());
+    action_->BindToDest(dest);
+  }
+
+  Status Run(Context* ctx) {
+    type_->Run(ctx, this);
+    return std::move(status_);
+  }
+  ~CallbackRunner() override {}
+
+ private:
+  void OnTypeCallbackInvoked(Status status, std::any data) override {
+    if (status) {
+      action_->Run(std::move(data));
+    } else {
+      status_ = std::move(status);
+    }
+  }
+  Status status_;
+  std::unique_ptr<TypeCallback> type_;
+  std::unique_ptr<ActionCallback> action_;
+};
+
+template <typename T>
+class DestInfoImpl : public DestInfo {
+ public:
+  explicit DestInfoImpl(T* ptr) : DestInfo(ptr) {}
+  std::type_index GetDestType() override { return typeid(T); }
+
+  CallbackFactory* CreateFactory(Actions action) override {
+    switch (action) {
+      case Actions::kStore:
+        return CallbackFactorySelector<T, Actions::kStore>::Select();
+      case Actions::kAppend:
+        return CallbackFactorySelector<T, Actions::kAppend>::Select();
+      default:
+        return nullptr;
+    }
+  }
+
+  CallbackFactory* CreateFactoryWithValue(Actions action,
+                                          std::any value) override {
+    switch (action) {
+      case Actions::kStoreConst:
+        return CallbackFactorySelector<T, Actions::kStore>::Select(value);
+      case Actions::kAppendConst:
+        return CallbackFactorySelector<T, Actions::kAppend>::Select(value);
+      default:
+        return nullptr;
+    }
+  }
+
+  // T* ptr() { return reinterpret_cast<T*>(ptr_); }
+};
+
+template <typename T>
+struct CallbackFactorySelector<T, Actions::kStore, true> {
+  static CallbackFactory* Select() {
+    class FactoryImpl : public CallbackFactory {
+     public:
+      ~FactoryImpl() override {}
+      ActionCallback* CreateActionCallback() override {
+        return new StoreActionCallback<T>();
+      }
+      TypeCallback* CreateTypeCallback() override {
+        return new DefaultTypeCallback<T>();
+      }
+    };
+    return new FactoryImpl();
   }
 };
 
@@ -547,6 +598,28 @@ struct CallbackFactorySelector<T, Actions::kAppend, true> {
       }
     };
     return new FactoryImpl();
+  }
+};
+
+template <typename T>
+struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
+  class FactoryImpl : public CallbackFactory {
+   public:
+    explicit FactoryImpl(std::any value) : value_(std::any_cast<T>(value)) {}
+    ~FactoryImpl() override {}
+    ActionCallback* CreateActionCallback() override {
+      return new StoreActionCallback<T>();
+    }
+    TypeCallback* CreateTypeCallback() override {
+      return new ConstTypeCallback<T>(value_);
+    }
+
+   private:
+    T value_;
+  };
+
+  static CallbackFactory* Select(std::any value) {
+    return new FactoryImpl(std::move(value));
   }
 };
 
