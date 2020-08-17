@@ -205,15 +205,10 @@ using function_signature_t = std::conditional_t<
 >;
 // clang-format on
 
-
 }  // namespace detail
 
 template <typename T>
 using ValueTypeOf = typename T::value_type;
-
-// struct ValueTypeOf {
-//   using type =
-// };
 
 // This struct instructs us how to append Value to T.
 template <typename T, typename Value = typename T::value_type>
@@ -278,11 +273,7 @@ struct CallbackFactorySelector<T, A, false> /* Not supported */ {
 
 class DestInfo {
  public:
-  // Create a factory that needs no args.
   virtual CallbackFactory* CreateFactory(Actions action) = 0;
-  // Create a factory with a piece of data.
-  // virtual CallbackFactory* CreateFactoryWithValue(Actions action,
-  //                                                 std::any value) = 0;
   virtual std::type_index GetDestType() = 0;
   virtual ~DestInfo() {}
   void* ptr() const { return ptr_; }
@@ -370,7 +361,6 @@ class DefaultTypeCallback : public TypeCallback {
 template <typename T>
 class ConstTypeCallback : public TypeCallback {
  public:
-  // explicit ConstTypeCallback(T value) : value_(value) {}
   std::type_index GetValueType() override { return typeid(T); }
   void BindToValue(std::any value) override { value_ = std::move(value); }
 
@@ -501,8 +491,7 @@ class CallbackRunnerImpl : public CallbackRunner,
  public:
   CallbackRunnerImpl(std::unique_ptr<TypeCallback> type,
                      std::unique_ptr<ActionCallback> action)
-      : type_(std::move(type)), action_(std::move(action)) {
-  }
+      : type_(std::move(type)), action_(std::move(action)) {}
 
   Status Run(Context* ctx) override {
     type_->Run(ctx, this);
@@ -521,14 +510,6 @@ class CallbackRunnerImpl : public CallbackRunner,
   Status status_;
   std::unique_ptr<TypeCallback> type_;
   std::unique_ptr<ActionCallback> action_;
-};
-
-// A DestInfo without T*, which is suitable for actions like print_help or
-// print_usage.
-class VoidDestInfo : public DestInfo {
- public:
-  std::type_index GetDestType() override { return typeid(void); }
-  CallbackFactory* CreateFactory(Actions action) override;
 };
 
 template <typename T>
@@ -596,9 +577,7 @@ struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
     }
   };
 
-  static CallbackFactory* Select() {
-    return new FactoryImpl();
-  }
+  static CallbackFactory* Select() { return new FactoryImpl(); }
 };
 
 template <typename T>
@@ -614,9 +593,7 @@ struct CallbackFactorySelector<T, Actions::kAppendConst, true> {
     }
   };
 
-  static CallbackFactory* Select() {
-    return new FactoryImpl();
-  }
+  static CallbackFactory* Select() { return new FactoryImpl(); }
 };
 
 struct Type {
@@ -820,8 +797,6 @@ struct Names {
   bool is_option;
   std::string meta_var;
 
-  // TODO: this should allow a single option.
-  // For positinal argument, only one name is allowed.
   Names(const char* name) {
     if (name[0] == '-') {
       InitOptions({name});
@@ -835,7 +810,6 @@ struct Names {
     long_names.push_back(std::move(positional));
   }
 
-  // For optional argument, a couple of names are allowed, including alias.
   Names(std::initializer_list<const char*> names) { InitOptions(names); }
 
   void InitOptions(std::initializer_list<const char*> names) {
@@ -880,7 +854,7 @@ class ArgumentInterace {
   virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
   virtual void InitCallback() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
-  
+
   virtual ~ArgumentInterace() {}
 };
 
@@ -900,7 +874,9 @@ class ArgumentDelegate {
 class Argument {
  public:
   Argument(ArgumentDelegate* delegate, const Names& names, int group)
-      : delegate_(delegate), group_(group) {
+      : callback_resolver_(new CallbackResolverImpl()),
+        delegate_(delegate),
+        group_(group) {
     InitNames(names);
     InitKey();
     delegate_->OnArgumentCreated(this);
@@ -1125,8 +1101,6 @@ class ArgArray {
 
 class ArgpParser {
  public:
-  // XXX: what is the use of help_filter?
-
   class Delegate {
    public:
     virtual Argument* FindOptionalArgument(int key) = 0;
@@ -1186,29 +1160,45 @@ inline void PrintArgpOptionArray(const std::vector<ArgpOption>& options) {
   }
 }
 
-// TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
-class ArgumentHolder : public ArgumentContainer,
-                       public ArgumentDelegate,
-                       public ArgpParser::Delegate {
+class ArgumentHolder {
  public:
-  ArgumentHolder() {
+  virtual Argument* AddArgumentToGroup(Names names, int group) = 0;
+  virtual Argument* AddArgument(Names names) = 0;
+  virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
+  virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
+  virtual ~ArgumentHolder() {}
+};
+
+// Impl add_group() call.
+class ArgumentGroup : public ArgumentContainer {
+ public:
+  ArgumentGroup(ArgumentHolder* holder, int group)
+      : holder_(holder), group_(group) {}
+
+ private:
+  Argument* AddArgument(Names names) override {
+    return holder_->AddArgumentToGroup(std::move(names), group_);
+  }
+
+  int group_;
+  ArgumentHolder* holder_;
+};
+
+// TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
+class ArgumentHolderImpl : public ArgumentHolder,
+                           public ArgumentDelegate,
+                           public ArgpParser::Delegate {
+ public:
+  ArgumentHolderImpl() {
     AddGroup("optional arguments");
     AddGroup("positional arguments");
   }
 
-  // Create a new group.
-  int AddGroup(const char* header) {
-    int group = groups_.size() + 1;
-    groups_.emplace_back(group, header);
-    return group;
-  }
-
   // Add an arg to a specific group.
-  Argument* AddArgumentToGroup(Names names, int group) {
+  Argument* AddArgumentToGroup(Names names, int group) override {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
     DCHECK(group <= groups_.size());
-
     Argument& arg = arguments_.emplace_back(this, names, group);
     return &arg;
   }
@@ -1221,7 +1211,14 @@ class ArgumentHolder : public ArgumentContainer,
     return AddArgumentToGroup(std::move(names), group);
   }
 
-  ArgumentGroup add_argument_group(const char* header);
+  ArgumentGroup AddArgumentGroup(const char* header) override {
+    int group = AddGroup(header);
+    return ArgumentGroup(this, group);
+  }
+
+  std::unique_ptr<ArgpParser> CreateParser() override {
+    return ArgpParser::Create(this);
+  }
 
   const std::map<int, Argument*>& optional_arguments() const {
     return optional_arguments_;
@@ -1230,6 +1227,7 @@ class ArgumentHolder : public ArgumentContainer,
     return positional_arguments_;
   }
 
+ private:
   // ArgpParser::Delegate:
   static constexpr int kAverageAliasCount = 4;
 
@@ -1315,7 +1313,6 @@ class ArgumentHolder : public ArgumentContainer,
     return positional_arguments_.size();
   }
 
- private:
   // If there is a group, but it has no member, it will not be added to
   // argp_options. This class manages the logic above. It also frees the
   // Argument class from managing groups as well as option and positional.
@@ -1344,6 +1341,13 @@ class ArgumentHolder : public ArgumentContainer,
     std::string header_;    // the text provided by user plus a ':'.
     unsigned members_ = 0;  // If this is 0, no header will be gen'ed.
   };
+
+  // Create a new group.
+  int AddGroup(const char* header) {
+    int group = groups_.size() + 1;
+    groups_.emplace_back(group, header);
+    return group;
+  }
 
   Group* GroupFromID(int group) {
     DCHECK(group <= groups_.size());
@@ -1400,27 +1404,6 @@ class ArgumentHolder : public ArgumentContainer,
   // Conflicts checking.
   std::set<std::string> name_set_;
 };
-
-// Impl add_group() call.
-class ArgumentGroup : public ArgumentContainer {
- private:
-  Argument* AddArgument(Names names) override {
-    return holder_->AddArgumentToGroup(std::move(names), group_);
-  }
-
-  ArgumentGroup(ArgumentHolder* holder, int group)
-      : holder_(holder), group_(group) {}
-
-  // Only ArgumentHolder can create this.
-  friend class ArgumentHolder;
-  int group_;
-  ArgumentHolder* holder_;
-};
-
-ArgumentGroup ArgumentHolder::add_argument_group(const char* header) {
-  int group = AddGroup(header);
-  return ArgumentGroup(this, group);
-}
 
 // This handles the argp_parser_t function and provide a bunch of context during
 // the parsing.
@@ -1646,21 +1629,21 @@ struct Options {
   ArgpParser::Options options;
 };
 
-class ArgumentParser : private ArgumentHolder {
+class ArgumentParser : public ArgumentContainer {
  public:
-  ArgumentParser() = default;
-
-  explicit ArgumentParser(const Options& options) : user_options_(options) {}
+  explicit ArgumentParser(const Options& options = {})
+      : holder_(new ArgumentHolderImpl()), user_options_(options) {}
 
   Options& options() { return user_options_; }
 
-  using ArgumentHolder::add_argument;
-  using ArgumentHolder::add_argument_group;
+  ArgumentGroup add_argument_group(const char* header) {
+    return holder_->AddArgumentGroup(header);
+  }
 
   // argp wants a char**, but most user don't expect argv being changed. So
   // cheat them.
   void parse_args(int argc, const char** argv) {
-    auto parser = ArgpParser::Create(this);
+    auto parser = holder_->CreateParser();
     parser->Init(user_options_.options);
     return parser->ParseArgs(ArgArray(argc, argv));
   }
@@ -1683,7 +1666,11 @@ class ArgumentParser : private ArgumentHolder {
   const char* program_bug_address() const { return argp_program_bug_address; }
 
  private:
+  Argument* AddArgument(Names names) override {
+    return holder_->AddArgument(std::move(names));
+  }
   Options user_options_;
+  std::unique_ptr<ArgumentHolder> holder_;
 };
 
 }  // namespace argparse
