@@ -172,6 +172,10 @@ inline std::string ReportError(const std::string& value,
   return os.str();
 }
 
+inline bool AnyHasType(const std::any& val, std::type_index type) {
+  return type == val.type();
+}
+
 // template <typename T>
 // using InternalUserCallback = std::function<Status(const Context&, T*)>;
 
@@ -324,6 +328,11 @@ class ActionCallback {
   virtual std::type_index GetDestType() = 0;
   virtual std::type_index GetValueType() = 0;
 
+  bool WorksWith(DestInfo* dest, TypeCallback* type) {
+    return GetDestType() == dest->GetDestType() &&
+           GetValueType() == type->GetValueType();
+  }
+
  private:
   virtual void RunImpl(std::any data) = 0;
 
@@ -339,7 +348,7 @@ class NullTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(void); }
 
  private:
-  std::any RunImpl(Context*) override { return nullptr; }
+  std::any RunImpl(Context*) override { return {}; }
 };
 
 // A subclass that parses string into value using a Traits.
@@ -414,7 +423,7 @@ class ActionCallbackBase : public ActionCallback {
   DestType* dest() { return reinterpret_cast<DestType*>(dest_); }
   ValueType ValueOf(std::any data) {
     DCHECK(data.has_value());
-    DCHECK(std::type_index(data.type()) == GetValueType());
+    DCHECK(AnyHasType(data, GetValueType()));
     return std::any_cast<ValueType>(std::move(data));
   }
 };
@@ -490,12 +499,9 @@ class DummyCallbackRunner : public CallbackRunner {
 class CallbackRunnerImpl : public CallbackRunner,
                            private TypeCallback::Delegate {
  public:
-  CallbackRunnerImpl(CallbackFactory* factory, DestInfo* dest)
-      : type_(factory->CreateTypeCallback()),
-        action_(factory->CreateActionCallback()) {
-    DCHECK(dest->GetDestType() == action_->GetDestType());
-    DCHECK(type_->GetValueType() == action_->GetValueType());
-    action_->BindToDest(dest);
+  CallbackRunnerImpl(std::unique_ptr<TypeCallback> type,
+                     std::unique_ptr<ActionCallback> action)
+      : type_(std::move(type)), action_(std::move(action)) {
   }
 
   Status Run(Context* ctx) override {
@@ -618,11 +624,7 @@ struct Type {
   Type() = default;
   Type(Type&&) = default;
 
-  // type(int()) or type(float())
-  // template <typename T>
-  // Type(T&&) {
-  //   callback.reset(new DefaultTypeCallback<T>());
-  // }
+  Type(TypeCallback* cb) : callback(cb) {}
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
@@ -644,26 +646,23 @@ inline Actions StringToActions(const std::string& str) {
 
 // Type-erasured
 struct Action {
-  std::unique_ptr<ActionCallback> callback;
   Actions action = Actions::kNoAction;
+  std::unique_ptr<ActionCallback> callback;
 
   Action() = default;
+  Action(Action&&) = default;
 
   Action(const char* action_string) {
     DCHECK(action_string);
     action = StringToActions(action_string);
   }
 
-  Action(Action&&) = default;
+  Action(ActionCallback* cb) : action(Actions::kCustom), callback(cb) {}
 
   // TODO:: restrict signature.
   template <typename Callback>
-  /* implicit */ Action(Callback&& cb) {
-    action = Actions::kCustom;
-    callback = CreateCustomActionCallback(std::forward<Callback>(cb));
-  }
-
-  bool Check() const { return action != Actions::kCustom || callback; }
+  /* implicit */ Action(Callback&& cb)
+      : Action(CreateCustomActionCallback(std::forward<Callback>(cb))) {}
 };
 
 struct Dest {
@@ -682,28 +681,78 @@ class CallbackResolver {
  public:
   virtual void SetDest(Dest dest) = 0;
   virtual void SetType(Type type) = 0;
+  virtual void SetValue(std::any value) = 0;
   virtual void SetAction(Action action) = 0;
   virtual CallbackRunner* CreateCallbackRunner() = 0;
   virtual ~CallbackResolver() {}
 };
 
+inline bool ActionNeedsConst(Actions a) {
+  switch (a) {
+    case Actions::kStoreConst:
+    case Actions::kAppendConst:
+      return true;
+    default:
+      return false;
+  }
+}
+
 class CallbackResolverImpl : public CallbackResolver {
  public:
-  void SetDest(Dest dest) override {
-    DCHECK(dest.dest_info);
-    dest_ = std::move(dest.dest_info);
-  }
-  void SetType(Type type) override {
-    DCHECK(type.callback);
-    custom_type_ = std::move(type.callback);
-  }
+  void SetDest(Dest dest) override { dest_ = std::move(dest.dest_info); }
+  void SetType(Type type) override { custom_type_ = std::move(type.callback); }
+  void SetValue(std::any value) override { value_ = std::move(value); }
   void SetAction(Action action) override {
-    DCHECK(action.Check());
     action_ = action.action;
     custom_action_ = std::move(action.callback);
   }
   CallbackRunner* CreateCallbackRunner() override {
+    if (!dest_) {
+      // everything is null.
+      if (!custom_action_)  // The user don't give any action and dest, the type
+                            // is discarded if given.
+        return new DummyCallbackRunner();
+      if (!custom_type_) {
+        DCHECK(custom_action_);
+        // The user migh just want to print something.
+        custom_type_.reset(new NullTypeCallback());
+      }
+      return new CallbackRunnerImpl(std::move(custom_type_),
+                                    std::move(custom_action_));
+    }
 
+    if (action_ == Actions::kNoAction)
+      action_ = Actions::kStore;
+
+    // The factory is used as a fall-back when user don't specify.
+    auto* factory = dest_->CreateFactory(action_);
+    DCHECK2(factory,
+            "The provided action is not supported by the type of dest");
+
+    if (!custom_action_) {
+      // user does not provide an action callback, we need to infer.
+      custom_action_.reset(factory->CreateActionCallback());
+    }
+    custom_action_->BindToDest(dest_.get());
+
+    if (!custom_type_) {
+      custom_type_.reset(factory->CreateTypeCallback());
+    }
+    if (ActionNeedsConst(action_)) {
+      const bool value_is_valid =
+          value_.has_value() &&
+          AnyHasType(value_, custom_type_->GetValueType());
+      DCHECK2(
+          value_is_valid,
+          "Action needs a const value, which is neither not provided nor of "
+          "the wrong type");
+      custom_type_->BindToValue(std::move(value_));
+    }
+
+    DCHECK2(custom_action_->WorksWith(dest_.get(), custom_type_.get()),
+            "The provide dest, action and type are not compatible");
+    return new CallbackRunnerImpl(std::move(custom_type_),
+                                  std::move(custom_action_));
   }
 
  private:
@@ -711,6 +760,7 @@ class CallbackResolverImpl : public CallbackResolver {
   std::unique_ptr<DestInfo> dest_;
   std::unique_ptr<TypeCallback> custom_type_;
   std::unique_ptr<ActionCallback> custom_action_;
+  std::any value_;
 };
 
 inline bool IsValidPositionalName(const char* name, std::size_t len) {
@@ -1002,6 +1052,15 @@ class ArgumentBuilder {
   }
   ArgumentBuilder& type(Type t) {
     resolver_->SetType(std::move(t));
+    return *this;
+  }
+  template <typename T>
+  ArgumentBuilder& type() {
+    resolver_->SetType(new DefaultTypeCallback<T>());
+    return *this;
+  }
+  ArgumentBuilder& value(std::any val) {
+    resolver_->SetValue(std::move(val));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
