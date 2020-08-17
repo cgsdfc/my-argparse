@@ -83,14 +83,6 @@ class ArgumentError final : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-struct Dest {
-  template <typename T>
-  explicit Dest(T* ptr) : type(typeid(*ptr)), ptr(ptr) {}
-
-  std::type_index type;
-  void* ptr;
-};
-
 class Status {
  public:
   // If succeeded, just return true, or if failed but nothing to say, just
@@ -406,7 +398,7 @@ class ActionCallbackBase : public ActionCallback {
   DestType* dest() { return reinterpret_cast<DestType*>(dest_); }
   ValueType ValueOf(std::any data) {
     DCHECK(data.has_value());
-    DCHECK(data.type() == GetValueType());
+    DCHECK(std::type_index(data.type()) == GetValueType());
     return std::any_cast<ValueType>(data);
   }
 };
@@ -455,10 +447,24 @@ class CustomActionCallback : public ActionCallbackBase<T, V> {
 template <typename Callback>
 std::unique_ptr<ActionCallback> CreateCustomActionCallback(Callback&& cb) {}
 
-// Run TypeCallback and ActionCallback.
-class CallbackRunner : public TypeCallback::Delegate {
+class CallbackRunner {
  public:
-  CallbackRunner(CallbackFactory* factory, DestInfo* dest)
+  virtual Status Run(Context* ctx) = 0;
+  virtual ~CallbackRunner() {}
+};
+
+// Used for no dest, no type no action.
+class DummyCallbackRunner : public CallbackRunner {
+ public:
+  Status Run(Context*) override { return true; }
+  ~DummyCallbackRunner() override {}
+};
+
+// Run TypeCallback and ActionCallback.
+class CallbackRunnerImpl : public CallbackRunner,
+                           private TypeCallback::Delegate {
+ public:
+  CallbackRunnerImpl(CallbackFactory* factory, DestInfo* dest)
       : type_(factory->CreateTypeCallback()),
         action_(factory->CreateActionCallback()) {
     DCHECK(dest->GetDestType() == action_->GetDestType());
@@ -466,11 +472,11 @@ class CallbackRunner : public TypeCallback::Delegate {
     action_->BindToDest(dest);
   }
 
-  Status Run(Context* ctx) {
+  Status Run(Context* ctx) override {
     type_->Run(ctx, this);
     return std::move(status_);
   }
-  ~CallbackRunner() override {}
+  ~CallbackRunnerImpl() override {}
 
  private:
   void OnTypeCallbackInvoked(Status status, std::any data) override {
@@ -584,7 +590,7 @@ struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
 struct Type {
   std::unique_ptr<TypeCallback> callback;
   Type() = default;
-  Type(Type&&) = default;
+  // Type(Type&&) = default;
 
   // type(int()) or type(float())
   template <typename T>
@@ -616,13 +622,14 @@ struct Action {
   std::unique_ptr<ActionCallback> callback;
   Actions action = Actions::kNoAction;
 
+  Action() = default;
+
   Action(const char* action_string) {
     DCHECK(action_string);
     action = StringToActions(action_string);
   }
 
-  Action() = default;
-  Action(Action&&) = default;
+  // Action(Action&&) = default;
 
   // TODO:: restrict signature.
   template <typename Callback,
@@ -631,16 +638,55 @@ struct Action {
     action = Actions::kCustom;
     callback = CreateCustomActionCallback(std::forward<Callback>(cb));
   }
+
+  bool Check() const { return action != Actions::kCustom || callback; }
 };
 
 struct Dest {
   std::unique_ptr<DestInfo> dest_info;
-
+  Dest() = default;
   template <typename T>
   /* implicit */ Dest(T* ptr) {
     DCHECK2(ptr, "nullptr passed to Dest()");
     dest_info.reset(new DestInfoImpl<T>(ptr));
   }
+};
+
+// This creates correct types of two callbacks (and catch potential bugs of
+// users) from user's configuration.
+class CallbackResolver {
+ public:
+  virtual void SetDest(Dest dest) = 0;
+  virtual void SetType(Type type) = 0;
+  virtual void SetAction(Action action) = 0;
+  virtual CallbackRunner* CreateCallbackRunner() = 0;
+  virtual ~CallbackResolver() {}
+};
+
+class CallbackResolverImpl : public CallbackResolver {
+ public:
+  void SetDest(Dest dest) override {
+    DCHECK(dest.dest_info);
+    dest_ = std::move(dest.dest_info);
+  }
+  void SetType(Type type) override {
+    DCHECK(type.callback);
+    custom_type_ = std::move(type.callback);
+  }
+  void SetAction(Action action) override {
+    DCHECK(action.Check());
+    action_ = action.action;
+    custom_action_ = std::move(action.callback);
+  }
+  CallbackRunner* CreateCallbackRunner() override {
+
+  }
+
+ private:
+  Actions action_ = Actions::kNoAction;
+  std::unique_ptr<DestInfo> dest_;
+  std::unique_ptr<TypeCallback> custom_type_;
+  std::unique_ptr<ActionCallback> custom_action_;
 };
 
 inline bool IsValidPositionalName(const char* name, std::size_t len) {
@@ -770,23 +816,6 @@ class Argument {
     delegate_->OnArgumentCreated(this);
   }
 
-  void SetDest(Dest dest) {
-    if (dest.callback) {
-      dest_ = dest.dest;
-      user_callback_ = std::move(dest.callback);
-    }
-  }
-
-  void SetAction(Action action) {
-    if (action.callback)
-      user_callback_ = std::move(action.callback);
-  }
-
-  void SetType(Type type) {
-    if (type.callback)
-      user_callback_ = std::move(type.callback);
-  }
-
   void SetHelpDoc(const char* help_doc) {
     if (help_doc)
       help_doc_ = help_doc;
@@ -800,7 +829,7 @@ class Argument {
   int group() const { return group_; }
   bool is_option() const { return key_ != kKeyForPositional; }
   bool is_required() const { return is_required_; }
-  UserCallback* user_callback() const { return user_callback_.get(); }
+  // UserCallback* user_callback() const { return user_callback_.get(); }
 
   const std::string& help_doc() const { return help_doc_; }
   const char* doc() const {
@@ -821,6 +850,8 @@ class Argument {
   const char* name() const {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
+
+  CallbackResolver* GetCallbackResolver() { return callback_resolver_.get(); }
 
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostringstream& os) const {
@@ -900,15 +931,9 @@ class Argument {
   }
 
   Status Finalize() {
-    // No dest provided, but still can have UserCallback. No need to Bind().
-    if (!dest_.has_value())
-      return true;
-    if (!user_callback_)
-      return Status(
-          "There should be at least one UserCallback given dest was set!");
-    if (!user_callback_->Bind(dest_.value()))
-      return Status(
-          "The type of dest is inconsistent with that of UserCallback!");
+    DCHECK(!callback_runner_ && callback_resolver_);
+    callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
+    callback_resolver_.reset();
     return true;
   }
 
@@ -924,8 +949,9 @@ class Argument {
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
-  std::optional<Dest> dest_;                     // Maybe null.
-  std::unique_ptr<UserCallback> user_callback_;  // Maybe null.
+  // std::optional<Dest> dest_;                     // Maybe null.
+  std::unique_ptr<CallbackResolver> callback_resolver_;
+  std::unique_ptr<CallbackRunner> callback_runner_;  // Maybe null.
   std::string help_doc_;
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
@@ -935,18 +961,19 @@ class Argument {
 
 class ArgumentBuilder {
  public:
-  explicit ArgumentBuilder(Argument* arg) : arg_(arg) {}
+  explicit ArgumentBuilder(Argument* arg)
+      : arg_(arg), resolver_(arg->GetCallbackResolver()) {}
 
   ArgumentBuilder& dest(Dest d) {
-    arg_->SetDest(std::move(d));
+    resolver_->SetDest(std::move(d));
     return *this;
   }
   ArgumentBuilder& action(Action a) {
-    arg_->SetAction(std::move(a));
+    resolver_->SetAction(std::move(a));
     return *this;
   }
   ArgumentBuilder& type(Type t) {
-    arg_->SetType(std::move(t));
+    resolver_->SetType(std::move(t));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
@@ -963,6 +990,7 @@ class ArgumentBuilder {
 
  private:
   Argument* arg_;
+  CallbackResolver* resolver_;
 };
 
 // Return value of help filter function.
@@ -1041,11 +1069,8 @@ class ArgumentContainer {
                                Dest dest = {},
                                const char* help = {},
                                Type type = {}) {
-    Argument* arg = AddArgument(std::move(names));
-    arg->SetDest(std::move(dest));
-    arg->SetHelpDoc(help);
-    arg->SetType(std::move(type));
-    return ArgumentBuilder(arg);
+    auto builder = ArgumentBuilder(AddArgument(std::move(names)));
+    return builder.dest(std::move(dest)).help(help).type(std::move(type));
   }
 
   virtual ~ArgumentContainer() {}
