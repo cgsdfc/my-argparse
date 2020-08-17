@@ -157,11 +157,10 @@ class Context {
 // makes use of this struct. When user actually use type or action, this isn't
 // needed logically but needed syntatically.
 template <typename T>
-struct DefaultConverter {
-  // Return typename of T.
-  static const char* type_name() { return nullptr; }
-  // Parse in, put the result into out, return error indicator.
-  static bool Parse(const std::string& in, T* out) { return true; }
+struct TypeCallbackTraits {
+  static void Run(Context* ctx, T* out) {
+    DCHECK2(false, "Please specialize TypeCallbackTrait<T> for your type");
+  }
 };
 
 // This will format an error string saying that:
@@ -350,7 +349,11 @@ class DefaultTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(T); }
 
  private:
-  std::any RunImpl(Context* ctx) override {}
+  std::any RunImpl(Context* ctx) override {
+    T value;
+    TypeCallbackTraits<T>::Run(ctx, &value);
+    return std::any(std::move(value));
+  }
 };
 
 // A subclass that always return a const value. Used for actions like
@@ -447,8 +450,26 @@ class CustomActionCallback : public ActionCallbackBase<T, V> {
   CallbackType callback_;
 };
 
+template <typename Signature>
+struct ActionCallbackTraits;
+
+template <typename T, typename V>
+struct ActionCallbackTraits<void(T*, std::optional<V>)> {
+  using type = CustomActionCallback<T, V>;
+};
+
+template <typename Callback, typename T, typename V>
+ActionCallback* CreateCustomActionCallbackImpl(Callback&& cb,
+                                               void (*)(T*, std::optional<V>)) {
+  return new CustomActionCallback<T, V>(std::forward<Callback>(cb));
+}
+
 template <typename Callback>
-std::unique_ptr<ActionCallback> CreateCustomActionCallback(Callback&& cb) {}
+ActionCallback* CreateCustomActionCallback(Callback&& cb) {
+  return CreateCustomActionCallbackImpl(
+      std::forward<Callback>(cb),
+      (detail::function_signature_t<Callback>*)nullptr);
+}
 
 class CallbackRunner {
  public:
@@ -602,7 +623,6 @@ struct Type {
   // }
 
   template <typename Callback>
-            // typename Enable = detail::function_signature_t<Callback>>
   /* implicit */ Type(Callback&& cb) {
     callback = CreateCustomTypeCallback(std::forward<Callback>(cb));
   }
@@ -636,7 +656,6 @@ struct Action {
 
   // TODO:: restrict signature.
   template <typename Callback>
-            // typename Enable = detail::function_signature_t<Callback>>
   /* implicit */ Action(Callback&& cb) {
     action = Actions::kCustom;
     callback = CreateCustomActionCallback(std::forward<Callback>(cb));
