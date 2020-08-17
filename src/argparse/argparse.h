@@ -202,6 +202,7 @@ using function_signature_t = std::conditional_t<
 >;
 // clang-format on
 
+
 }  // namespace detail
 
 template <typename T>
@@ -595,10 +596,10 @@ struct Type {
   Type(Type&&) = default;
 
   // type(int()) or type(float())
-  template <typename T>
-  Type(T&&) {
-    callback.reset(new DefaultTypeCallback<T>());
-  }
+  // template <typename T>
+  // Type(T&&) {
+  //   callback.reset(new DefaultTypeCallback<T>());
+  // }
 
   template <typename Callback>
             // typename Enable = detail::function_signature_t<Callback>>
