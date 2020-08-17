@@ -277,10 +277,10 @@ class DestInfo {
   // Create a factory that needs no args.
   virtual CallbackFactory* CreateFactory(Actions action) = 0;
   // Create a factory with a piece of data.
-  virtual CallbackFactory* CreateFactoryWithValue(Actions action,
-                                                  std::any value) = 0;
+  // virtual CallbackFactory* CreateFactoryWithValue(Actions action,
+  //                                                 std::any value) = 0;
   virtual std::type_index GetDestType() = 0;
-
+  virtual ~DestInfo() {}
   void* ptr() const { return ptr_; }
 
  protected:
@@ -302,6 +302,8 @@ class TypeCallback {
   }
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
+  // For subclass that needs a value.
+  virtual void BindToValue(std::any value) {}
 
  private:
   virtual std::any RunImpl(Context* ctx) = 0;
@@ -355,8 +357,9 @@ class DefaultTypeCallback : public TypeCallback {
 template <typename T>
 class ConstTypeCallback : public TypeCallback {
  public:
-  explicit ConstTypeCallback(T value) : value_(value) {}
+  // explicit ConstTypeCallback(T value) : value_(value) {}
   std::type_index GetValueType() override { return typeid(T); }
+  void BindToValue(std::any value) override { value_ = std::move(value); }
 
  private:
   std::any RunImpl(Context* ctx) override { return value_; }
@@ -389,7 +392,6 @@ class ActionCallbackBase : public ActionCallback {
   using DestType = T;
   using ValueType = V;
 
-  // explicit ActionCallbackBase(T* dest) : ActionCallback(dest) {}
   std::type_index GetDestType() override { return typeid(DestType); }
   std::type_index GetValueType() override { return typeid(ValueType); }
 
@@ -515,20 +517,6 @@ class DestInfoImpl : public DestInfo {
         return nullptr;
     }
   }
-
-  CallbackFactory* CreateFactoryWithValue(Actions action,
-                                          std::any value) override {
-    switch (action) {
-      case Actions::kStoreConst:
-        return CallbackFactorySelector<T, Actions::kStore>::Select(value);
-      case Actions::kAppendConst:
-        return CallbackFactorySelector<T, Actions::kAppend>::Select(value);
-      default:
-        return nullptr;
-    }
-  }
-
-  // T* ptr() { return reinterpret_cast<T*>(ptr_); }
 };
 
 template <typename T>
@@ -569,28 +557,42 @@ template <typename T>
 struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
   class FactoryImpl : public CallbackFactory {
    public:
-    explicit FactoryImpl(std::any value) : value_(std::any_cast<T>(value)) {}
     ~FactoryImpl() override {}
     ActionCallback* CreateActionCallback() override {
       return new StoreActionCallback<T>();
     }
     TypeCallback* CreateTypeCallback() override {
-      return new ConstTypeCallback<T>(value_);
+      return new ConstTypeCallback<T>();
     }
-
-   private:
-    T value_;
   };
 
-  static CallbackFactory* Select(std::any value) {
-    return new FactoryImpl(std::move(value));
+  static CallbackFactory* Select() {
+    return new FactoryImpl();
+  }
+};
+
+template <typename T>
+struct CallbackFactorySelector<T, Actions::kAppendConst, true> {
+  class FactoryImpl : public CallbackFactory {
+   public:
+    ~FactoryImpl() override {}
+    ActionCallback* CreateActionCallback() override {
+      return new AppendActionCallback<T>();
+    }
+    TypeCallback* CreateTypeCallback() override {
+      return new ConstTypeCallback<T>();
+    }
+  };
+
+  static CallbackFactory* Select() {
+    return new FactoryImpl();
   }
 };
 
 struct Type {
   std::unique_ptr<TypeCallback> callback;
   Type() = default;
-  // Type(Type&&) = default;
+  Type(Type&&) = default;
 
   // type(int()) or type(float())
   template <typename T>
@@ -598,8 +600,8 @@ struct Type {
     callback.reset(new DefaultTypeCallback<T>());
   }
 
-  template <typename Callback,
-            typename Enable = detail::function_signature_t<Callback>>
+  template <typename Callback>
+            // typename Enable = detail::function_signature_t<Callback>>
   /* implicit */ Type(Callback&& cb) {
     callback = CreateCustomTypeCallback(std::forward<Callback>(cb));
   }
@@ -629,11 +631,11 @@ struct Action {
     action = StringToActions(action_string);
   }
 
-  // Action(Action&&) = default;
+  Action(Action&&) = default;
 
   // TODO:: restrict signature.
-  template <typename Callback,
-            typename Enable = detail::function_signature_t<Callback>>
+  template <typename Callback>
+            // typename Enable = detail::function_signature_t<Callback>>
   /* implicit */ Action(Callback&& cb) {
     action = Actions::kCustom;
     callback = CreateCustomActionCallback(std::forward<Callback>(cb));
@@ -851,8 +853,14 @@ class Argument {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
-  CallbackResolver* GetCallbackResolver() { return callback_resolver_.get(); }
-
+  CallbackResolver* GetCallbackResolver() {
+    DCHECK(callback_resolver_);
+    return callback_resolver_.get();
+  }
+  CallbackRunner* GetCallbackRunner() {
+    DCHECK(callback_runner_);
+    return callback_runner_.get();
+  }
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostringstream& os) const {
     if (!is_option()) {
@@ -930,26 +938,24 @@ class Argument {
     key_ = short_names_.empty() ? delegate_->NextOptionKey() : short_names_[0];
   }
 
-  Status Finalize() {
+  void InitCallback() {
     DCHECK(!callback_runner_ && callback_resolver_);
     callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
     callback_resolver_.reset();
-    return true;
   }
 
-  // Put here to record some metics.
-  Status RunUserCallback(const Context& ctx) {
-    if (!user_callback_)  // User doesn't provide any.
-      return true;
-    return user_callback_->Run(ctx);
-  }
+  // // Put here to record some metics.
+  // Status RunCallback(const Context& ctx) {
+  //   if (!user_callback_)  // User doesn't provide any.
+  //     return true;
+  //   return user_callback_->Run(ctx);
+  // }
 
   // For extension.
   ArgumentDelegate* delegate_;
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
-  // std::optional<Dest> dest_;                     // Maybe null.
   std::unique_ptr<CallbackResolver> callback_resolver_;
   std::unique_ptr<CallbackRunner> callback_runner_;  // Maybe null.
   std::string help_doc_;
@@ -1395,10 +1401,11 @@ class ArgpParserImpl : public ArgpParser {
   // TODO: Change this scheme.
   void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
     Context ctx(arg, value, state);
-    auto status = arg->RunUserCallback(ctx);
+    arg->GetCallbackRunner()->Run(&ctx);
+    // auto status = arg->RunCallback(ctx);
     // If the user said no, just die with a msg.
-    if (status)
-      return;
+    // if (status)
+    //   return;
     // state.Error("%s", status.message().c_str());
   }
 
