@@ -1082,7 +1082,8 @@ class ArgumentBuilder {
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
-    arg_->SetHelpDoc(h);
+    if (h)
+      arg_->SetHelpDoc(h);
     return *this;
   }
   ArgumentBuilder& required(bool b) {
@@ -1090,7 +1091,8 @@ class ArgumentBuilder {
     return *this;
   }
   ArgumentBuilder& meta_var(const char* v) {
-    arg_->SetMetaVar(v);
+    if (v)
+      arg_->SetMetaVar(v);
     return *this;
   }
 
