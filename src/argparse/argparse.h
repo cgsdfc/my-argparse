@@ -131,7 +131,7 @@ class Context {
   // Whether a value is passed to this arg.
   bool has_value() const { return has_value_; }
   // TODO: impl this by making Argument an interface.
-  bool is_option() const;  // Whether this arg is an option.
+  const Argument& argument() const { return *argument_; }
 
   Context(const Argument* argument, const char* value, ArgpState state)
       : has_value_(bool(value)), argument_(argument), state_(state) {
@@ -851,16 +851,17 @@ class Argument {
   virtual void SetHelpDoc(const char* help_doc) = 0;
   virtual void SetRequired(bool required) = 0;
   virtual void SetMetaVar(const char* meta_var) = 0;
-  virtual bool IsOption() = 0;
-  virtual bool IsInitialized() = 0;
-  virtual int GetKey() = 0;
-  virtual int GetGroup() = 0;
-  virtual void FormatArgsDoc(std::ostream& os) = 0;
   virtual CallbackResolver* GetCallbackResolver() = 0;
-  virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
   virtual void InitCallback() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
-  virtual bool AppearsBefore(const Argument* that) = 0;
+
+  virtual bool IsOption() const = 0;
+  virtual bool IsInitialized() const = 0;
+  virtual int GetKey() const = 0;
+  virtual int GetGroup() const = 0;
+  virtual void FormatArgsDoc(std::ostream& os) const = 0;
+  virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) const = 0;
+  virtual bool AppearsBefore(const Argument* that) const = 0;
 
   virtual ~Argument() {}
 };
@@ -887,10 +888,10 @@ class ArgumentImpl : public Argument {
     DCHECK(meta_var);
     meta_var_ = meta_var;
   }
-  bool IsOption() override { return is_option(); }
-  bool IsInitialized() override { return initialized(); }
-  int GetKey() override { return key(); }
-  int GetGroup() override { return group(); }
+  bool IsOption() const override { return is_option(); }
+  bool IsInitialized() const override { return initialized(); }
+  int GetKey() const override { return key(); }
+  int GetGroup() const override { return group(); }
 
   bool initialized() const { return key_ != 0; }
   int key() const { return key_; }
@@ -927,7 +928,7 @@ class ArgumentImpl : public Argument {
     return callback_runner_.get();
   }
   // [--name|-n|-whatever=[value]] or output
-  void FormatArgsDoc(std::ostream& os) override {
+  void FormatArgsDoc(std::ostream& os) const override {
     if (!is_option()) {
       os << meta_var();
       return;
@@ -960,7 +961,7 @@ class ArgumentImpl : public Argument {
     callback_resolver_.reset();
   }
 
-  void CompileToArgpOptions(std::vector<ArgpOption>* options) override {
+  void CompileToArgpOptions(std::vector<ArgpOption>* options) const override {
     ArgpOption opt{};
     opt.doc = doc();
     opt.group = group();
@@ -985,7 +986,7 @@ class ArgumentImpl : public Argument {
     }
   }
 
-  bool AppearsBefore(const Argument* that) override {
+  bool AppearsBefore(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
@@ -1111,8 +1112,8 @@ enum class HelpFilterResult {
   kReplace,
 };
 
-using HelpFilterCallback = std::function<
-    HelpFilterResult(const Argument&, const std::string&, std::string* repl)>;
+using HelpFilterCallback =
+    std::function<HelpFilterResult(const Argument&, std::string* text)>;
 
 class ArgArray {
  public:
@@ -1544,7 +1545,7 @@ class ArgpParserImpl : public ArgpParser {
   }
 
   static char* HelpFilterImpl(int key, const char* text, void* input) {
-    if (!input)
+    if (!input || !text)
       return (char*)text;
     auto* self = reinterpret_cast<ArgpParserImpl*>(input);
     DCHECK2(self->help_filter_,
@@ -1552,9 +1553,8 @@ class ArgpParserImpl : public ArgpParser {
     auto* arg = self->delegate_->FindOptionalArgument(key);
     DCHECK2(arg, "argp calls us with unknown key!");
 
-    std::string repl;
-    HelpFilterResult result =
-        std::invoke(self->help_filter_, *arg, text, &repl);
+    std::string repl(text);
+    HelpFilterResult result = std::invoke(self->help_filter_, *arg, &repl);
     switch (result) {
       case HelpFilterResult::kKeep:
         return const_cast<char*>(text);
