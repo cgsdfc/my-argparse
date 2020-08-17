@@ -706,6 +706,7 @@ class CallbackResolverImpl : public CallbackResolver {
     action_ = action.action;
     custom_action_ = std::move(action.callback);
   }
+
   CallbackRunner* CreateCallbackRunner() override {
     if (!dest_) {
       // everything is null.
@@ -864,8 +865,23 @@ struct Names {
 
 class ArgumentInterace {
  public:
+  class Delegate {
+   public:
+    // Generate a key for an option.
+    virtual int NextOptionKey() = 0;
+    // Call when an Arg is fully constructed.
+    virtual void OnArgumentCreated(Argument*) = 0;
+    virtual ~Delegate() {}
+  };
+
   virtual bool IsOption() = 0;
   virtual void FormatArgsDoc(std::ostream& os) = 0;
+  virtual CallbackResolver* GetCallbackResolver() = 0;
+  virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
+  virtual void InitCallback() = 0;
+  virtual CallbackRunner* GetCallbackRunner() = 0;
+  
+  virtual ~ArgumentInterace() {}
 };
 
 // A delegate used by the Argument class.
@@ -934,7 +950,7 @@ class Argument {
     return callback_runner_.get();
   }
   // [--name|-n|-whatever=[value]] or output
-  void FormatArgsDoc(std::ostringstream& os) const {
+  void FormatArgsDoc(std::ostream& os) {
     if (!is_option()) {
       os << meta_var();
       return;
@@ -961,7 +977,7 @@ class Argument {
     os << ']';
   }
 
-  void CompileToArgpOptions(std::vector<ArgpOption>* options) const {
+  void CompileToArgpOptions(std::vector<ArgpOption>* options) {
     ArgpOption opt{};
     opt.doc = doc();
     opt.group = group();
@@ -1016,13 +1032,6 @@ class Argument {
     callback_resolver_.reset();
   }
 
-  // // Put here to record some metics.
-  // Status RunCallback(const Context& ctx) {
-  //   if (!user_callback_)  // User doesn't provide any.
-  //     return true;
-  //   return user_callback_->Run(ctx);
-  // }
-
   // For extension.
   ArgumentDelegate* delegate_;
   // For positional, this is -1, for group-header, this is -2.
@@ -1069,6 +1078,10 @@ class ArgumentBuilder {
   }
   ArgumentBuilder& required(bool b) {
     arg_->SetRequired(b);
+    return *this;
+  }
+  ArgumentBuilder& meta_var(const char* v) {
+    arg_->SetMetaVar(v);
     return *this;
   }
 
@@ -1234,7 +1247,7 @@ class ArgumentHolder : public ArgumentContainer,
 
     // TODO: if there is not pos/opt at all but there are two groups, will argp
     // still print these empty groups?
-    for (const Argument& arg : arguments_) {
+    for (Argument& arg : arguments_) {
       arg.CompileToArgpOptions(options);
     }
     // Only when at least one opt/pos presents should we generate their groups.
