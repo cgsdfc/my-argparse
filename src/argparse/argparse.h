@@ -160,44 +160,6 @@ class Context {
   Status status_;  // User's error() call is saved here.
 };
 
-// When an argument is parsed, a UserCallback is fired.
-// User can execute their code to collect infomation into their Dest.
-// class UserCallback {
-//  public:
-//   // Run this callback within the Context and return a status.
-//   Status Run(const Context& ctx) {
-//     // DCHECK2(dest_ptr_, "Bind() must be called before Run() can be called!");
-//     // dest is optional, if no dest given, the callback will be run with a
-//     // nullptr, if the user wishes so. This mostly happens with action, the user
-//     // may use void as T to avoid inconvenience.
-//     DCHECK2(dest_ptr_ || type_ == typeid(void),
-//             "If no dest was provided, you must use void as T");
-//     return RunImpl(ctx);
-//   }
-
-//   // Bind to a Dest. Make sure type matches.
-//   bool Bind(const Dest& dest) {
-//     DCHECK2(!dest_ptr_, "A UserCallback cannot be bound twice");
-//     if (dest.type != type_)
-//       return false;
-//     DCHECK(dest.ptr);
-//     dest_ptr_ = dest.ptr;
-//     return true;
-//   }
-
-//   virtual ~UserCallback() {}
-
-//  protected:
-//   virtual Status RunImpl(const Context& ctx) = 0;
-
-//   // subclass must call this.
-//   explicit UserCallback(std::type_index type) : type_(type) {}
-
-//   std::type_index type_;
-//   // The typed-pruned pointer of a Dest.
-//   void* dest_ptr_ = nullptr;
-// };
-
 // Why we need a default version?
 // During type-erasure of dest, a DestUserCallback will always be created, which
 // makes use of this struct. When user actually use type or action, this isn't
@@ -270,10 +232,12 @@ struct AppendTraits {
 
 // A more complete module to handle user's callbacks.
 enum class Actions {
+  kNoAction,
   kStore,
   kStoreConst,
   kAppend,
   kAppendConst,
+  kCustom,
 };
 
 class CallbackFactory {
@@ -315,26 +279,6 @@ template <typename T, Actions A>
 struct CallbackFactorySelector<T, A, false> /* Not supported */ {
   static CallbackFactory* Select() { return nullptr; }
 };
-
-// template <typename T>
-// std::unique_ptr<CallbackFactory> CreateActionFactory(Actions act) {
-//   CallbackFactory* factory;
-//   switch (act) {
-//     case Actions::kStore:
-//       factory = CallbackFactorySelector<T, Actions::kStore>::Select();
-//       break;
-//     case Actions::kStoreConst:
-//       factory = CallbackFactorySelector<T, Actions::kStoreConst>::Select();
-//     case Actions::kAppend:
-//       factory = CallbackFactorySelector<T, Actions::kAppend>::Select();
-//     case Actions::kAppendConst:
-//       factory = CallbackFactorySelector<T, Actions::kAppendConst>::Select();
-//     default:
-//       break;
-//   }
-//   DCHECK2(factory, "Action is not supported by this type");
-//   return std::unique_ptr<CallbackFactory>(factory);
-// }
 
 class DestInfo {
  public:
@@ -429,7 +373,7 @@ class ConstTypeCallback : public TypeCallback {
 
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
-public:
+ public:
   using CallbackType = std::function<void(Context*, T*)>;
   explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
@@ -637,200 +581,65 @@ struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
   }
 };
 
-// When the user merely provides a dest, we will infer from the type of the
-// pointer and provide this callback, which parses the string into the value of
-// the type and store into the user's pointer.
-// template <typename T>
-// class DefaultUserCallback : public UserCallback {
-//  public:
-//   DefaultUserCallback() : UserCallback(typeid(T)) {}
+struct Type {
+  std::unique_ptr<TypeCallback> callback;
+  Type() = default;
+  Type(Type&&) = default;
 
-//  private:
-//   Status RunImpl(const Context& ctx) override {
-//     using Converter = DefaultConverter<T>;
-//     bool rv = Converter::Parse(ctx.value(), reinterpret_cast<T*>(dest_ptr_));
-//     if (rv)
-//       return true;
-//     // Error reporting.
-//     return ReportError(ctx.value(), Converter::type_name());
-//   }
-// };
+  // type(int()) or type(float())
+  template <typename T>
+  Type(T&&) {
+    callback.reset(new DefaultTypeCallback<T>());
+  }
 
-// template <typename T>
-// class CustomUserCallback : public UserCallback {
-//  public:
-//   using Callback = InternalUserCallback<T>;
-//   explicit CustomUserCallback(Callback cb)
-//       : UserCallback(typeid(T)), callback_(std::move(cb)) {}
+  template <typename Callback,
+            typename Enable = detail::function_signature_t<Callback>>
+  /* implicit */ Type(Callback&& cb) {
+    callback = CreateCustomTypeCallback(std::forward<Callback>(cb));
+  }
+};
 
-//  private:
-//   Status RunImpl(const Context& ctx) override {
-//     return std::invoke(callback_, ctx, reinterpret_cast<T*>(dest_ptr_));
-//   }
-//   Callback callback_;
-// };
-
-// introduce a layer to generally adapt user's callback to our internal
-// signature. To obtain an adapter, you use
-// UserCallbackAdapter<decltype(cb)>::type. Upon this layer we use
-// std::function<Status(const Context&, T*)> as the actual storage and further
-// erase its T using UserCallback.
-
-// enum CallbackSupportMask {
-//   kSupportedByAction = 0x1,
-//   kSupportedByType = 0x2,
-//   kSupportedByAll = 0xffff,
-// };
-
-// Policy layer: for non-internal format, define a Policy function doing the
-// actual adaption.
-// template <typename Callback,
-//           typename Signature = detail::function_signature_t<Callback>>
-// struct UserCallbackTraits;
-
-// template <typename Callback, typename T>
-// struct UserCallbackTraits<Callback, Status(const Context&, T*) noexcept> {
-//   using type = T;
-//   static constexpr CallbackSupportMask kMask = kSupportedByAll;
-//   static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
-//     return cb(ctx, out);
-//   }
-// };
-
-// // If the user have the right signature (but may throw), we still catch any
-// // exception.
-// template <typename Callback, typename T>
-// struct UserCallbackTraits<Callback, Status(const Context&, T*)> {
-//   using type = T;
-//   static constexpr CallbackSupportMask kMask = kSupportedByAll;
-//   static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
-//     try {
-//       return cb(ctx, out);
-//     } catch (const ArgumentError& e) {
-//       return Status(e.what());
-//     }
-//   }
-// };
-
-// // If the user just convert things, we store his result
-// // and catch any exception.
-// template <typename Callback, typename T>
-// struct UserCallbackTraits<Callback, T(const Context&)> {
-//   using type = T;
-//   static constexpr CallbackSupportMask kMask = kSupportedByType;
-//   static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
-//     try {
-//       *out = cb(ctx);
-//       return true;
-//     } catch (const ArgumentError& e) {
-//       return Status(e.what());
-//     }
-//   }
-// };
-
-// // If the user just convert things and force noexcept, we store his result
-// // assuming no error can happen.
-// template <typename Callback, typename T>
-// struct UserCallbackTraits<Callback, void(const Context&, T*)> {
-//   static constexpr CallbackSupportMask kMask = kSupportedByAction;
-//   using type = T;
-//   static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
-//     try {
-//       cb(ctx, out);
-//       return true;
-//     } catch (const ArgumentError& e) {
-//       return Status(e.what());
-//     }
-//   }
-// };
-
-// // If the user just convert things and force noexcept, we store his result
-// // assuming no error can happen.
-// template <typename Callback, typename T>
-// struct UserCallbackTraits<Callback, T(const Context&) noexcept> {
-//   static constexpr CallbackSupportMask kMask = kSupportedByType;
-//   using type = T;
-//   static Status RunCallback(const Context& ctx, T* out, Callback&& cb) {
-//     *out = cb(ctx);
-//     return true;
-//   }
-// };
-
-// // Adapter layer: If the signature is not standard, call the policy layer.
-// template <typename Callback,
-//           typename Signature = detail::function_signature_t<Callback>>
-// struct UserCallbackAdapter {
-//   using Traits = UserCallbackTraits<Callback>;
-//   using type = typename Traits::type;
-//   struct Helper {
-//     // Store a copy of Callback.
-//     std::decay_t<Callback> cb_;
-
-//     Status operator()(const Context& ctx, type* out) {
-//       return Traits::RunCallback(ctx, out, std::forward<Callback>(cb_));
-//     }
-//   };
-//   static InternalUserCallback<type> Adapt(Callback&& cb) {
-//     return Helper{std::forward<Callback>(cb)};
-//   }
-// };
-
-// // If the user have the right signature, do nothing.
-// template <typename Callback, typename T>
-// struct UserCallbackAdapter<Callback, Status(const Context&, T*) noexcept> {
-//   using type = T;
-//   static Callback&& Adapt(Callback&& cb) { return std::forward<Callback>(cb); }
-// };
-
-// template <typename Callback>
-// std::unique_ptr<UserCallback> CreateCustomUserCallback(Callback&& cb) {
-//   using Adapter = UserCallbackAdapter<Callback>;
-//   using type = typename Adapter::type;
-//   return std::make_unique<CustomUserCallback<type>>(
-//       Adapter::Adapt(std::forward<Callback>(cb)));
-// }
-
-// // Check if Callback is supported by Whom.
-// template <typename Callback, CallbackSupportMask kMask>
-// struct CallbackIsSupported
-//     : std::bool_constant<(UserCallbackTraits<Callback>::kMask & kMask) != 0> {};
+inline Actions StringToActions(const std::string& str) {
+  static const std::map<std::string, Actions> map{
+      {"store", Actions::kStore},
+      {"store_const", Actions::kStoreConst},
+      {"append", Actions::kAppend},
+      {"append_const", Actions::kAppendConst},
+  };
+  auto iter = map.find(str);
+  DCHECK2(iter != map.end(), "Unknown action string passed in");
+  return iter->second;
+}
 
 // Type-erasured
 struct Action {
-  std::unique_ptr<UserCallback> callback;
+  std::unique_ptr<ActionCallback> callback;
+  Actions action = Actions::kNoAction;
+
+  Action(const char* action_string) {
+    DCHECK(action_string);
+    action = StringToActions(action_string);
+  }
+
   Action() = default;
   Action(Action&&) = default;
 
   // TODO:: restrict signature.
-  template <typename Callback>
+  template <typename Callback,
+            typename Enable = detail::function_signature_t<Callback>>
   /* implicit */ Action(Callback&& cb) {
-    static_assert(CallbackIsSupported<Callback, kSupportedByAction>{},
-                  "Callback was not supported by Action");
-    callback = CreateCustomUserCallback(std::forward<Callback>(cb));
+    action = Actions::kCustom;
+    callback = CreateCustomActionCallback(std::forward<Callback>(cb));
   }
 };
 
-struct Destination {
-  std::optional<Dest> dest;
-  std::unique_ptr<UserCallback> callback;
-  Destination() = default;
+struct Dest {
+  std::unique_ptr<DestInfo> dest_info;
+
   template <typename T>
-  /* implicit */ Destination(T* ptr)
-      : dest(Dest(ptr)), callback(new DefaultUserCallback<T>()) {
-    DCHECK2(ptr, "nullptr passed to Destination()!");
-  }
-};
-
-struct Type {
-  std::unique_ptr<UserCallback> callback;
-  Type() = default;
-  Type(Type&&) = default;
-
-  template <typename Callback>
-  /* implicit */ Type(Callback&& cb) {
-    static_assert(CallbackIsSupported<Callback, kSupportedByType>{},
-                  "Callback was not supported by Type");
-    callback = CreateCustomUserCallback(std::forward<Callback>(cb));
+  /* implicit */ Dest(T* ptr) {
+    DCHECK2(ptr, "nullptr passed to Dest()");
+    dest_info.reset(new DestInfoImpl<T>(ptr));
   }
 };
 
@@ -961,7 +770,7 @@ class Argument {
     delegate_->OnArgumentCreated(this);
   }
 
-  void SetDest(Destination dest) {
+  void SetDest(Dest dest) {
     if (dest.callback) {
       dest_ = dest.dest;
       user_callback_ = std::move(dest.callback);
@@ -1128,7 +937,7 @@ class ArgumentBuilder {
  public:
   explicit ArgumentBuilder(Argument* arg) : arg_(arg) {}
 
-  ArgumentBuilder& dest(Destination d) {
+  ArgumentBuilder& dest(Dest d) {
     arg_->SetDest(std::move(d));
     return *this;
   }
@@ -1229,7 +1038,7 @@ class ArgpParser {
 class ArgumentContainer {
  public:
   ArgumentBuilder add_argument(Names names,
-                               Destination dest = {},
+                               Dest dest = {},
                                const char* help = {},
                                Type type = {}) {
     Argument* arg = AddArgument(std::move(names));
