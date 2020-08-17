@@ -386,8 +386,18 @@ class CustomTypeCallback : public TypeCallback {
   CallbackType callback_;
 };
 
+template <typename Callback, typename T>
+TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
+                                           void (*)(Context*, T*)) {
+  return new DefaultTypeCallback<T>(std::forward<Callback>(cb));
+}
+
 template <typename Callback>
-std::unique_ptr<TypeCallback> CreateCustomTypeCallback(Callback&& cb) {}
+TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
+  return CreateCustomTypeCallbackImpl(
+      std::forward<Callback>(cb),
+      (detail::function_signature_t<Callback>*)nullptr);
+}
 
 // A helper subclass that impl dest-type and value-type.
 template <typename T, typename V>
@@ -405,7 +415,7 @@ class ActionCallbackBase : public ActionCallback {
   ValueType ValueOf(std::any data) {
     DCHECK(data.has_value());
     DCHECK(std::type_index(data.type()) == GetValueType());
-    return std::any_cast<ValueType>(data);
+    return std::any_cast<ValueType>(std::move(data));
   }
 };
 
@@ -448,14 +458,6 @@ class CustomActionCallback : public ActionCallbackBase<T, V> {
   }
 
   CallbackType callback_;
-};
-
-template <typename Signature>
-struct ActionCallbackTraits;
-
-template <typename T, typename V>
-struct ActionCallbackTraits<void(T*, std::optional<V>)> {
-  using type = CustomActionCallback<T, V>;
 };
 
 template <typename Callback, typename T, typename V>
