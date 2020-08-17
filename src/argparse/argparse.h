@@ -254,7 +254,7 @@ template <typename T>
 using ValueTypeOf = typename T::value_type;
 
 // struct ValueTypeOf {
-//   using type = 
+//   using type =
 // };
 
 // This struct instructs us how to append Value to T.
@@ -316,7 +316,6 @@ struct CallbackFactorySelector<T, A, false> /* Not supported */ {
   static CallbackFactory* Select() { return nullptr; }
 };
 
-
 template <typename T>
 std::unique_ptr<CallbackFactory> CreateActionFactory(Actions act) {
   CallbackFactory* factory;
@@ -337,23 +336,23 @@ std::unique_ptr<CallbackFactory> CreateActionFactory(Actions act) {
   return std::unique_ptr<CallbackFactory>(factory);
 }
 
-struct UserData {
-  virtual std::type_index GetTypeIndex() = 0;
-  virtual ~UserData() {}
-};
+// struct UserData {
+//   virtual std::type_index GetTypeIndex() = 0;
+//   virtual ~UserData() {}
+// };
 
-template <typename T>
-struct UserDataImpl : UserData {
-  T data;
-  ~UserDataImpl() override {}
-  std::type_index GetTypeIndex() override { return typeid(T); }
-};
+// template <typename T>
+// struct UserDataImpl : UserData {
+//   T data;
+//   ~UserDataImpl() override {}
+//   std::type_index GetTypeIndex() override { return typeid(T); }
+// };
 
-template <typename T>
-T Cast(UserData* data) {
-  DCHECK(data->GetTypeIndex() == typeid(T));
-  return static_cast<UserDataImpl<T>*>(data)->data;
-}
+// template <typename T>
+// T Cast(UserData* data) {
+//   DCHECK(data->GetTypeIndex() == typeid(T));
+//   return static_cast<UserDataImpl<T>*>(data)->data;
+// }
 
 // Perform data conversion..
 class TypeCallback {
@@ -361,8 +360,7 @@ class TypeCallback {
   // TODO: may not use Delegate.
   class Delegate {
    public:
-    virtual void OnTypeCallbackInvoked(Status status,
-                                       std::unique_ptr<UserData> data) {}
+    virtual void OnTypeCallbackInvoked(Status status, std::any data) {}
     virtual ~Delegate() {}
   };
   void Run(Context* ctx, Delegate* delegate) {
@@ -373,7 +371,7 @@ class TypeCallback {
   virtual std::type_index GetValueType() = 0;
 
  private:
-  virtual std::unique_ptr<UserData> RunImpl(Context* ctx) = 0;
+  virtual std::any RunImpl(Context* ctx) = 0;
 };
 
 // Impl a callback with the signature:
@@ -381,7 +379,7 @@ class TypeCallback {
 // T is called the DestType. V is called the ValueType.
 class ActionCallback {
  public:
-  void Run(std::unique_ptr<UserData> data) { RunImpl(std::move(data)); }
+  void Run(std::any data) { RunImpl(std::move(data)); }
   void BindToDest(void* dest, std::type_index type) {
     DCHECK(GetDestType() == type);
     dest_ = dest;
@@ -391,7 +389,7 @@ class ActionCallback {
   virtual std::type_index GetValueType() = 0;
 
  private:
-  virtual void RunImpl(std::unique_ptr<UserData> data) = 0;
+  virtual void RunImpl(std::any data) = 0;
 
  protected:
   void* dest_ = nullptr;
@@ -410,8 +408,7 @@ class CallbackContext : public TypeCallback::Delegate {
   ~CallbackContext() override {}
 
  private:
-  void OnTypeCallbackInvoked(Status status,
-                             std::unique_ptr<UserData> data) override {
+  void OnTypeCallbackInvoked(Status status, std::any data) override {
     if (status) {
       action_callback_->Run(std::move(data));
     } else {
@@ -431,17 +428,17 @@ class NullTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(void); }
 
  private:
-  std::unique_ptr<UserData> RunImpl(Context*) override { return nullptr; }
+  std::any RunImpl(Context*) override { return nullptr; }
 };
 
 // A subclass that parses string into value using a Traits.
 template <typename T>
 class DefaultTypeCallback : public TypeCallback {
-public:
- std::type_index GetValueType() override { return typeid(T); }
+ public:
+  std::type_index GetValueType() override { return typeid(T); }
 
-private:
- std::unique_ptr<UserData> RunImpl(Context* ctx) override {}
+ private:
+  std::any RunImpl(Context* ctx) override {}
 };
 
 // A subclass that always return a const value. Used for actions like
@@ -453,10 +450,11 @@ class ConstTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(T); }
 
  private:
-  std::unique_ptr<UserData> RunImpl(Context* ctx) override {
-    return std::make_unique<UserDataImpl<T>>(value_);
+  std::any RunImpl(Context* ctx) override {
+    return value_;
+    // return std::make_unique<UserDataImpl<T>>(value_);
   }
-  T value_;
+  std::any value_;
 };
 
 // A helper subclass that impl dest-type and value-type.
@@ -472,9 +470,9 @@ class ActionCallbackBase : public ActionCallback {
  protected:
   // Helpers for subclass.
   DestType* dest() { return reinterpret_cast<DestType*>(dest_); }
-  static ValueType ValueOf(UserData* data) {
-    DCHECK(data);
-    return Cast<ValueType>(data);
+  static ValueType ValueOf(std::any data) {
+    DCHECK(data.has_value());
+    return std::any_cast<ValueType>(data);
   }
 };
 
@@ -482,9 +480,9 @@ template <typename T, typename V = T>
 class StoreActionCallback : public ActionCallbackBase<T, V> {
  public:
  private:
-  void RunImpl(std::unique_ptr<UserData> data) override {
-    if (data) {
-      *(this->dest()) = this->ValueOf(data.get());
+  void RunImpl(std::any data) override {
+    if (data.has_value()) {
+      *(this->dest()) = this->ValueOf(data);
     }
   }
 };
@@ -528,9 +526,9 @@ template <typename T, typename V = ValueTypeOf<T>>
 class AppendActionCallback : public ActionCallbackBase<T, V> {
  private:
   using Traits = AppendTraits<T, V>;
-  void RunImpl(std::unique_ptr<UserData> data) override {
-    if (data) {
-      Traits::Append(this->dest(), this->ValueOf(data.get()));
+  void RunImpl(std::any data) override {
+    if (data.has_value()) {
+      Traits::Append(this->dest(), this->ValueOf(data));
     }
   }
 };
