@@ -116,7 +116,7 @@ class Status {
   std::string message_;
 };
 
-// TODO: make it a class.
+// This is an internal class to communicate data/state between user's callback.
 class Context {
  public:
   // Issue an error.
@@ -124,10 +124,18 @@ class Context {
     state_.Error(msg);
     status_ = Status(msg);
   }
+
   void print_usage() { return state_.Usage(); }
   void print_help() { return state_.Help(stderr, 0); }
+
   std::string& value() { return value_; }
   const std::string& value() const { return value_; }
+  std::any* result() { return &result_; }
+  std::any TakeResult() { return std::move(result_); }
+  const Status& status() const { return status_; }
+  Status* status() { return &status_; }
+  void set_result(std::any data) { result_ = std::move(data); }
+
   // Whether a value is passed to this arg.
   bool has_value() const { return has_value_; }
   // TODO: impl this by making Argument an interface.
@@ -140,16 +148,15 @@ class Context {
   }
 
   // For checking if user's call succeeded.
-  Status TakeStatus() { return std::move(status_); }
+//   Status TakeStatus() { return std::move(status_); }
 
  private:
-  // The Argument being parsed.
   bool has_value_;
   const Argument* argument_;
   ArgpState state_;
-  // The command-line value to this argument.
   std::string value_;
-  Status status_;  // User's error() call is saved here.
+  Status status_;
+  std::any result_;
 };
 
 // Why we need a default version?
@@ -283,6 +290,34 @@ class DestInfo {
   void* ptr_ = nullptr;
 };
 
+// The most consice prototype of a TypeCallback.
+// User read the string, write the conversion result to T* and if failed, report
+// error using Status*.
+// The reason why the return value is not Status is for lambda, if you mix
+// return true and return "errmsg", the compiler can't deduct return type, which
+// forces you to write ->Status. Very ugly. And to indicate success, you must
+// return true, Very verbose. The Status* scheme, however, allow no tailing
+// return type and silence implies ok pattern. If you don't touch Status*, you
+// imply success. Only when you use it does it reports an error.
+// Like:
+// @code
+// [](const std::string& in, int* out, Status* status) { try { *out =
+// std::stoi(in); } catch (const std::exception& e) {
+// status->set_error(e.what());}
+// @endcode
+
+template <typename T>
+using TypeCallbackPrototype = void(const std::string&, T*, Status*);
+
+// There is an alternative for those using exception.
+// You convert string into T and throw ArgumentError if something bad happened.
+template <typename T>
+using TypeCallbackPrototypeThrows = T(const std::string&);
+
+// The prototype for action. An action normally does not report errors.
+template <typename T, typename V>
+using ActionCallbackPrototype = void(T*, std::optional<V>);
+
 // Perform data conversion..
 class TypeCallback {
  public:
@@ -291,14 +326,17 @@ class TypeCallback {
     virtual void OnTypeCallbackInvoked(Status status, std::any data) {}
     virtual ~Delegate() {}
   };
-  void Run(Context* ctx, Delegate* delegate) {
-    auto data = RunImpl(ctx);
-    delegate->OnTypeCallbackInvoked(ctx->TakeStatus(), std::move(data));
-  }
+
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
-  // For subclass that needs a value.
-  virtual void BindToValue(std::any value) {}
+
+  void Run(Context* ctx, Delegate* delegate) {
+    std::any data;
+    if (ctx->has_value()) {
+      data = RunImpl(ctx);
+    }
+    delegate->OnTypeCallbackInvoked(*ctx->status(), std::move(data));
+  }
 
  private:
   virtual std::any RunImpl(Context* ctx) = 0;
@@ -309,11 +347,6 @@ class TypeCallback {
 // T is called the DestType. V is called the ValueType.
 class ActionCallback {
  public:
-  void Run(std::any data) { RunImpl(std::move(data)); }
-  void BindToDest(DestInfo* dest_info) {
-    DCHECK(GetDestType() == dest_info->GetDestType());
-    dest_ = dest_info->ptr();
-  }
   virtual ~ActionCallback() {}
   // For performing runtime type check.
   virtual std::type_index GetDestType() = 0;
@@ -324,8 +357,23 @@ class ActionCallback {
            GetValueType() == type->GetValueType();
   }
 
+  void Run(std::any) {
+    // PreCond: ctx->status == true.
+    // DCHECK(ctx->status() == true);
+    // RunImpl(ctx->TakeResult());
+  }
+
+  void BindToDest(DestInfo* dest_info) {
+    DCHECK(GetDestType() == dest_info->GetDestType());
+    dest_ = dest_info->ptr();
+  }
+
+  // append-const and store-const needs a value.
+  virtual void BindToValue(std::any value) {}
+
  private:
   virtual void RunImpl(std::any data) = 0;
+//   virtual void SetValue(std::any value) = 0;
 
  protected:
   void* dest_ = nullptr;
@@ -358,21 +406,23 @@ class DefaultTypeCallback : public TypeCallback {
 
 // A subclass that always return a const value. Used for actions like
 // store-const and append-const.
-template <typename T>
-class ConstTypeCallback : public TypeCallback {
- public:
-  std::type_index GetValueType() override { return typeid(T); }
-  void BindToValue(std::any value) override { value_ = std::move(value); }
+// template <typename T>
+// class ConstTypeCallback : public TypeCallback {
+//  public:
+//   std::type_index GetValueType() override { return typeid(T); }
+//   void BindToValue(std::any value) override { value_ = std::move(value); }
 
- private:
-  std::any RunImpl(Context* ctx) override { return value_; }
-  std::any value_;
-};
+//  private:
+//   void RunImpl(Context* ctx) override { 
+
+//   }
+//   std::any value_;
+// };
 
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
  public:
-  using CallbackType = std::function<void(Context*, T*)>;
+  using CallbackType = std::function<TypeCallbackPrototype<T>>;
   explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
  private:
@@ -423,10 +473,34 @@ template <typename T, typename V = T>
 class StoreActionCallback : public ActionCallbackBase<T, V> {
  private:
   void RunImpl(std::any data) override {
-    if (data.has_value()) {
+    if (data.has_value())
       *(this->dest()) = this->ValueOf(data);
-    }
   }
+};
+
+// Common base class for actions dealing with const value.
+template <typename T, typename V>
+class ConstActionCallbackBase : public ActionCallbackBase<T, V> {
+ protected:
+  T ConstValue() {
+    DCHECK2(const_value_.has_value(),
+            "This action needs a const value. Please specify it by .value()");
+    return this->ValueOf(const_value_);
+  }
+
+ private:
+  void BindToValue(std::any value) override {
+    DCHECK2(value.has_value(), "Must bind a valid value");
+    DCHECK2(AnyHasType(value, this->GetValueType()), "Type mismatch");
+    const_value_ = std::move(value);
+ }
+ std::any const_value_;
+};
+
+template <typename T, typename V = T>
+class StoreConstActionCallback : public ConstActionCallbackBase<T, V> {
+private:
+ void RunImpl(std::any) override { *(this->dest()) = this->ConstValue(); }
 };
 
 template <typename T, typename V = ValueTypeOf<T>>
@@ -434,9 +508,17 @@ class AppendActionCallback : public ActionCallbackBase<T, V> {
  private:
   using Traits = AppendTraits<T, V>;
   void RunImpl(std::any data) override {
-    if (data.has_value()) {
+    if (data.has_value())
       Traits::Append(this->dest(), this->ValueOf(data));
-    }
+  }
+};
+
+template <typename T, typename V = ValueTypeOf<T>>
+class AppendConstActionCallback : public ConstActionCallbackBase<T, V> {
+ private:
+  using Traits = AppendTraits<T, V>;
+  void RunImpl(std::any) override {
+    Traits::Append(this->dest(), this->ConstValue());
   }
 };
 
@@ -449,9 +531,10 @@ class CustomActionCallback : public ActionCallbackBase<T, V> {
 
  private:
   void RunImpl(std::any data) override {
+    // User needs an optional.
     std::optional<V> value;
     if (data.has_value())
-      value.emplace(this->ValueOf(data));
+      value.emplace(this->ValueOf(std::move(data)));
     DCHECK(callback_);
     std::invoke(callback_, this->dest(), std::move(value));
   }
@@ -474,14 +557,19 @@ ActionCallback* CreateCustomActionCallback(Callback&& cb) {
 
 class CallbackRunner {
  public:
-  virtual Status Run(Context* ctx) = 0;
+  class Delegate {
+   public:
+    virtual ~Delegate() {}
+    virtual void HandleError(Status status) = 0;
+  };
+  virtual void Run(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
 };
 
 // Used for no dest, no type no action.
 class DummyCallbackRunner : public CallbackRunner {
  public:
-  Status Run(Context*) override { return true; }
+  void Run(Context*, Delegate*) override {}
   ~DummyCallbackRunner() override {}
 };
 
@@ -492,10 +580,10 @@ class CallbackRunnerImpl : public CallbackRunner,
   CallbackRunnerImpl(std::unique_ptr<TypeCallback> type,
                      std::unique_ptr<ActionCallback> action)
       : type_(std::move(type)), action_(std::move(action)) {}
-
-  Status Run(Context* ctx) override {
+  using CallbackRunner::Delegate;
+  void Run(Context* ctx, Delegate* delegate) override {
+    delegate_ = delegate;
     type_->Run(ctx, this);
-    return std::move(status_);
   }
   ~CallbackRunnerImpl() override {}
 
@@ -504,9 +592,11 @@ class CallbackRunnerImpl : public CallbackRunner,
     if (status) {
       action_->Run(std::move(data));
     } else {
-      status_ = std::move(status);
+      delegate_->HandleError(std::move(status));
     }
   }
+
+  Delegate* delegate_;
   Status status_;
   std::unique_ptr<TypeCallback> type_;
   std::unique_ptr<ActionCallback> action_;
@@ -524,6 +614,10 @@ class DestInfoImpl : public DestInfo {
         return CallbackFactorySelector<T, Actions::kStore>::Select();
       case Actions::kAppend:
         return CallbackFactorySelector<T, Actions::kAppend>::Select();
+      case Actions::kStoreConst:
+        return CallbackFactorySelector<T, Actions::kStoreConst>::Select();
+      case Actions::kAppendConst:
+        return CallbackFactorySelector<T, Actions::kAppendConst>::Select();
       default:
         return nullptr;
     }
@@ -570,10 +664,10 @@ struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
    public:
     ~FactoryImpl() override {}
     ActionCallback* CreateActionCallback() override {
-      return new StoreActionCallback<T>();
+      return new StoreConstActionCallback<T>();
     }
     TypeCallback* CreateTypeCallback() override {
-      return new ConstTypeCallback<T>();
+      return new NullTypeCallback();
     }
   };
 
@@ -586,10 +680,10 @@ struct CallbackFactorySelector<T, Actions::kAppendConst, true> {
    public:
     ~FactoryImpl() override {}
     ActionCallback* CreateActionCallback() override {
-      return new AppendActionCallback<T>();
+      return new AppendConstActionCallback<T>();
     }
     TypeCallback* CreateTypeCallback() override {
-      return new ConstTypeCallback<T>();
+      return new NullTypeCallback();
     }
   };
 
@@ -724,7 +818,7 @@ class CallbackResolverImpl : public CallbackResolver {
           value_is_valid,
           "Action needs a const value, which is neither not provided nor of "
           "the wrong type");
-      custom_type_->BindToValue(std::move(value_));
+      custom_action_->BindToValue(std::move(value_));
     }
 
     DCHECK2(custom_action_->WorksWith(dest_.get(), custom_type_.get()),
@@ -1417,10 +1511,11 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
 // This handles the argp_parser_t function and provide a bunch of context during
 // the parsing.
-class ArgpParserImpl : public ArgpParser {
+class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
  public:
   // When this is constructed, Delegate must have been added options.
-  explicit ArgpParserImpl(Delegate* delegate) : delegate_(delegate) {
+  explicit ArgpParserImpl(ArgpParser::Delegate* delegate)
+      : delegate_(delegate) {
     argp_.parser = &ArgpParserImpl::Callback;
     positional_count_ = delegate_->PositionalArgumentCount();
     delegate_->CompileToArgpOptions(&argp_options_);
@@ -1488,13 +1583,11 @@ class ArgpParserImpl : public ArgpParser {
   // TODO: Change this scheme.
   void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
     Context ctx(arg, value, state);
-    arg->GetCallbackRunner()->Run(&ctx);
-    // auto status = arg->RunCallback(ctx);
-    // If the user said no, just die with a msg.
-    // if (status)
-    //   return;
-    // state.Error("%s", status.message().c_str());
+    arg->GetCallbackRunner()->Run(&ctx, this);
   }
+
+  // CallbackRunner::Delegate:
+  void HandleError(Status status) override {}
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
@@ -1571,7 +1664,7 @@ class ArgpParserImpl : public ArgpParser {
 
   int parser_flags_ = 0;
   unsigned positional_count_ = 0;
-  Delegate* delegate_;
+  ArgpParser::Delegate* delegate_;
   Status status_;
   argp argp_ = {};
   std::string program_doc_;
