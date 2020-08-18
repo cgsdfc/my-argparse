@@ -130,11 +130,13 @@ class Context {
 
   std::string& value() { return value_; }
   const std::string& value() const { return value_; }
+
+  bool status_ok() const { return static_cast<bool>(status_); }
+  Status* status() { return &status_; }
+
+  void set_result(std::any data) { result_ = std::move(data); }
   std::any* result() { return &result_; }
   std::any TakeResult() { return std::move(result_); }
-  const Status& status() const { return status_; }
-  Status* status() { return &status_; }
-  void set_result(std::any data) { result_ = std::move(data); }
 
   // Whether a value is passed to this arg.
   bool has_value() const { return has_value_; }
@@ -146,9 +148,6 @@ class Context {
     if (has_value())
       value_.assign(value);
   }
-
-  // For checking if user's call succeeded.
-//   Status TakeStatus() { return std::move(status_); }
 
  private:
   bool has_value_;
@@ -165,7 +164,7 @@ class Context {
 // needed logically but needed syntatically.
 template <typename T>
 struct TypeCallbackTraits {
-  static void Run(Context* ctx, T* out) {
+  static void Run(const std::string&, T*, Status*) {
     DCHECK2(false, "Please specialize TypeCallbackTrait<T> for your type");
   }
 };
@@ -323,7 +322,7 @@ class TypeCallback {
  public:
   class Delegate {
    public:
-    virtual void OnTypeCallbackInvoked(Status status, std::any data) {}
+    virtual void OnTypeCallbackInvoked(Context* ctx) {}
     virtual ~Delegate() {}
   };
 
@@ -331,15 +330,14 @@ class TypeCallback {
   virtual std::type_index GetValueType() = 0;
 
   void Run(Context* ctx, Delegate* delegate) {
-    std::any data;
     if (ctx->has_value()) {
-      data = RunImpl(ctx);
+      ctx->set_result(RunImpl(ctx->value(), ctx->status()));
     }
-    delegate->OnTypeCallbackInvoked(*ctx->status(), std::move(data));
+    delegate->OnTypeCallbackInvoked(ctx);
   }
 
  private:
-  virtual std::any RunImpl(Context* ctx) = 0;
+  virtual std::any RunImpl(const std::string& in, Status* status) = 0;
 };
 
 // Impl a callback with the signature:
@@ -351,16 +349,19 @@ class ActionCallback {
   // For performing runtime type check.
   virtual std::type_index GetDestType() = 0;
   virtual std::type_index GetValueType() = 0;
+  virtual bool NeedsDest() const { return true; }
+  virtual bool NeedsValue() const { return false; }
 
   bool WorksWith(DestInfo* dest, TypeCallback* type) {
     return GetDestType() == dest->GetDestType() &&
            GetValueType() == type->GetValueType();
   }
 
-  void Run(std::any) {
-    // PreCond: ctx->status == true.
-    // DCHECK(ctx->status() == true);
-    // RunImpl(ctx->TakeResult());
+  void Run(Context* ctx) {
+    DCHECK(ctx->status_ok());
+    DCHECK(!NeedsDest() || dest_);
+    DCHECK(!NeedsValue() || value_.has_value());
+    RunImpl(ctx->TakeResult());
   }
 
   void BindToDest(DestInfo* dest_info) {
@@ -369,14 +370,19 @@ class ActionCallback {
   }
 
   // append-const and store-const needs a value.
-  virtual void BindToValue(std::any value) {}
+  void BindToValue(std::any value) {
+    DCHECK(NeedsValue());
+    DCHECK(value.has_value());
+    DCHECK(AnyHasType(value, GetValueType()));
+    value_ = std::move(value);
+  }
 
  private:
   virtual void RunImpl(std::any data) = 0;
-//   virtual void SetValue(std::any value) = 0;
 
  protected:
   void* dest_ = nullptr;
+  std::any value_;
 };
 
 // A subclass that always return nullptr. Used for actions without a need of
@@ -387,7 +393,9 @@ class NullTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(void); }
 
  private:
-  std::any RunImpl(Context*) override { return {}; }
+  std::any RunImpl(const std::string& in, Status* status) override {
+    return {};
+  }
 };
 
 // A subclass that parses string into value using a Traits.
@@ -397,27 +405,12 @@ class DefaultTypeCallback : public TypeCallback {
   std::type_index GetValueType() override { return typeid(T); }
 
  private:
-  std::any RunImpl(Context* ctx) override {
+  std::any RunImpl(const std::string& in, Status* status) override {
     T value;
-    TypeCallbackTraits<T>::Run(ctx, &value);
-    return std::any(std::move(value));
+    TypeCallbackTraits<T>::Run(in, &value, status);
+    return value;
   }
 };
-
-// A subclass that always return a const value. Used for actions like
-// store-const and append-const.
-// template <typename T>
-// class ConstTypeCallback : public TypeCallback {
-//  public:
-//   std::type_index GetValueType() override { return typeid(T); }
-//   void BindToValue(std::any value) override { value_ = std::move(value); }
-
-//  private:
-//   void RunImpl(Context* ctx) override { 
-
-//   }
-//   std::any value_;
-// };
 
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
@@ -426,10 +419,10 @@ class CustomTypeCallback : public TypeCallback {
   explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
  private:
-  std::any RunImpl(Context* ctx) override {
+  std::any RunImpl(const std::string& in, Status* status) override {
     T value;
-    std::invoke(callback_, ctx, &value);
-    return std::make_any(std::move(value));
+    std::invoke(callback_, in, &value, status);
+    return value;
   }
 
   CallbackType callback_;
@@ -483,18 +476,12 @@ template <typename T, typename V>
 class ConstActionCallbackBase : public ActionCallbackBase<T, V> {
  protected:
   T ConstValue() {
-    DCHECK2(const_value_.has_value(),
-            "This action needs a const value. Please specify it by .value()");
-    return this->ValueOf(const_value_);
+    DCHECK(this->value_.has_value());
+    return this->ValueOf(this->value_);
   }
 
  private:
-  void BindToValue(std::any value) override {
-    DCHECK2(value.has_value(), "Must bind a valid value");
-    DCHECK2(AnyHasType(value, this->GetValueType()), "Type mismatch");
-    const_value_ = std::move(value);
- }
- std::any const_value_;
+  bool NeedsValue() const override { return true; }
 };
 
 template <typename T, typename V = T>
@@ -560,7 +547,7 @@ class CallbackRunner {
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void HandleError(Status status) = 0;
+    virtual void HandleError(Context* ctx) = 0;
   };
   virtual void Run(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
@@ -588,11 +575,11 @@ class CallbackRunnerImpl : public CallbackRunner,
   ~CallbackRunnerImpl() override {}
 
  private:
-  void OnTypeCallbackInvoked(Status status, std::any data) override {
-    if (status) {
-      action_->Run(std::move(data));
+  void OnTypeCallbackInvoked(Context* ctx) override {
+    if (ctx->status_ok()) {
+      action_->Run(ctx);
     } else {
-      delegate_->HandleError(std::move(status));
+      delegate_->HandleError(ctx);
     }
   }
 
@@ -758,15 +745,15 @@ class CallbackResolver {
   virtual ~CallbackResolver() {}
 };
 
-inline bool ActionNeedsConst(Actions a) {
-  switch (a) {
-    case Actions::kStoreConst:
-    case Actions::kAppendConst:
-      return true;
-    default:
-      return false;
-  }
-}
+// inline bool ActionNeedsConst(Actions a) {
+//   switch (a) {
+//     case Actions::kStoreConst:
+//     case Actions::kAppendConst:
+//       return true;
+//     default:
+//       return false;
+//   }
+// }
 
 class CallbackResolverImpl : public CallbackResolver {
  public:
@@ -810,7 +797,7 @@ class CallbackResolverImpl : public CallbackResolver {
     if (!custom_type_) {
       custom_type_.reset(factory->CreateTypeCallback());
     }
-    if (ActionNeedsConst(action_)) {
+    if (custom_action_->NeedsValue()) {
       const bool value_is_valid =
           value_.has_value() &&
           AnyHasType(value_, custom_type_->GetValueType());
@@ -1587,7 +1574,9 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   }
 
   // CallbackRunner::Delegate:
-  void HandleError(Status status) override {}
+  void HandleError(Context* ctx) override {
+    // TODO:
+  }
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
