@@ -745,16 +745,6 @@ class CallbackResolver {
   virtual ~CallbackResolver() {}
 };
 
-// inline bool ActionNeedsConst(Actions a) {
-//   switch (a) {
-//     case Actions::kStoreConst:
-//     case Actions::kAppendConst:
-//       return true;
-//     default:
-//       return false;
-//   }
-// }
-
 class CallbackResolverImpl : public CallbackResolver {
  public:
   void SetDest(Dest dest) override { dest_ = std::move(dest.dest_info); }
@@ -785,29 +775,25 @@ class CallbackResolverImpl : public CallbackResolver {
 
     // The factory is used as a fall-back when user don't specify.
     auto* factory = dest_->CreateFactory(action_);
-    DCHECK2(factory,
+    // if we need the factory (action_ or type_ is null), but it is invalid.
+    DCHECK2((custom_action_ && custom_type_) || factory,
             "The provided action is not supported by the type of dest");
 
     if (!custom_action_) {
       // user does not provide an action callback, we need to infer.
       custom_action_.reset(factory->CreateActionCallback());
     }
-    custom_action_->BindToDest(dest_.get());
+    if (custom_action_->NeedsDest()) {
+      custom_action_->BindToDest(dest_.get());
+    }
+
+    if (custom_action_->NeedsValue()) {
+      custom_action_->BindToValue(std::move(value_));
+    }
 
     if (!custom_type_) {
       custom_type_.reset(factory->CreateTypeCallback());
     }
-    if (custom_action_->NeedsValue()) {
-      const bool value_is_valid =
-          value_.has_value() &&
-          AnyHasType(value_, custom_type_->GetValueType());
-      DCHECK2(
-          value_is_valid,
-          "Action needs a const value, which is neither not provided nor of "
-          "the wrong type");
-      custom_action_->BindToValue(std::move(value_));
-    }
-
     DCHECK2(custom_action_->WorksWith(dest_.get(), custom_type_.get()),
             "The provide dest, action and type are not compatible");
     return new CallbackRunnerImpl(std::move(custom_type_),
