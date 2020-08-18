@@ -1683,3 +1683,13 @@ class ArgumentParser : public ArgumentContainer {
 };
 
 }  // namespace argparse
+
+// TODO: about error handling.
+// User's callback should be very concise and contains the very only
+// info user needs.
+// For type-callback, user performs a conversion (only if a arg is present), or
+// tell us error. For action-callback, user performs an action (only if
+// type-callback succeeded) and maybe tell us error. That's enough. User don't
+// print help or usage, it 's what we should do -- catch user's error and do
+// error handling. We allow user to specify error handling policy, deciding what
+// to print, whether to exit, exit with what code... etc.
