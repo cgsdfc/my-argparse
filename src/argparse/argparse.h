@@ -320,20 +320,12 @@ using ActionCallbackPrototype = void(T*, std::optional<V>);
 // Perform data conversion..
 class TypeCallback {
  public:
-  class Delegate {
-   public:
-    virtual void OnTypeCallbackInvoked(Context* ctx) {}
-    virtual ~Delegate() {}
-  };
-
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
 
-  void Run(Context* ctx, Delegate* delegate) {
-    if (ctx->has_value()) {
-      ctx->set_result(RunImpl(ctx->value(), ctx->status()));
-    }
-    delegate->OnTypeCallbackInvoked(ctx);
+  void Run(Context* ctx) {
+    DCHECK(ctx->has_value());
+    ctx->set_result(RunImpl(ctx->value(), ctx->status()));
   }
 
  private:
@@ -557,30 +549,22 @@ class DummyCallbackRunner : public CallbackRunner {
 };
 
 // Run TypeCallback and ActionCallback.
-class CallbackRunnerImpl : public CallbackRunner,
-                           private TypeCallback::Delegate {
+class CallbackRunnerImpl : public CallbackRunner {
  public:
   CallbackRunnerImpl(std::unique_ptr<TypeCallback> type,
                      std::unique_ptr<ActionCallback> action)
       : type_(std::move(type)), action_(std::move(action)) {}
-  using CallbackRunner::Delegate;
+
   void Run(Context* ctx, Delegate* delegate) override {
-    delegate_ = delegate;
-    type_->Run(ctx, this);
+    if (ctx->has_value())
+      type_->Run(ctx);
+    if (ctx->status_ok())
+      action_->Run(ctx);
+    else
+      delegate->HandleError(ctx);
   }
-  ~CallbackRunnerImpl() override {}
 
  private:
-  void OnTypeCallbackInvoked(Context* ctx) override {
-    if (ctx->status_ok()) {
-      action_->Run(ctx);
-    } else {
-      delegate_->HandleError(ctx);
-    }
-  }
-
-  Delegate* delegate_;
-  Status status_;
   std::unique_ptr<TypeCallback> type_;
   std::unique_ptr<ActionCallback> action_;
 };
