@@ -274,7 +274,7 @@ struct CallbackFactorySelector;
 
 template <typename T, Actions A>
 struct CallbackFactorySelector<T, A, false> /* Not supported */ {
-  static CallbackFactory* Select() { return nullptr; }
+  static CallbackFactory* Run() { return nullptr; }
 };
 
 class DestInfo {
@@ -594,30 +594,32 @@ class DestInfoImpl : public DestInfo {
   CallbackFactory* CreateFactory(Actions action) override {
     switch (action) {
       case Actions::kStore:
-        return CallbackFactorySelector<T, Actions::kStore>::Select();
+        return CallbackFactorySelector<T, Actions::kStore>::Run();
       case Actions::kAppend:
-        return CallbackFactorySelector<T, Actions::kAppend>::Select();
+        return CallbackFactorySelector<T, Actions::kAppend>::Run();
       case Actions::kStoreConst:
-        return CallbackFactorySelector<T, Actions::kStoreConst>::Select();
+        return CallbackFactorySelector<T, Actions::kStoreConst>::Run();
       case Actions::kAppendConst:
-        return CallbackFactorySelector<T, Actions::kAppendConst>::Select();
+        return CallbackFactorySelector<T, Actions::kAppendConst>::Run();
       default:
         return nullptr;
     }
   }
 };
 
-template <typename T>
-struct CallbackFactorySelector<T, Actions::kStore, true> {
-  static CallbackFactory* Select() {
+template <typename ActionCallbackT, typename TypeCallbackT>
+struct CallbackFactoryGenerator {
+  static_assert(std::is_base_of<ActionCallback, ActionCallbackT>{});
+  static_assert(std::is_base_of<TypeCallback, TypeCallbackT>{});
+
+  static CallbackFactory* Run() {
     class FactoryImpl : public CallbackFactory {
      public:
-      ~FactoryImpl() override {}
       ActionCallback* CreateActionCallback() override {
-        return new StoreActionCallback<T>();
+        return new ActionCallbackT();
       }
       TypeCallback* CreateTypeCallback() override {
-        return new DefaultTypeCallback<T>();
+        return new TypeCallbackT();
       }
     };
     return new FactoryImpl();
@@ -625,52 +627,23 @@ struct CallbackFactorySelector<T, Actions::kStore, true> {
 };
 
 template <typename T>
-struct CallbackFactorySelector<T, Actions::kAppend, true> {
-  static CallbackFactory* Select() {
-    class FactoryImpl : public CallbackFactory {
-     public:
-      ~FactoryImpl() override {}
-      ActionCallback* CreateActionCallback() override {
-        return new AppendActionCallback<T>();
-      }
-      TypeCallback* CreateTypeCallback() override {
-        return new DefaultTypeCallback<ValueTypeOf<T>>();
-      }
-    };
-    return new FactoryImpl();
-  }
+struct CallbackFactorySelector<T, Actions::kStore, true>
+    : CallbackFactoryGenerator<StoreActionCallback<T>, DefaultTypeCallback<T>> {
 };
 
 template <typename T>
-struct CallbackFactorySelector<T, Actions::kStoreConst, true> {
-  class FactoryImpl : public CallbackFactory {
-   public:
-    ~FactoryImpl() override {}
-    ActionCallback* CreateActionCallback() override {
-      return new StoreConstActionCallback<T>();
-    }
-    TypeCallback* CreateTypeCallback() override {
-      return new NullTypeCallback();
-    }
-  };
+struct CallbackFactorySelector<T, Actions::kAppend, true>
+    : CallbackFactoryGenerator<AppendActionCallback<T>,
+                               DefaultTypeCallback<ValueTypeOf<T>>> {};
 
-  static CallbackFactory* Select() { return new FactoryImpl(); }
+template <typename T>
+struct CallbackFactorySelector<T, Actions::kStoreConst, true>
+    : CallbackFactoryGenerator<StoreConstActionCallback<T>, NullTypeCallback> {
 };
 
 template <typename T>
-struct CallbackFactorySelector<T, Actions::kAppendConst, true> {
-  class FactoryImpl : public CallbackFactory {
-   public:
-    ~FactoryImpl() override {}
-    ActionCallback* CreateActionCallback() override {
-      return new AppendConstActionCallback<T>();
-    }
-    TypeCallback* CreateTypeCallback() override {
-      return new NullTypeCallback();
-    }
-  };
-
-  static CallbackFactory* Select() { return new FactoryImpl(); }
+struct CallbackFactorySelector<T, Actions::kAppendConst, true>
+    : CallbackFactoryGenerator<AppendConstActionCallback<T>, NullTypeCallback> {
 };
 
 struct Type {
