@@ -421,8 +421,21 @@ class CustomTypeCallback : public TypeCallback {
 
 template <typename Callback, typename T>
 TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
-                                           void (*)(Context*, T*)) {
-  return new DefaultTypeCallback<T>(std::forward<Callback>(cb));
+                                           TypeCallbackPrototype<T>*) {
+  return new CustomTypeCallback<T>(std::forward<Callback>(cb));
+}
+
+template <typename Callback, typename T>
+TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
+                                           TypeCallbackPrototypeThrows<T>*) {
+  auto adapter = [cb](const std::string& in, T* out, Status* status) {
+    try {
+      *out = std::invoke(cb, in);
+    } catch (const ArgumentError& e) {
+      *status = e.what();
+    }
+  };
+  return new CustomTypeCallback<T>(adapter);
 }
 
 template <typename Callback>
@@ -474,8 +487,8 @@ class StoreActionCallback : public ActionCallbackBase<T, V> {
 
 template <typename T, typename V = T>
 class StoreConstActionCallback : public ActionCallbackBase<T, V> {
-private:
- void RunImpl(std::any) override { *(this->dest()) = this->ConstValue(); }
+ private:
+  void RunImpl(std::any) override { *(this->dest()) = this->ConstValue(); }
 };
 
 template <typename T, typename V = ValueTypeOf<T>>
