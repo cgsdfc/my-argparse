@@ -349,32 +349,31 @@ class ActionCallback {
   // For performing runtime type check.
   virtual std::type_index GetDestType() = 0;
   virtual std::type_index GetValueType() = 0;
-  virtual bool NeedsDest() const { return true; }
-  virtual bool NeedsValue() const { return false; }
+  // virtual bool NeedsDest() const { return true; }
+  // virtual bool NeedsValue() const { return false; }
 
   bool WorksWith(DestInfo* dest, TypeCallback* type) {
-    return GetDestType() == dest->GetDestType() &&
-           GetValueType() == type->GetValueType();
+    // return GetDestType() == dest->GetDestType() &&
+    //        GetValueType() == type->GetValueType();
+    // TODO: check this at runtime.
+    return true;
   }
 
   void Run(Context* ctx) {
     DCHECK(ctx->status_ok());
-    DCHECK(!NeedsDest() || dest_);
-    DCHECK(!NeedsValue() || value_.has_value());
     RunImpl(ctx->TakeResult());
   }
 
-  void BindToDest(DestInfo* dest_info) {
+  void SetDest(DestInfo* dest_info) {
     DCHECK(GetDestType() == dest_info->GetDestType());
     dest_ = dest_info->ptr();
   }
 
-  // append-const and store-const needs a value.
-  void BindToValue(std::any value) {
-    DCHECK(NeedsValue());
+  // Set an const value to this action (must be a valid value.)
+  void SetConstValue(std::any value) {
     DCHECK(value.has_value());
     DCHECK(AnyHasType(value, GetValueType()));
-    value_ = std::move(value);
+    const_value_ = std::move(value);
   }
 
  private:
@@ -382,7 +381,7 @@ class ActionCallback {
 
  protected:
   void* dest_ = nullptr;
-  std::any value_;
+  std::any const_value_;
 };
 
 // A subclass that always return nullptr. Used for actions without a need of
@@ -453,11 +452,21 @@ class ActionCallbackBase : public ActionCallback {
 
  protected:
   // Helpers for subclass.
-  DestType* dest() { return reinterpret_cast<DestType*>(dest_); }
+  // Access the dest (must be set).
+  DestType* dest() {
+    DCHECK(dest_);
+    return reinterpret_cast<DestType*>(dest_);
+  }
+  // Cast data into the correct type.
   ValueType ValueOf(std::any data) {
     DCHECK(data.has_value());
     DCHECK(AnyHasType(data, GetValueType()));
     return std::any_cast<ValueType>(std::move(data));
+  }
+  // Access the const value.
+  ValueType ConstValue() {
+    DCHECK(const_value_.has_value());
+    return ValueOf(const_value_);
   }
 };
 
@@ -471,21 +480,8 @@ class StoreActionCallback : public ActionCallbackBase<T, V> {
   }
 };
 
-// Common base class for actions dealing with const value.
-template <typename T, typename V>
-class ConstActionCallbackBase : public ActionCallbackBase<T, V> {
- protected:
-  T ConstValue() {
-    DCHECK(this->value_.has_value());
-    return this->ValueOf(this->value_);
-  }
-
- private:
-  bool NeedsValue() const override { return true; }
-};
-
 template <typename T, typename V = T>
-class StoreConstActionCallback : public ConstActionCallbackBase<T, V> {
+class StoreConstActionCallback : public ActionCallbackBase<T, V> {
 private:
  void RunImpl(std::any) override { *(this->dest()) = this->ConstValue(); }
 };
@@ -501,7 +497,7 @@ class AppendActionCallback : public ActionCallbackBase<T, V> {
 };
 
 template <typename T, typename V = ValueTypeOf<T>>
-class AppendConstActionCallback : public ConstActionCallbackBase<T, V> {
+class AppendConstActionCallback : public ActionCallbackBase<T, V> {
  private:
   using Traits = AppendTraits<T, V>;
   void RunImpl(std::any) override {
@@ -783,12 +779,14 @@ class CallbackResolverImpl : public CallbackResolver {
       // user does not provide an action callback, we need to infer.
       custom_action_.reset(factory->CreateActionCallback());
     }
-    if (custom_action_->NeedsDest()) {
-      custom_action_->BindToDest(dest_.get());
-    }
 
-    if (custom_action_->NeedsValue()) {
-      custom_action_->BindToValue(std::move(value_));
+    // If there is a dest, send it to action anyway (may not be needed by the
+    // action, but we generally don't know that.).
+    custom_action_->SetDest(dest_.get());
+
+    if (value_.has_value()) {
+      // If user gave us a value, send it to the action.
+      custom_action_->SetConstValue(std::move(value_));
     }
 
     if (!custom_type_) {
