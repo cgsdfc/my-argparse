@@ -26,7 +26,7 @@ int main(int argc, char const* argv[]) {
                             // }));
 
   std::string output;
-  parser.add_argument("output", &output, "output to this file").arg();
+  parser.add_argument("output", &output, "output to this file").action("store");
   std::string input;
   parser.add_argument({"--input", "-i", "--input-file"}, &input, "input file");
 

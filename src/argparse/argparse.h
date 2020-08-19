@@ -909,7 +909,7 @@ class ArgumentImpl : public Argument {
         delegate_(delegate),
         group_(group) {
     InitNames(names);
-    InitKey();
+    InitKey(names.is_option);
     delegate_->OnArgumentCreated(this);
   }
 
@@ -1041,8 +1041,8 @@ class ArgumentImpl : public Argument {
   }
 
   // Initialize the key member. Must be called after InitNames().
-  void InitKey() {
-    if (!is_option()) {
+  void InitKey(bool is_option) {
+    if (!is_option) {
       key_ = kKeyForPositional;
       return;
     }
