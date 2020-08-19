@@ -12,12 +12,6 @@ struct AppendTraits<Appendable, int> {
 };
 
 int main(int argc, char const* argv[]) {
-  std::cout << ActionIsSupported<std::vector<int>, Actions::kAppend>{};
-  std::cout << ActionIsSupported<int, Actions::kAppend> {};
-  std::cout << ActionIsSupported<std::list<int>, Actions::kAppend> {};
-  std::cout << ActionIsSupported<Appendable, Actions::kAppend> {};
-  using ti = decltype(typeid(int));
-
   ArgumentParser parser(Options()
                             .description("a test program")
                             .bug_address("xxx@xxx.com"));
@@ -26,15 +20,11 @@ int main(int argc, char const* argv[]) {
                             // }));
 
   std::string output;
-  parser.add_argument("output", &output, "output to this file").action("store");
+  parser.add_argument("output", &output, "output to this file");
   std::string input;
-  parser.add_argument({"--input", "-i", "--input-file"}, &input, "input file");
-
-  auto student = parser.add_argument_group("student");
-  student.add_argument("--sid").help("student id");
-  // xxx: this is not supported.
-  student.add_argument("--cid");
-  parser.add_argument("file");
+  parser.add_argument("input", &input, "input file");
 
   parser.parse_args(argc, argv);
+  std::cout << "output: " << output << '\n';
+  std::cout << "input: " << input << '\n';
 }

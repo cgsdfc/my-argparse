@@ -111,6 +111,8 @@ class Status {
   explicit operator bool() const { return success_; }
   const std::string& message() const { return message_; }
 
+  void set_error(const std::string& msg) { message_ = msg; }
+
  private:
   bool success_;
   std::string message_;
@@ -1717,6 +1719,24 @@ class ArgumentParser : public ArgumentContainer {
   Options user_options_;
   std::unique_ptr<ArgumentHolder> holder_;
 };
+
+template <>
+struct TypeCallbackTraits<std::string> {
+  static void Run(const std::string& in, std::string* out, Status*) {
+    *out = in;
+  }
+};
+template <>
+struct TypeCallbackTraits<char> {
+  static void Run(const std::string& in, char* out, Status* status) {
+    if (in.size() != 1)
+      return status->set_error("char must be exactly one character");
+    if (!std::isprint(in[0]))
+      return status->set_error("char must be printable");
+    *out = in[0];
+  }
+};
+
 
 }  // namespace argparse
 
