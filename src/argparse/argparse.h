@@ -272,28 +272,27 @@ class CallbackFactory {
 
 // This is a meta-function that tests if A can be performed on T.
 template <typename T, Actions A, typename Enable = void>
-struct ActionIsSupported : std::false_type {};
+struct IsActionSupported : std::false_type {};
 
 // Store is always supported if T is copy-assignable.
 template <typename T>
-struct ActionIsSupported<T, Actions::kStore, void>
+struct IsActionSupported<T, Actions::kStore, void>
     : std::is_copy_assignable<T> {};
 
 // Store Const is supported only if Store is supported.
 template <typename T>
-struct ActionIsSupported<T, Actions::kStoreConst, void>
-    : ActionIsSupported<T, Actions::kStore, void> {};
+struct IsActionSupported<T, Actions::kStoreConst, void>
+    : IsActionSupported<T, Actions::kStore, void> {};
 
-// Append is supported if AppendTraits<T>::Append() is valid.
 template <typename T>
-struct ActionIsSupported<T,
+struct IsActionSupported<T,
                          Actions::kAppend,
                          std::enable_if_t<IsAppendSupported<T>{}>>
     : std::true_type {};
 
 // This is a meta-function that handles static-runtime mix of selecting action
 // factory.
-template <typename T, Actions A, bool Supported = ActionIsSupported<T, A>{}>
+template <typename T, Actions A, bool Supported = IsActionSupported<T, A>{}>
 struct CallbackFactorySelector;
 
 template <typename T, Actions A>
@@ -365,8 +364,6 @@ class ActionCallback {
   // For performing runtime type check.
   virtual std::type_index GetDestType() = 0;
   virtual std::type_index GetValueType() = 0;
-  // virtual bool NeedsDest() const { return true; }
-  // virtual bool NeedsValue() const { return false; }
 
   bool WorksWith(DestInfo* dest, TypeCallback* type) {
     // return GetDestType() == dest->GetDestType() &&
@@ -519,7 +516,6 @@ template <typename T, typename Traits = AppendTraits<T>>
 class AppendActionCallback
     : public ActionCallbackBase<T, typename Traits::ValueType> {
  private:
-  // using Traits = AppendTraits<T>;
   void RunImpl(std::any data) override {
     if (data.has_value())
       Traits::Append(this->dest(), this->ValueOf(data));

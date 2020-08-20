@@ -11,7 +11,7 @@ struct AppendTraits<Appendable> : std::true_type {
   static void Append(Appendable*, int i);
 };
 
-static_assert(ActionIsSupported<Appendable, Actions::kAppend>{});
+static_assert(IsActionSupported<Appendable, Actions::kAppend>{});
 
 int main(int argc, char const* argv[]) {
   ArgumentParser parser(Options()
