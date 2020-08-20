@@ -6,10 +6,12 @@ using namespace argparse;
 struct Appendable {};
 
 template <>
-struct AppendTraits<Appendable, int> {
-  using value_type = int;
-  static void Append(Appendable*, int&& i);
+struct AppendTraits<Appendable> : std::true_type {
+  using ValueType = int;
+  static void Append(Appendable*, int i);
 };
+
+static_assert(ActionIsSupported<Appendable, Actions::kAppend>{});
 
 int main(int argc, char const* argv[]) {
   ArgumentParser parser(Options()

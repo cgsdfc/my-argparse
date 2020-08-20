@@ -5,6 +5,7 @@
 #include <any>
 #include <cassert>
 #include <cstring>  // strlen()
+#include <deque>
 #include <functional>
 #include <list>
 #include <map>
@@ -215,19 +216,42 @@ using function_signature_t = std::conditional_t<
 
 }  // namespace detail
 
+// For STL-compatible T, default is:
 template <typename T>
-using ValueTypeOf = typename T::value_type;
+struct DefaultAppendTraits : std::true_type {
+  using ValueType = typename T::value_type;
 
-// This struct instructs us how to append Value to T.
-template <typename T, typename Value = typename T::value_type>
-struct AppendTraits {
-  using value_type = Value;
-
-  static void Append(T* obj, value_type&& item) {
+  static void Append(T* obj, ValueType&& item) {
     // By default use the push_back() method of T.
-    obj->push_back(std::forward<value_type>(item));
+    obj->push_back(std::forward<ValueType>(item));
   }
 };
+
+// This traits indicates whether T supports append operation and if it does,
+// tells us how to do the append.
+template <typename T>
+struct AppendTraits : std::false_type {}; // Not supported.
+
+// Extracted the bool value from AppendTraits.
+template <typename T>
+using IsAppendSupported = std::bool_constant<AppendTraits<T>{}>;
+
+// Get the value-type for a appendable, only use it when IsAppendSupported<T>.
+template <typename T>
+using ValueTypeOf = typename AppendTraits<T>::ValueType;
+
+// Specialized for STL containers.
+template <typename T>
+struct AppendTraits<std::vector<T>> : DefaultAppendTraits<std::vector<T>> {};
+template <typename T>
+struct AppendTraits<std::list<T>> : DefaultAppendTraits<std::list<T>> {};
+template <typename T>
+struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
+// std::string is not considered appendable, if you need that, use
+// std::vector<char>
+
+// For user's types, specialize AppendTraits<>, and if your type is
+// standard-compatible, inherits from DefaultAppendTraits<>.
 
 // A more complete module to handle user's callbacks.
 enum class Actions {
@@ -264,10 +288,8 @@ struct ActionIsSupported<T, Actions::kStoreConst, void>
 template <typename T>
 struct ActionIsSupported<T,
                          Actions::kAppend,
-                         std::void_t<decltype(
-                             // static_cast<void (*)(T*, typename
-                             // AppendTraits<T>::value_type&&)>(
-                             &AppendTraits<T>::Append)>> : std::true_type {};
+                         std::enable_if_t<IsAppendSupported<T>{}>>
+    : std::true_type {};
 
 // This is a meta-function that handles static-runtime mix of selecting action
 // factory.
@@ -493,20 +515,21 @@ class StoreConstActionCallback : public ActionCallbackBase<T, V> {
   void RunImpl(std::any) override { *(this->dest()) = this->ConstValue(); }
 };
 
-template <typename T, typename V = ValueTypeOf<T>>
-class AppendActionCallback : public ActionCallbackBase<T, V> {
+template <typename T, typename Traits = AppendTraits<T>>
+class AppendActionCallback
+    : public ActionCallbackBase<T, typename Traits::ValueType> {
  private:
-  using Traits = AppendTraits<T, V>;
+  // using Traits = AppendTraits<T>;
   void RunImpl(std::any data) override {
     if (data.has_value())
       Traits::Append(this->dest(), this->ValueOf(data));
   }
 };
 
-template <typename T, typename V = ValueTypeOf<T>>
-class AppendConstActionCallback : public ActionCallbackBase<T, V> {
+template <typename T, typename Traits = AppendTraits<T>>
+class AppendConstActionCallback
+    : public ActionCallbackBase<T, typename Traits::ValueType> {
  private:
-  using Traits = AppendTraits<T, V>;
   void RunImpl(std::any) override {
     Traits::Append(this->dest(), this->ConstValue());
   }
