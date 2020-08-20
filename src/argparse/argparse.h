@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <any>
 #include <cassert>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>  // strlen()
 #include <deque>
 #include <functional>
@@ -161,16 +163,22 @@ class Context {
   std::any result_;
 };
 
-// Why we need a default version?
-// During type-erasure of dest, a DestUserCallback will always be created, which
-// makes use of this struct. When user actually use type or action, this isn't
-// needed logically but needed syntatically.
-template <typename T>
-struct TypeCallbackTraits {
+// The default impl for the types we know (bulitin-types like int).
+// This traits shouldn't be overriden by users.
+template <typename T, typename SFINAE = void>
+struct DefaultTypeCallbackTraits {
+  // This is selected when user use a custom type without specializing
+  // TypeCallbackTraits.
   static void Run(const std::string&, T*, Status*) {
     DCHECK2(false, "Please specialize TypeCallbackTrait<T> for your type");
   }
 };
+
+// By default, use the traits defined by the library for builtin types.
+// The user can specialize this to provide traits for their custom types
+// or override global (existing) types.
+template <typename T>
+struct TypeCallbackTraits : DefaultTypeCallbackTraits<T> {};
 
 // This will format an error string saying that:
 // cannot parse `value' into `type_name'.
@@ -678,14 +686,14 @@ struct Type {
 };
 
 inline Actions StringToActions(const std::string& str) {
-  static const std::map<std::string, Actions> map{
+  static const std::map<std::string, Actions> kStringToActions{
       {"store", Actions::kStore},
       {"store_const", Actions::kStoreConst},
       {"append", Actions::kAppend},
       {"append_const", Actions::kAppendConst},
   };
-  auto iter = map.find(str);
-  DCHECK2(iter != map.end(), "Unknown action string passed in");
+  auto iter = kStringToActions.find(str);
+  DCHECK2(iter != kStringToActions.end(), "Unknown action string passed in");
   return iter->second;
 }
 
@@ -1739,14 +1747,16 @@ class ArgumentParser : public ArgumentContainer {
   std::unique_ptr<ArgumentHolder> holder_;
 };
 
+// wstring is not supported now.
 template <>
-struct TypeCallbackTraits<std::string> {
+struct DefaultTypeCallbackTraits<std::string> {
   static void Run(const std::string& in, std::string* out, Status*) {
     *out = in;
   }
 };
+// char is an unquoted single character.
 template <>
-struct TypeCallbackTraits<char> {
+struct DefaultTypeCallbackTraits<char> {
   static void Run(const std::string& in, char* out, Status* status) {
     if (in.size() != 1)
       return status->set_error("char must be exactly one character");
@@ -1755,7 +1765,43 @@ struct TypeCallbackTraits<char> {
     *out = in[0];
   }
 };
+template <>
+struct DefaultTypeCallbackTraits<bool> {
+  static void Run(const std::string& in, bool* out, Status* status) {
+    static const std::map<std::string, bool> kStringToBools{
+        {"true", true},   {"True", true},   {"1", true},
+        {"false", false}, {"False", false}, {"0", false},
+    };
+    auto iter = kStringToBools.find(in);
+    if (iter == kStringToBools.end())
+      return status->set_error("Not a valid bool value");
+    *out= iter->second;
+  }
+};
 
+template <typename T, T (*Func)(const char*, char**)>
+struct FloatingPointTypeCallbackTraits {
+  static void Run(const std::string& in, T* out, Status* status) {
+    char* str_end;
+    const char* str = in.c_str();
+    T result = Func(str, &str_end);
+    if (result == 0 && str_end == str)
+      return status->set_error("Not a floating point number");
+    if (errno == ERANGE)
+      return status->set_error("Floating point value of out range");
+    *out = result;
+  }
+};
+
+template <>
+struct DefaultTypeCallbackTraits<float>
+    : FloatingPointTypeCallbackTraits<float, std::strtof> {};
+template <>
+struct DefaultTypeCallbackTraits<double>
+    : FloatingPointTypeCallbackTraits<double, std::strtod> {};
+template <>
+struct DefaultTypeCallbackTraits<long double>
+    : FloatingPointTypeCallbackTraits<long double, std::strtold> {};
 
 }  // namespace argparse
 
