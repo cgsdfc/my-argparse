@@ -1775,34 +1775,52 @@ struct DefaultTypeCallbackTraits<bool> {
     };
     auto iter = kStringToBools.find(in);
     if (iter == kStringToBools.end())
-      return status->set_error("Not a valid bool value");
+      return status->set_error("not a valid bool value");
     *out= iter->second;
   }
 };
 
-// Based on C++11's stoi,stod,stof etc.
-template <typename T, T (*Func)(const std::string&, std::size_t*)>
+template <typename T, typename Func, Func func>
 struct StoXTypeCallbackTraits {
   static void Run(const std::string& in, T* out, Status* status) {
     try {
-      *out = Func(in, nullptr);
-    } catch (std::invalid_argument& e) {
+      *out = func(in);
+    } catch (std::invalid_argument&) {
       status->set_error("not in a valid numeric format");
-    } catch (std::out_of_range& e) {
+    } catch (std::out_of_range&) {
       status->set_error("out of representable range");
     }
   }
 };
 
+// Based on C++11's stoi,stod,stof etc.
+template <typename T, T (*Func)(const std::string&, std::size_t*)>
+struct FloatTypeCallbackTraits
+    : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
+
+// Integral has a radix arg...
+template <typename T, T (*Func)(const std::string&, std::size_t*, int)>
+struct IntegralTypeCallbackTraits
+    : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
+
 template <>
 struct DefaultTypeCallbackTraits<float>
-    : StoXTypeCallbackTraits<float, std::stof> {};
+    : FloatTypeCallbackTraits<float, std::stof> {};
 template <>
 struct DefaultTypeCallbackTraits<double>
-    : StoXTypeCallbackTraits<double, std::stod> {};
+    : FloatTypeCallbackTraits<double, std::stod> {};
 template <>
 struct DefaultTypeCallbackTraits<long double>
-    : StoXTypeCallbackTraits<long double, std::stold> {};
+    : FloatTypeCallbackTraits<long double, std::stold> {};
+template <>
+struct DefaultTypeCallbackTraits<int>
+    : IntegralTypeCallbackTraits<int, std::stoi> {};
+template <>
+struct DefaultTypeCallbackTraits<long>
+    : IntegralTypeCallbackTraits<long, std::stol> {};
+template <>
+struct DefaultTypeCallbackTraits<long long>
+    : IntegralTypeCallbackTraits<long long, std::stoll> {};
 
 }  // namespace argparse
 
