@@ -29,4 +29,5 @@ int main(int argc, char const* argv[]) {
   parser.parse_args(argc, argv);
   std::cout << "output: " << output << '\n';
   std::cout << "input: " << input << '\n';
+
 }

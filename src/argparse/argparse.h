@@ -18,6 +18,7 @@
 #include <stdexcept>  // to define ArgumentError.
 #include <type_traits>
 #include <typeindex>  // We use type_index since it is copyable.
+#include <utility>
 #include <vector>
 
 #define DCHECK(expr) assert(expr)
@@ -1779,29 +1780,29 @@ struct DefaultTypeCallbackTraits<bool> {
   }
 };
 
-template <typename T, T (*Func)(const char*, char**)>
-struct FloatingPointTypeCallbackTraits {
+// Based on C++11's stoi,stod,stof etc.
+template <typename T, T (*Func)(const std::string&, std::size_t*)>
+struct StoXTypeCallbackTraits {
   static void Run(const std::string& in, T* out, Status* status) {
-    char* str_end;
-    const char* str = in.c_str();
-    T result = Func(str, &str_end);
-    if (result == 0 && str_end == str)
-      return status->set_error("Not a floating point number");
-    if (errno == ERANGE)
-      return status->set_error("Floating point value of out range");
-    *out = result;
+    try {
+      *out = Func(in, nullptr);
+    } catch (std::invalid_argument& e) {
+      status->set_error("not in a valid numeric format");
+    } catch (std::out_of_range& e) {
+      status->set_error("out of representable range");
+    }
   }
 };
 
 template <>
 struct DefaultTypeCallbackTraits<float>
-    : FloatingPointTypeCallbackTraits<float, std::strtof> {};
+    : StoXTypeCallbackTraits<float, std::stof> {};
 template <>
 struct DefaultTypeCallbackTraits<double>
-    : FloatingPointTypeCallbackTraits<double, std::strtod> {};
+    : StoXTypeCallbackTraits<double, std::stod> {};
 template <>
 struct DefaultTypeCallbackTraits<long double>
-    : FloatingPointTypeCallbackTraits<long double, std::strtold> {};
+    : StoXTypeCallbackTraits<long double, std::stold> {};
 
 }  // namespace argparse
 
