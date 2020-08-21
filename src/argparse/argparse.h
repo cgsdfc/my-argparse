@@ -1834,32 +1834,6 @@ struct STLNumberTypeCallbackTraits {
   }
 };
 
-// // Based on C++11's stoi,stod,stof etc.
-// template <typename T, T (*Func)(const std::string&, std::size_t*)>
-// struct FloatTypeCallbackTraits
-//     : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
-
-// // Integral has a radix arg...
-// template <typename T, T (*Func)(const std::string&, std::size_t*, int)>
-// struct IntegralTypeCallbackTraits
-//     : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
-
-// template <>
-// struct DefaultTypeCallbackTraits<float>
-//     : FloatTypeCallbackTraits<float, std::stof> {};
-// template <>
-// struct DefaultTypeCallbackTraits<double>
-//     : FloatTypeCallbackTraits<double, std::stod> {};
-// template <>
-// struct DefaultTypeCallbackTraits<long double>
-//     : FloatTypeCallbackTraits<long double, std::stold> {};
-// template <>
-// struct DefaultTypeCallbackTraits<int>
-//     : IntegralTypeCallbackTraits<int, std::stoi> {};
-// template <>
-// struct DefaultTypeCallbackTraits<long>
-//     : IntegralTypeCallbackTraits<long, std::stol> {};
-
 template <typename T>
 struct DefaultTypeCallbackTraits<T,
                                  std::enable_if_t<has_stl_number_parser_t<T>{}>>
