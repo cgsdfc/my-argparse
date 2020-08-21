@@ -14,8 +14,6 @@ struct AppendTraits<Appendable> : std::true_type {
 static_assert(IsActionSupported<Appendable, Actions::kAppend>{});
 
 int main(int argc, char const* argv[]) {
-  // auto func = stl_number_parser<double>()();
-  // func()
 
   ArgumentParser parser(Options()
                             .description("a test program")
@@ -24,9 +22,9 @@ int main(int argc, char const* argv[]) {
                             //   std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
                             // }));
 
-  std::string output;
+  double output;
   parser.add_argument("output", &output, "output to this file");
-  std::string input;
+  int input;
   parser.add_argument("input", &input, "input file");
 
   parser.parse_args(argc, argv);

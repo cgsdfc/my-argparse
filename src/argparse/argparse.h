@@ -1815,6 +1815,20 @@ template <>
 struct stl_number_parser<unsigned long long>
     : stl_integral_parser_t<unsigned long long, std::stoull> {};
 
+template <typename T, typename Parser>
+T StlParseNumberImpl(const std::string& in, std::false_type) {
+  return Parser()()(in, nullptr, 0);
+}
+template <typename T, typename Parser>
+T StlParseNumberImpl(const std::string& in, std::true_type) {
+  return Parser()()(in, nullptr);
+}
+template <typename T>
+T StlParseNumber(const std::string& in) {
+  return StlParseNumberImpl<T, stl_number_parser<T>>(
+      in, std::is_floating_point<T>{});
+}
+
 template <typename T>
 using has_stl_number_parser_t =
     std::bool_constant<bool(stl_number_parser<T>{})>;
@@ -1823,9 +1837,8 @@ template <typename T, typename Parser = stl_number_parser<T>>
 struct STLNumberTypeCallbackTraits {
   static_assert(has_stl_number_parser_t<T>{});
   static void Run(const std::string& in, T* out, Status* status) {
-    constexpr auto func = Parser();
     try {
-      *out = func(in);
+      *out = StlParseNumber<T>(in);
     } catch (std::invalid_argument&) {
       status->set_error("not in a valid numeric format");
     } catch (std::out_of_range&) {
