@@ -1780,10 +1780,12 @@ struct DefaultTypeCallbackTraits<bool> {
   }
 };
 
+// For std::stof,stod,stold.
 template <typename T, T (*func)(const std::string&, std::size_t*)>
 using stl_floating_point_parser_t =
     std::integral_constant<decltype(func), func>;
 
+// For std::stoi,stol,stoll,etc.
 template <typename T, T (*func)(const std::string&, std::size_t*, int)>
 using stl_integral_parser_t = std::integral_constant<decltype(func), func>;
 
@@ -1815,34 +1817,34 @@ template <>
 struct stl_number_parser<unsigned long long>
     : stl_integral_parser_t<unsigned long long, std::stoull> {};
 
-template <typename T, typename Parser>
-T StlParseNumberImpl(const std::string& in, std::false_type) {
-  return Parser()()(in, nullptr, 0);
-}
-template <typename T, typename Parser>
-T StlParseNumberImpl(const std::string& in, std::true_type) {
-  return Parser()()(in, nullptr);
-}
-template <typename T>
-T StlParseNumber(const std::string& in) {
-  return StlParseNumberImpl<T, stl_number_parser<T>>(
-      in, std::is_floating_point<T>{});
-}
-
 template <typename T>
 using has_stl_number_parser_t =
     std::bool_constant<bool(stl_number_parser<T>{})>;
 
-template <typename T, typename Parser = stl_number_parser<T>>
-struct STLNumberTypeCallbackTraits {
+template <typename T, typename stl_number_parser<T>::value_type func>
+T StlParseNumberImpl(const std::string& in, std::false_type) {
+  return func(in, nullptr, 0);
+}
+template <typename T, typename stl_number_parser<T>::value_type func>
+T StlParseNumberImpl(const std::string& in, std::true_type) {
+  return func(in, nullptr);
+}
+template <typename T>
+void StlParseNumber(const std::string& in, T* out) {
   static_assert(has_stl_number_parser_t<T>{});
+  *out = StlParseNumberImpl<T, stl_number_parser<T>{}>(
+      in, std::is_floating_point<T>{});
+}
+
+template <typename T>
+struct STLNumberTypeCallbackTraits {
   static void Run(const std::string& in, T* out, Status* status) {
     try {
-      *out = StlParseNumber<T>(in);
+      StlParseNumber(in, out);
     } catch (std::invalid_argument&) {
-      status->set_error("not in a valid numeric format");
+      status->set_error("invalid numeric format");
     } catch (std::out_of_range&) {
-      status->set_error("out of representable range");
+      status->set_error("numeric value out of range");
     }
   }
 };
