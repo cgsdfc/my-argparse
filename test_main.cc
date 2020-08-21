@@ -14,6 +14,9 @@ struct AppendTraits<Appendable> : std::true_type {
 static_assert(IsActionSupported<Appendable, Actions::kAppend>{});
 
 int main(int argc, char const* argv[]) {
+  // auto func = stl_number_parser<double>()();
+  // func()
+
   ArgumentParser parser(Options()
                             .description("a test program")
                             .bug_address("xxx@xxx.com"));

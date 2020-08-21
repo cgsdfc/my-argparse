@@ -1780,9 +1780,50 @@ struct DefaultTypeCallbackTraits<bool> {
   }
 };
 
-template <typename T, typename Func, Func func>
-struct StoXTypeCallbackTraits {
+template <typename T, T (*func)(const std::string&, std::size_t*)>
+using stl_floating_point_parser_t =
+    std::integral_constant<decltype(func), func>;
+
+template <typename T, T (*func)(const std::string&, std::size_t*, int)>
+using stl_integral_parser_t = std::integral_constant<decltype(func), func>;
+
+template <typename T>
+struct stl_number_parser : std::false_type {};
+
+template <>
+struct stl_number_parser<float>
+    : stl_floating_point_parser_t<float, std::stof> {};
+template <>
+struct stl_number_parser<double>
+    : stl_floating_point_parser_t<double, std::stod> {};
+template <>
+struct stl_number_parser<long double>
+    : stl_floating_point_parser_t<long double, std::stold> {};
+
+template <>
+struct stl_number_parser<int> : stl_integral_parser_t<int, std::stoi> {};
+template <>
+struct stl_number_parser<long> : stl_integral_parser_t<long, std::stol> {};
+template <>
+struct stl_number_parser<long long>
+    : stl_integral_parser_t<long long, std::stoll> {};
+
+template <>
+struct stl_number_parser<unsigned long>
+    : stl_integral_parser_t<unsigned long, std::stoul> {};
+template <>
+struct stl_number_parser<unsigned long long>
+    : stl_integral_parser_t<unsigned long long, std::stoull> {};
+
+template <typename T>
+using has_stl_number_parser_t =
+    std::bool_constant<bool(stl_number_parser<T>{})>;
+
+template <typename T, typename Parser = stl_number_parser<T>>
+struct STLNumberTypeCallbackTraits {
+  static_assert(has_stl_number_parser_t<T>{});
   static void Run(const std::string& in, T* out, Status* status) {
+    constexpr auto func = Parser();
     try {
       *out = func(in);
     } catch (std::invalid_argument&) {
@@ -1793,34 +1834,36 @@ struct StoXTypeCallbackTraits {
   }
 };
 
-// Based on C++11's stoi,stod,stof etc.
-template <typename T, T (*Func)(const std::string&, std::size_t*)>
-struct FloatTypeCallbackTraits
-    : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
+// // Based on C++11's stoi,stod,stof etc.
+// template <typename T, T (*Func)(const std::string&, std::size_t*)>
+// struct FloatTypeCallbackTraits
+//     : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
 
-// Integral has a radix arg...
-template <typename T, T (*Func)(const std::string&, std::size_t*, int)>
-struct IntegralTypeCallbackTraits
-    : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
+// // Integral has a radix arg...
+// template <typename T, T (*Func)(const std::string&, std::size_t*, int)>
+// struct IntegralTypeCallbackTraits
+//     : StoXTypeCallbackTraits<T, decltype(Func), Func> {};
 
-template <>
-struct DefaultTypeCallbackTraits<float>
-    : FloatTypeCallbackTraits<float, std::stof> {};
-template <>
-struct DefaultTypeCallbackTraits<double>
-    : FloatTypeCallbackTraits<double, std::stod> {};
-template <>
-struct DefaultTypeCallbackTraits<long double>
-    : FloatTypeCallbackTraits<long double, std::stold> {};
-template <>
-struct DefaultTypeCallbackTraits<int>
-    : IntegralTypeCallbackTraits<int, std::stoi> {};
-template <>
-struct DefaultTypeCallbackTraits<long>
-    : IntegralTypeCallbackTraits<long, std::stol> {};
-template <>
-struct DefaultTypeCallbackTraits<long long>
-    : IntegralTypeCallbackTraits<long long, std::stoll> {};
+// template <>
+// struct DefaultTypeCallbackTraits<float>
+//     : FloatTypeCallbackTraits<float, std::stof> {};
+// template <>
+// struct DefaultTypeCallbackTraits<double>
+//     : FloatTypeCallbackTraits<double, std::stod> {};
+// template <>
+// struct DefaultTypeCallbackTraits<long double>
+//     : FloatTypeCallbackTraits<long double, std::stold> {};
+// template <>
+// struct DefaultTypeCallbackTraits<int>
+//     : IntegralTypeCallbackTraits<int, std::stoi> {};
+// template <>
+// struct DefaultTypeCallbackTraits<long>
+//     : IntegralTypeCallbackTraits<long, std::stol> {};
+
+template <typename T>
+struct DefaultTypeCallbackTraits<T,
+                                 std::enable_if_t<has_stl_number_parser_t<T>{}>>
+    : STLNumberTypeCallbackTraits<T> {};
 
 }  // namespace argparse
 
