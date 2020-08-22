@@ -219,42 +219,42 @@ class Status {
 };
 
 // This is an internal class to communicate data/state between user's callback.
-class Context {
+struct Context {
  public:
   // Issue an error.
-  void error(const std::string& msg) {
-    state_.Error(msg);
-    status_ = Status(msg);
-  }
+  // void error(const std::string& msg) {
+  //   state_.Error(msg);
+  //   status_ = Status(msg);
+  // }
 
-  void print_usage() { return state_.Usage(); }
-  void print_help() { return state_.Help(stderr, 0); }
+  // void print_usage() { return state_.Usage(); }
+  // void print_help() { return state_.Help(stderr, 0); }
 
-  std::string& value() { return value_; }
-  const std::string& value() const { return value_; }
+  // std::string& value() { return value_; }
+  // const std::string& value() const { return value_; }
 
-  bool status_ok() const { return static_cast<bool>(status_); }
-  Status* status() { return &status_; }
+  // bool status_ok() const { return static_cast<bool>(status_); }
+  // Status* status() { return &status_; }
 
-  void set_result(std::any data) { result_ = std::move(data); }
-  std::any* result() { return &result_; }
-  std::any TakeResult() { return std::move(result_); }
+  // void set_result(std::any data) { result_ = std::move(data); }
+  // std::any* result() { return &result_; }
+  // std::any TakeResult() { return std::move(result_); }
 
-  // Whether a value is passed to this arg.
-  bool has_value() const { return has_value_; }
-  // TODO: impl this by making Argument an interface.
-  const Argument& argument() const { return *argument_; }
+  // // Whether a value is passed to this arg.
+  // bool has_value() const { return has_value_; }
+  // // TODO: impl this by making Argument an interface.
+  // const Argument& argument() const { return *argument_; }
 
   Context(const Argument* argument, const char* value, ArgpState state)
-      : has_value_(bool(value)), argument_(argument), state_(state) {
-    if (has_value())
+      : has_value(bool(value)), argument(argument), state(state) {
+    if (has_value)
       value_.assign(value);
   }
 
- private:
-  bool has_value_;
-  const Argument* argument_;
-  ArgpState state_;
+//  private:
+  const bool has_value;
+  const Argument* argument;
+  ArgpState state;
   std::string value_;
   Status status_;
   std::any result_;
@@ -277,14 +277,14 @@ struct DefaultTypeCallbackTraits {
 template <typename T>
 struct TypeCallbackTraits : DefaultTypeCallbackTraits<T> {};
 
-// This will format an error string saying that:
-// cannot parse `value' into `type_name'.
-inline std::string ReportError(const std::string& value,
-                               const char* type_name) {
-  std::ostringstream os;
-  os << "Cannot convert `" << value << "' into a value of type " << type_name;
-  return os.str();
-}
+// // This will format an error string saying that:
+// // cannot parse `value' into `type_name'.
+// inline std::string ReportError(const std::string& value,
+//                                const char* type_name) {
+//   std::ostringstream os;
+//   os << "Cannot convert `" << value << "' into a value of type " << type_name;
+//   return os.str();
+// }
 
 inline bool AnyHasType(const std::any& val, std::type_index type) {
   return type == val.type();
@@ -414,22 +414,6 @@ class DestInfo {
   void* ptr_ = nullptr;
 };
 
-// The most consice prototype of a TypeCallback.
-// User read the string, write the conversion result to T* and if failed, report
-// error using Status*.
-// The reason why the return value is not Status is for lambda, if you mix
-// return true and return "errmsg", the compiler can't deduct return type, which
-// forces you to write ->Status. Very ugly. And to indicate success, you must
-// return true, Very verbose. The Status* scheme, however, allow no tailing
-// return type and silence implies ok pattern. If you don't touch Status*, you
-// imply success. Only when you use it does it reports an error.
-// Like:
-// @code
-// [](const std::string& in, int* out, Status* status) { try { *out =
-// std::stoi(in); } catch (const std::exception& e) {
-// status->set_error(e.what());}
-// @endcode
-
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
 
@@ -447,14 +431,7 @@ class TypeCallback {
  public:
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
-
-  void Run(Context* ctx) {
-    DCHECK(ctx->has_value());
-    ctx->set_result(RunImpl(ctx->value(), ctx->status()));
-  }
-
- private:
-  virtual std::any RunImpl(const std::string& in, Status* status) = 0;
+  virtual void Run(Context* ctx) = 0;
 };
 
 // Impl a callback with the signature:
@@ -475,8 +452,8 @@ class ActionCallback {
   }
 
   void Run(Context* ctx) {
-    DCHECK(ctx->status_ok());
-    RunImpl(ctx->TakeResult());
+    // DCHECK(ctx->status_ok());
+    // RunImpl(ctx->TakeResult());
   }
 
   void SetDest(DestInfo* dest_info) {
@@ -499,48 +476,54 @@ class ActionCallback {
   std::any const_value_;
 };
 
+template <typename T>
+class TypeCallbackBase : public TypeCallback {
+ public:
+  std::type_index GetValueType() override { return typeid(T); }
+
+  void Run(Context* ctx) override {
+    DCHECK(ctx->has_value);
+    Result<T> result;
+    RunImpl(ctx->value_, &result);
+    if (result.has_value()) {
+      ctx->result_ = result.release_value();
+    } else if (result.has_error()) {
+      ctx->status_ = result.release_error();
+    }
+    // Result is empty..
+  }
+
+ private:
+  virtual void RunImpl(const std::string& in, Result<T>* out) = 0;
+};
+
 // A subclass that always return nullptr. Used for actions without a need of
 // value.
 class NullTypeCallback : public TypeCallback {
  public:
   NullTypeCallback() = default;
   std::type_index GetValueType() override { return typeid(void); }
-
- private:
-  std::any RunImpl(const std::string& in, Status* status) override {
-    return {};
-  }
+  void Run(Context*) override {}
 };
 
 // A subclass that parses string into value using a Traits.
 template <typename T>
-class DefaultTypeCallback : public TypeCallback {
- public:
-  std::type_index GetValueType() override { return typeid(T); }
-
+class DefaultTypeCallback : public TypeCallbackBase<T> {
  private:
-  std::any RunImpl(const std::string& in, Status* status) override {
-    // Result<T> result;
-    // TypeCallbackTraits<T>::Run(in, &result);
-    // if (result.has_error()) {
-    //   status->set_error(result.release_error());
-    //   return {};
-    // }
-    // return result.release_value();
+  void RunImpl(const std::string& in, Result<T>* out) override {
+    TypeCallbackTraits<T>::Run(in, out);
   }
 };
 
 template <typename T>
-class CustomTypeCallback : public TypeCallback {
+class CustomTypeCallback : public TypeCallbackBase<T> {
  public:
   using CallbackType = std::function<TypeCallbackPrototype<T>>;
   explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
  private:
-  std::any RunImpl(const std::string& in, Status* status) override {
-    // T value;
-    // std::invoke(callback_, in, &value, status);
-    // return value;
+  void RunImpl(const std::string& in, Result<T>* out) override {
+    std::invoke(callback_, in, out);
   }
 
   CallbackType callback_;
@@ -696,9 +679,10 @@ class CallbackRunnerImpl : public CallbackRunner {
       : type_(std::move(type)), action_(std::move(action)) {}
 
   void Run(Context* ctx, Delegate* delegate) override {
-    if (ctx->has_value())
+    if (ctx->has_value)
       type_->Run(ctx);
-    if (ctx->status_ok())
+
+    if (ctx->status_)
       action_->Run(ctx);
     else
       delegate->HandleError(ctx);
@@ -1927,7 +1911,7 @@ T StlParseNumberImpl(const std::string& in, std::true_type) {
   return func(in, nullptr);
 }
 template <typename T>
-void StlParseNumber(const std::string& in) {
+T StlParseNumber(const std::string& in) {
   static_assert(has_stl_number_parser_t<T>{});
   return StlParseNumberImpl<T, stl_number_parser<T>{}>(
       in, std::is_floating_point<T>{});

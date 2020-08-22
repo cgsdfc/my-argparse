@@ -28,7 +28,7 @@ int main(int argc, char const* argv[]) {
                             //   std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
                             // }));
 
-  double output;
+  std::string output;
   parser.add_argument("output", &output, "output to this file");
   int input;
   parser.add_argument("input", &input, "input file");
