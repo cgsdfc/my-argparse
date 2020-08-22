@@ -81,6 +81,10 @@ class Result {
   explicit Result(T&& val) : data_(std::move(val)) { DCHECK(has_value()); }
   explicit Result(const T& val) : data_(val) { DCHECK(has_value()); }
 
+  // For now just use default. If T can't be moved, will it still work?
+  Result(Result&&) = default;
+  Result& operator=(Result&&) = default;
+
   bool has_value() const { return data_.index() == kValueIndex; }
   bool has_error() const { return data_.index() == kErrorMsgIndex; }
 
@@ -133,9 +137,9 @@ class Result {
   }
   // right-valued caster.
   // Result<T> r; T v = std::move(r);
-  operator T() && { return release_value(); }
-  // const& caster.
-  operator const T&() const& { return get_value(); }
+  // operator T() && { return release_value(); }
+  // // const& caster.
+  // operator const T&() const& { return get_value(); }
 
   // Goes back to empty state.
   void reset() {
@@ -188,6 +192,7 @@ class ArgumentError final : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+// Internal class to represent error.
 class Status {
  public:
   // If succeeded, just return true, or if failed but nothing to say, just
@@ -216,27 +221,77 @@ class Status {
   explicit operator bool() const { return success_; }
   const std::string& message() const { return message_; }
 
-  void set_error(const std::string& msg) { message_ = msg; }
-
  private:
   bool success_;
   std::string message_;
 };
+
+// Status-NG.
+class Error {
+ public:
+  Error() { DCHECK(ok()); }
+  explicit Error(const char* msg) : msg_(msg) { DCHECK(msg); }
+  explicit Error(std::string&& msg) : msg_(std::move(msg)) {}
+  bool ok() const { return !has_error(); }
+  bool has_error() const { return msg_.has_value(); }
+
+ private:
+  std::optional<std::string> msg_;
+};
+
+// Our version of any.
+class Any {
+ public:
+  virtual ~Any() {}
+  virtual std::type_index GetType() = 0;
+};
+
+template <typename T>
+class AnyImpl : public Any {
+ public:
+  explicit AnyImpl(T&& val) : value_(std::move(val)) {}
+  explicit AnyImpl(const T& val) : value_(val) {}
+  ~AnyImpl() override {}
+  std::type_index GetType() override { return typeid(T); }
+
+  T ReleaseValue() { return MoveOrCopy(&value_); }
+
+  static AnyImpl* FromAny(Any* any) {
+    DCHECK(any && any->GetType() == typeid(T));
+    return static_cast<AnyImpl*>(any);
+  }
+
+ private:
+  T value_;
+};
+
+// Wrap T into Any.
+template <typename T>
+std::unique_ptr<Any> WrapAny(T&& val) {
+  return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
+}
+
+// Steal the T from Any.
+template <typename T>
+T ReleaseAny(Any* any) {
+  return AnyImpl<T>::FromAny(any)->ReleaseValue();
+}
 
 // This is an internal class to communicate data/state between user's callback.
 struct Context {
   Context(const Argument* argument, const char* value, ArgpState state)
       : has_value(bool(value)), argument(argument), state(state) {
     if (has_value)
-      value_.assign(value);
+      this->value.assign(value);
   }
 
   const bool has_value;
   const Argument* argument;
   ArgpState state;
-  std::string value_;
+  std::string value;
   Status status_;
   std::any result_;
+  std::unique_ptr<Any> any_;
 };
 
 // The default impl for the types we know (bulitin-types like int).
@@ -255,15 +310,6 @@ struct DefaultTypeCallbackTraits {
 // or override global (existing) types.
 template <typename T>
 struct TypeCallbackTraits : DefaultTypeCallbackTraits<T> {};
-
-// // This will format an error string saying that:
-// // cannot parse `value' into `type_name'.
-// inline std::string ReportError(const std::string& value,
-//                                const char* type_name) {
-//   std::ostringstream os;
-//   os << "Cannot convert `" << value << "' into a value of type " << type_name;
-//   return os.str();
-// }
 
 inline bool AnyHasType(const std::any& val, std::type_index type) {
   return type == val.type();
@@ -403,7 +449,7 @@ using TypeCallbackPrototypeThrows = T(const std::string&);
 
 // The prototype for action. An action normally does not report errors.
 template <typename T, typename V>
-using ActionCallbackPrototype = void(T*, std::optional<V>);
+using ActionCallbackPrototype = void(T*, Result<V>);
 
 // Perform data conversion..
 class TypeCallback {
@@ -411,48 +457,6 @@ class TypeCallback {
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
   virtual void Run(Context* ctx) = 0;
-};
-
-// Impl a callback with the signature:
-// void action(T* dest, std::optional<V> val);
-// T is called the DestType. V is called the ValueType.
-class ActionCallback {
- public:
-  virtual ~ActionCallback() {}
-  // For performing runtime type check.
-  virtual std::type_index GetDestType() = 0;
-  virtual std::type_index GetValueType() = 0;
-
-  bool WorksWith(DestInfo* dest, TypeCallback* type) {
-    // return GetDestType() == dest->GetDestType() &&
-    //        GetValueType() == type->GetValueType();
-    // TODO: check this at runtime.
-    return true;
-  }
-
-  void Run(Context* ctx) {
-    // DCHECK(ctx->status_ok());
-    // RunImpl(ctx->TakeResult());
-  }
-
-  void SetDest(DestInfo* dest_info) {
-    DCHECK(GetDestType() == dest_info->GetDestType());
-    dest_ = dest_info->ptr();
-  }
-
-  // Set an const value to this action (must be a valid value.)
-  void SetConstValue(std::any value) {
-    DCHECK(value.has_value());
-    DCHECK(AnyHasType(value, GetValueType()));
-    const_value_ = std::move(value);
-  }
-
- private:
-  virtual void RunImpl(std::any data) = 0;
-
- protected:
-  void* dest_ = nullptr;
-  std::any const_value_;
 };
 
 template <typename T>
@@ -463,7 +467,7 @@ class TypeCallbackBase : public TypeCallback {
   void Run(Context* ctx) override {
     DCHECK(ctx->has_value);
     Result<T> result;
-    RunImpl(ctx->value_, &result);
+    RunImpl(ctx->value, &result);
     if (result.has_value()) {
       ctx->result_ = result.release_value();
     } else if (result.has_error()) {
@@ -534,6 +538,42 @@ TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
       (detail::function_signature_t<Callback>*)nullptr);
 }
 
+// Impl a callback with the signature:
+// void action(T* dest, std::optional<V> val);
+// T is called the DestType. V is called the ValueType.
+class ActionCallback {
+ public:
+  virtual ~ActionCallback() {}
+  // For performing runtime type check.
+  virtual std::type_index GetDestType() = 0;
+  virtual std::type_index GetValueType() = 0;
+
+  bool WorksWith(DestInfo* dest, TypeCallback* type) {
+    // return GetDestType() == dest->GetDestType() &&
+    //        GetValueType() == type->GetValueType();
+    // TODO: check this at runtime.
+    return true;
+  }
+
+  virtual void Run(Context* ctx) = 0;
+
+  void SetDest(DestInfo* dest_info) {
+    DCHECK(GetDestType() == dest_info->GetDestType());
+    dest_ = dest_info->ptr();
+  }
+
+  // Set an const value to this action (must be a valid value.)
+  void SetConstValue(std::any value) {
+    DCHECK(value.has_value());
+    DCHECK(AnyHasType(value, GetValueType()));
+    const_value_ = std::move(value);
+  }
+
+ protected:
+  void* dest_ = nullptr;
+  std::any const_value_;
+};
+
 // A helper subclass that impl dest-type and value-type.
 template <typename T, typename V>
 class ActionCallbackBase : public ActionCallback {
@@ -544,7 +584,12 @@ class ActionCallbackBase : public ActionCallback {
   std::type_index GetDestType() override { return typeid(DestType); }
   std::type_index GetValueType() override { return typeid(ValueType); }
 
+  void Run(Context* ctx) override {
+    // convert Any to Result<T> and call RunImpl().
+  }
+
  protected:
+  virtual void RunImpl(Result<ValueType> result) = 0;
   // Helpers for subclass.
   // Access the dest (must be set).
   DestType* dest() {
@@ -568,33 +613,35 @@ class ActionCallbackBase : public ActionCallback {
 template <typename T, typename V = T>
 class StoreActionCallback : public ActionCallbackBase<T, V> {
  private:
-  void RunImpl(std::any data) override {
+  void RunImpl(Result<V> data) override {
     if (data.has_value())
-      *(this->dest()) = this->ValueOf(std::move(data));
+      *(this->dest()) = data.release_value();
   }
 };
 
 template <typename T, typename V = T>
 class StoreConstActionCallback : public ActionCallbackBase<T, V> {
  private:
-  void RunImpl(std::any) override { *(this->dest()) = this->ConstValue(); }
+  void RunImpl(Result<V>) override { *(this->dest()) = this->ConstValue(); }
 };
 
-template <typename T, typename Traits = AppendTraits<T>>
-class AppendActionCallback
-    : public ActionCallbackBase<T, typename Traits::ValueType> {
+template <typename T,
+          typename Traits = AppendTraits<T>,
+          typename ValueType = typename Traits::ValueType>
+class AppendActionCallback : public ActionCallbackBase<T, ValueType> {
  private:
-  void RunImpl(std::any data) override {
+  void RunImpl(Result<ValueType> data) override {
     if (data.has_value())
-      Traits::Append(this->dest(), this->ValueOf(data));
+      Traits::Append(this->dest(), data.release_value());
   }
 };
 
-template <typename T, typename Traits = AppendTraits<T>>
-class AppendConstActionCallback
-    : public ActionCallbackBase<T, typename Traits::ValueType> {
+template <typename T,
+          typename Traits = AppendTraits<T>,
+          typename V = typename Traits::ValueType>
+class AppendConstActionCallback : public ActionCallbackBase<T, V> {
  private:
-  void RunImpl(std::any) override {
+  void RunImpl(Result<V>) override {
     Traits::Append(this->dest(), this->ConstValue());
   }
 };
@@ -603,17 +650,14 @@ class AppendConstActionCallback
 template <typename T, typename V>
 class CustomActionCallback : public ActionCallbackBase<T, V> {
  public:
-  using CallbackType = std::function<void(T*, std::optional<V>)>;
-  explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {}
+  using CallbackType = std::function<ActionCallbackPrototype<T, V>>;
+  explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {
+    DCHECK(callback_);
+  }
 
  private:
-  void RunImpl(std::any data) override {
-    // User needs an optional.
-    std::optional<V> value;
-    if (data.has_value())
-      value.emplace(this->ValueOf(std::move(data)));
-    DCHECK(callback_);
-    std::invoke(callback_, this->dest(), std::move(value));
+  void RunImpl(Result<V> data) override {
+    std::invoke(callback_, this->dest(), std::move(data));
   }
 
   CallbackType callback_;
@@ -621,7 +665,7 @@ class CustomActionCallback : public ActionCallbackBase<T, V> {
 
 template <typename Callback, typename T, typename V>
 ActionCallback* CreateCustomActionCallbackImpl(Callback&& cb,
-                                               void (*)(T*, std::optional<V>)) {
+                                               void (*)(T*, Result<V>)) {
   return new CustomActionCallback<T, V>(std::forward<Callback>(cb));
 }
 
@@ -1836,7 +1880,7 @@ struct DefaultTypeCallbackTraits<bool> {
     auto iter = kStringToBools.find(in);
     if (iter == kStringToBools.end())
       return out->set_error("not a valid bool value");
-    *out= iter->second;
+    *out = iter->second;
   }
 };
 

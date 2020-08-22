@@ -33,9 +33,7 @@ int main(int argc, char const* argv[]) {
   int input;
   parser.add_argument("input", &input, "input file")
       .type([](const std::string& in, Result<int>* out) { out->set_value(1); })
-      .action([](int* out, std::optional<int> v) {
-
-      });
+      .action([](int* out, Result<int> in) { *out = in.get_value(); });
 
   parser.parse_args(argc, argv);
   std::cout << "output: " << output << '\n';
