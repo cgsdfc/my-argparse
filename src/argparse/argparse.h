@@ -20,6 +20,7 @@
 #include <type_traits>
 #include <typeindex>  // We use type_index since it is copyable.
 #include <utility>
+#include <variant>
 #include <vector>
 
 #define DCHECK(expr) assert(expr)
@@ -53,6 +54,101 @@ using ::argp_usage;
 using ::error_t;
 using ::program_invocation_name;
 using ::program_invocation_short_name;
+
+// Try to use move, fall back to copy.
+template <typename T>
+T MoveOrCopyImpl(T* val, std::true_type) {
+  return std::move(*val);
+}
+template <typename T>
+T MoveOrCopyImpl(T* val, std::false_type) {
+  return *val;
+}
+template <typename T>
+T MoveOrCopy(T* val) {
+  static_assert(std::is_copy_constructible<T>{} ||
+                std::is_move_constructible<T>{});
+  return MoveOrCopyImpl(val, std::is_move_constructible<T>{});
+}
+
+// Result<T> handles user' returned value and error using a union.
+template <typename T>
+class Result {
+ public:
+  // Default is empty (!has_value && !has_error).
+  Result() { DCHECK(empty()); }
+  // To hold a value.
+  explicit Result(T&& val) : data_(std::move(val)) { DCHECK(has_value()); }
+  explicit Result(const T& val) : data_(val) { DCHECK(has_value()); }
+
+  bool has_value() const { return data_.index() == kValueIndex; }
+  bool has_error() const { return data_.index() == kErrorMsgIndex; }
+
+  void set_error(const std::string& msg) {
+     data_.emplace<kErrorMsgIndex>(msg);
+     DCHECK(has_error());
+  }
+  void set_error(std::string&& msg) {
+    data_.emplace<kErrorMsgIndex>(std::move(msg));
+    DCHECK(has_error());
+  }
+  void set_value(const T& val) {
+     data_.emplace<kValueIndex>(val);
+     DCHECK(has_value());
+  }
+  void set_value(T&& val) {
+    data_.emplace<kValueIndex>(std::move(val));
+    DCHECK(has_value());
+  }
+
+  Result& operator=(const T& val) {
+    set_value(val);
+    return *this;
+  }
+  Result& operator=(T&& val) {
+    set_value(std::move(val));
+    return *this;
+  }
+
+  // Release the err-msg (if any). Keep in error state.
+  std::string release_error() {
+    DCHECK(has_error());
+    // We know that std::string is moveable.
+    return std::get<kErrorMsgIndex>(std::move(data_));
+  }
+  const std::string& get_error() const{
+    DCHECK(has_error());
+    return std::get<kErrorMsgIndex>(data_);
+  }
+
+  // Release the value, Keep in value state.
+  T release_value() {
+    DCHECK(has_value());
+    // TODO: move or copy.
+    // But we don't know T is moveable or not.
+    return std::get<kValueIndex>(MoveOrCopy(&data_));
+  }
+  const T& get_value() const {
+    DCHECK(has_value());
+    return std::get<kValueIndex>(data_);
+  }
+
+  // Goes back to empty state.
+  void reset() {
+    data_.emplace<kEmptyIndex>();
+    DCHECK(empty());
+  }
+
+ private:
+  bool empty() const { return kEmptyIndex == data_.index(); }
+  enum Indices {
+    kEmptyIndex,
+    kErrorMsgIndex,
+    kValueIndex,
+  };
+  // Special state is empty. A zero int.
+  std::variant<int, std::string, T> data_;
+};
 
 // Wrapper of argp_state.
 class ArgpState {
