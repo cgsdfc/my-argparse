@@ -131,10 +131,15 @@ class Result {
     DCHECK(has_value());
     return std::get<kValueIndex>(data_);
   }
+  // right-valued caster.
+  // Result<T> r; T v = std::move(r);
+  operator T() && { return release_value(); }
+  // const& caster.
+  operator const T&() const& { return get_value(); }
 
   // Goes back to empty state.
   void reset() {
-    data_.emplace<kEmptyIndex>(0);
+    data_.emplace<kEmptyIndex>(EmptyType{});
     DCHECK(empty());
   }
 
@@ -145,8 +150,8 @@ class Result {
     kErrorMsgIndex,
     kValueIndex,
   };
-  // Special state is empty. A zero int.
-  std::variant<int, std::string, T> data_;
+  struct EmptyType {};
+  std::variant<EmptyType, std::string, T> data_;
 };
 
 // Wrapper of argp_state.
@@ -220,38 +225,12 @@ class Status {
 
 // This is an internal class to communicate data/state between user's callback.
 struct Context {
- public:
-  // Issue an error.
-  // void error(const std::string& msg) {
-  //   state_.Error(msg);
-  //   status_ = Status(msg);
-  // }
-
-  // void print_usage() { return state_.Usage(); }
-  // void print_help() { return state_.Help(stderr, 0); }
-
-  // std::string& value() { return value_; }
-  // const std::string& value() const { return value_; }
-
-  // bool status_ok() const { return static_cast<bool>(status_); }
-  // Status* status() { return &status_; }
-
-  // void set_result(std::any data) { result_ = std::move(data); }
-  // std::any* result() { return &result_; }
-  // std::any TakeResult() { return std::move(result_); }
-
-  // // Whether a value is passed to this arg.
-  // bool has_value() const { return has_value_; }
-  // // TODO: impl this by making Argument an interface.
-  // const Argument& argument() const { return *argument_; }
-
   Context(const Argument* argument, const char* value, ArgpState state)
       : has_value(bool(value)), argument(argument), state(state) {
     if (has_value)
       value_.assign(value);
   }
 
-//  private:
   const bool has_value;
   const Argument* argument;
   ArgpState state;
