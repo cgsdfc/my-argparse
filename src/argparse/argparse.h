@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>  // strlen()
 #include <deque>
+#include <fstream>
 #include <functional>
 #include <list>
 #include <map>
@@ -511,7 +512,7 @@ class StoreActionCallback : public ActionCallbackBase<T, V> {
  private:
   void RunImpl(std::any data) override {
     if (data.has_value())
-      *(this->dest()) = this->ValueOf(data);
+      *(this->dest()) = this->ValueOf(std::move(data));
   }
 };
 
@@ -1853,6 +1854,11 @@ template <typename T>
 struct DefaultTypeCallbackTraits<T,
                                  std::enable_if_t<has_stl_number_parser_t<T>{}>>
     : STLNumberTypeCallbackTraits<T> {};
+
+// template <>
+// struct DefaultTypeCallbackTraits<std::ofstream> {
+
+// };
 
 }  // namespace argparse
 
