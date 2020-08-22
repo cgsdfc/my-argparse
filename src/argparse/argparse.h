@@ -267,14 +267,21 @@ class AnyImpl : public Any {
 
 // Wrap T into Any.
 template <typename T>
-std::unique_ptr<Any> WrapAny(T&& val) {
-  return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
+std::unique_ptr<Any> WrapAny(Result<T>* result) {
+  std::unique_ptr<Any> any;
+  if (result->has_value())
+    any.reset(new AnyImpl<T>(result->release_value()));
+  return any;
+  // return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
 }
 
 // Steal the T from Any.
 template <typename T>
-T ReleaseAny(Any* any) {
-  return AnyImpl<T>::FromAny(any)->ReleaseValue();
+void UnwrapAny(std::unique_ptr<Any> any, Result<T>* out) {
+  if (any) {
+    auto* any_impl = AnyImpl<T>::FromAny(any.get());
+    out->set_value(any_impl->ReleaseValue());
+  }
 }
 
 // This is an internal class to communicate data/state between user's callback.
@@ -454,9 +461,14 @@ using ActionCallbackPrototype = void(T*, Result<V>);
 // Perform data conversion..
 class TypeCallback {
  public:
+  struct Results {
+    bool has_error = false;
+    std::unique_ptr<Any> value;
+    std::string msg;
+  };
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
-  virtual void Run(Context* ctx) = 0;
+  virtual void Run(const std::string& in, Results* out) {}
 };
 
 template <typename T>
@@ -464,16 +476,17 @@ class TypeCallbackBase : public TypeCallback {
  public:
   std::type_index GetValueType() override { return typeid(T); }
 
-  void Run(Context* ctx) override {
-    DCHECK(ctx->has_value);
+  void Run(const std::string& in, Results* out) override {
     Result<T> result;
-    RunImpl(ctx->value, &result);
+    RunImpl(in, &result);
+
     if (result.has_value()) {
-      ctx->result_ = result.release_value();
+      out->value = WrapAny(&result);
+      out->has_error = false;
     } else if (result.has_error()) {
-      ctx->status_ = result.release_error();
+      out->msg = result.release_error();
+      out->has_error = true;
     }
-    // Result is empty..
   }
 
  private:
@@ -486,7 +499,6 @@ class NullTypeCallback : public TypeCallback {
  public:
   NullTypeCallback() = default;
   std::type_index GetValueType() override { return typeid(void); }
-  void Run(Context*) override {}
 };
 
 // A subclass that parses string into value using a Traits.
@@ -555,7 +567,7 @@ class ActionCallback {
     return true;
   }
 
-  virtual void Run(Context* ctx) = 0;
+  virtual void Run(std::unique_ptr<Any> any) = 0;
 
   void SetDest(DestInfo* dest_info) {
     DCHECK(GetDestType() == dest_info->GetDestType());
@@ -584,8 +596,10 @@ class ActionCallbackBase : public ActionCallback {
   std::type_index GetDestType() override { return typeid(DestType); }
   std::type_index GetValueType() override { return typeid(ValueType); }
 
-  void Run(Context* ctx) override {
-    // convert Any to Result<T> and call RunImpl().
+  void Run(std::unique_ptr<Any> data) override {
+    Result<V> result;
+    UnwrapAny(std::move(data), &result);
+    RunImpl(std::move(result));
   }
 
  protected:
@@ -681,7 +695,7 @@ class CallbackRunner {
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void HandleError(Context* ctx) = 0;
+    virtual void HandleError(std::string msg) = 0;
   };
   virtual void Run(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
@@ -702,13 +716,13 @@ class CallbackRunnerImpl : public CallbackRunner {
       : type_(std::move(type)), action_(std::move(action)) {}
 
   void Run(Context* ctx, Delegate* delegate) override {
+    TypeCallback::Results results;
     if (ctx->has_value)
-      type_->Run(ctx);
-
-    if (ctx->status_)
-      action_->Run(ctx);
+      type_->Run(ctx->value, &results);
+    if (results.has_error)
+      delegate->HandleError(std::move(results.msg));
     else
-      delegate->HandleError(ctx);
+      action_->Run(std::move(results.value));
   }
 
  private:
@@ -1662,9 +1676,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   }
 
   // CallbackRunner::Delegate:
-  void HandleError(Context* ctx) override {
-    // TODO:
-  }
+  void HandleError(std::string msg) override {}
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
