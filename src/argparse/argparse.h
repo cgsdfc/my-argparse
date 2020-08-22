@@ -763,7 +763,7 @@ struct Type {
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
-    callback = CreateCustomTypeCallback(std::forward<Callback>(cb));
+    callback.reset(CreateCustomTypeCallback(std::forward<Callback>(cb)));
   }
 };
 
