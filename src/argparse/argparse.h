@@ -85,19 +85,19 @@ class Result {
   bool has_error() const { return data_.index() == kErrorMsgIndex; }
 
   void set_error(const std::string& msg) {
-     data_.emplace<kErrorMsgIndex>(msg);
+     data_.template emplace<kErrorMsgIndex>(msg);
      DCHECK(has_error());
   }
   void set_error(std::string&& msg) {
-    data_.emplace<kErrorMsgIndex>(std::move(msg));
+    data_.template emplace<kErrorMsgIndex>(std::move(msg));
     DCHECK(has_error());
   }
   void set_value(const T& val) {
-     data_.emplace<kValueIndex>(val);
+     data_.template emplace<kValueIndex>(val);
      DCHECK(has_value());
   }
   void set_value(T&& val) {
-    data_.emplace<kValueIndex>(std::move(val));
+    data_.template emplace<kValueIndex>(std::move(val));
     DCHECK(has_value());
   }
 
@@ -124,7 +124,6 @@ class Result {
   // Release the value, Keep in value state.
   T release_value() {
     DCHECK(has_value());
-    // TODO: move or copy.
     // But we don't know T is moveable or not.
     return std::get<kValueIndex>(MoveOrCopy(&data_));
   }
@@ -135,7 +134,7 @@ class Result {
 
   // Goes back to empty state.
   void reset() {
-    data_.emplace<kEmptyIndex>();
+    data_.emplace<kEmptyIndex>(0);
     DCHECK(empty());
   }
 
@@ -267,7 +266,7 @@ template <typename T, typename SFINAE = void>
 struct DefaultTypeCallbackTraits {
   // This is selected when user use a custom type without specializing
   // TypeCallbackTraits.
-  static void Run(const std::string&, T*, Status*) {
+  static void Run(const std::string&, Result<T>* out) {
     DCHECK2(false, "Please specialize TypeCallbackTrait<T> for your type");
   }
 };
@@ -290,9 +289,6 @@ inline std::string ReportError(const std::string& value,
 inline bool AnyHasType(const std::any& val, std::type_index type) {
   return type == val.type();
 }
-
-// template <typename T>
-// using InternalUserCallback = std::function<Status(const Context&, T*)>;
 
 namespace detail {
 // clang-format off
@@ -435,7 +431,7 @@ class DestInfo {
 // @endcode
 
 template <typename T>
-using TypeCallbackPrototype = void(const std::string&, T*, Status*);
+using TypeCallbackPrototype = void(const std::string&, Result<T>*);
 
 // There is an alternative for those using exception.
 // You convert string into T and throw ArgumentError if something bad happened.
@@ -524,9 +520,13 @@ class DefaultTypeCallback : public TypeCallback {
 
  private:
   std::any RunImpl(const std::string& in, Status* status) override {
-    T value;
-    TypeCallbackTraits<T>::Run(in, &value, status);
-    return value;
+    // Result<T> result;
+    // TypeCallbackTraits<T>::Run(in, &result);
+    // if (result.has_error()) {
+    //   status->set_error(result.release_error());
+    //   return {};
+    // }
+    // return result.release_value();
   }
 };
 
@@ -538,9 +538,9 @@ class CustomTypeCallback : public TypeCallback {
 
  private:
   std::any RunImpl(const std::string& in, Status* status) override {
-    T value;
-    std::invoke(callback_, in, &value, status);
-    return value;
+    // T value;
+    // std::invoke(callback_, in, &value, status);
+    // return value;
   }
 
   CallbackType callback_;
@@ -555,11 +555,11 @@ TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
 template <typename Callback, typename T>
 TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
                                            TypeCallbackPrototypeThrows<T>*) {
-  auto adapter = [cb](const std::string& in, T* out, Status* status) {
+  auto adapter = [cb](const std::string& in, Result<T>* out) {
     try {
       *out = std::invoke(cb, in);
     } catch (const ArgumentError& e) {
-      *status = e.what();
+      out->set_error(e.what());
     }
   };
   return new CustomTypeCallback<T>(adapter);
@@ -1848,31 +1848,31 @@ class ArgumentParser : public ArgumentContainer {
 // wstring is not supported now.
 template <>
 struct DefaultTypeCallbackTraits<std::string> {
-  static void Run(const std::string& in, std::string* out, Status*) {
+  static void Run(const std::string& in, Result<std::string>* out) {
     *out = in;
   }
 };
 // char is an unquoted single character.
 template <>
 struct DefaultTypeCallbackTraits<char> {
-  static void Run(const std::string& in, char* out, Status* status) {
+  static void Run(const std::string& in, Result<char>* out) {
     if (in.size() != 1)
-      return status->set_error("char must be exactly one character");
+      return out->set_error("char must be exactly one character");
     if (!std::isprint(in[0]))
-      return status->set_error("char must be printable");
+      return out->set_error("char must be printable");
     *out = in[0];
   }
 };
 template <>
 struct DefaultTypeCallbackTraits<bool> {
-  static void Run(const std::string& in, bool* out, Status* status) {
+  static void Run(const std::string& in, Result<bool>* out) {
     static const std::map<std::string, bool> kStringToBools{
         {"true", true},   {"True", true},   {"1", true},
         {"false", false}, {"False", false}, {"0", false},
     };
     auto iter = kStringToBools.find(in);
     if (iter == kStringToBools.end())
-      return status->set_error("not a valid bool value");
+      return out->set_error("not a valid bool value");
     *out= iter->second;
   }
 };
@@ -1927,21 +1927,21 @@ T StlParseNumberImpl(const std::string& in, std::true_type) {
   return func(in, nullptr);
 }
 template <typename T>
-void StlParseNumber(const std::string& in, T* out) {
+void StlParseNumber(const std::string& in) {
   static_assert(has_stl_number_parser_t<T>{});
-  *out = StlParseNumberImpl<T, stl_number_parser<T>{}>(
+  return StlParseNumberImpl<T, stl_number_parser<T>{}>(
       in, std::is_floating_point<T>{});
 }
 
 template <typename T>
 struct STLNumberTypeCallbackTraits {
-  static void Run(const std::string& in, T* out, Status* status) {
+  static void Run(const std::string& in, Result<T>* out) {
     try {
-      StlParseNumber(in, out);
+      *out = StlParseNumber<T>(in);
     } catch (std::invalid_argument&) {
-      status->set_error("invalid numeric format");
+      out->set_error("invalid numeric format");
     } catch (std::out_of_range&) {
-      status->set_error("numeric value out of range");
+      out->set_error("numeric value out of range");
     }
   }
 };
