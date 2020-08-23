@@ -84,8 +84,8 @@ ArgumentImpl::ArgumentImpl(Delegate* delegate, const Names& names, int group)
 }
 
 void ArgumentImpl::CompileToArgpOptions(
-    std::vector<ArgpOption>* options) const {
-  ArgpOption opt{};
+    std::vector<argp_option>* options) const {
+  argp_option opt{};
   opt.doc = doc();
   opt.group = group();
   opt.name = name();
@@ -101,8 +101,8 @@ void ArgumentImpl::CompileToArgpOptions(
   // TODO: handle alias correctly. Add all aliases.
   for (auto first = long_names_.begin() + 1, last = long_names_.end();
        first != last; ++first) {
-    ArgpOption opt_alias;
-    std::memcpy(&opt_alias, &opt, sizeof(ArgpOption));
+    argp_option opt_alias;
+    std::memcpy(&opt_alias, &opt, sizeof(argp_option));
     opt.name = first->c_str();
     opt.flags = OPTION_ALIAS;
     options->push_back(opt_alias);
@@ -166,7 +166,7 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
 }
 
 void ArgumentHolderImpl::CompileToArgpOptions(
-    std::vector<ArgpOption>* options) {
+    std::vector<argp_option>* options) {
   if (arguments_.empty())
     return options->push_back({});
 
@@ -277,7 +277,9 @@ error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
   return 0;
 }
 
-char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key, const char* text, void* input) {
+char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
+                                                 const char* text,
+                                                 void* input) {
   if (!input || !text)
     return (char*)text;
   auto* self = reinterpret_cast<ArgpParserImpl*>(input);

@@ -24,7 +24,7 @@
 #include <vector>
 
 #define DCHECK(expr) assert(expr)
-#define DCHECK2(expr, msg) assert(expr && msg)
+#define DCHECK2(expr, msg) assert(expr&& msg)
 
 namespace argparse {
 
@@ -38,7 +38,6 @@ class Options;
 class ActionCallback;
 class TypeCallback;
 
-using ArgpOption = ::argp_option;
 using ArgpProgramVersionCallback = decltype(::argp_program_version_hook);
 using ::argp;
 using ::argp_error;
@@ -89,16 +88,16 @@ class Result {
   bool has_error() const { return data_.index() == kErrorMsgIndex; }
 
   void set_error(const std::string& msg) {
-     data_.template emplace<kErrorMsgIndex>(msg);
-     DCHECK(has_error());
+    data_.template emplace<kErrorMsgIndex>(msg);
+    DCHECK(has_error());
   }
   void set_error(std::string&& msg) {
     data_.template emplace<kErrorMsgIndex>(std::move(msg));
     DCHECK(has_error());
   }
   void set_value(const T& val) {
-     data_.template emplace<kValueIndex>(val);
-     DCHECK(has_value());
+    data_.template emplace<kValueIndex>(val);
+    DCHECK(has_value());
   }
   void set_value(T&& val) {
     data_.template emplace<kValueIndex>(std::move(val));
@@ -120,7 +119,7 @@ class Result {
     // We know that std::string is moveable.
     return std::get<kErrorMsgIndex>(std::move(data_));
   }
-  const std::string& get_error() const{
+  const std::string& get_error() const {
     DCHECK(has_error());
     return std::get<kErrorMsgIndex>(data_);
   }
@@ -309,7 +308,7 @@ struct DefaultAppendTraits : std::true_type {
 // This traits indicates whether T supports append operation and if it does,
 // tells us how to do the append.
 template <typename T>
-struct AppendTraits : std::false_type {}; // Not supported.
+struct AppendTraits : std::false_type {};  // Not supported.
 
 // Extracted the bool value from AppendTraits.
 template <typename T>
@@ -493,9 +492,6 @@ TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
       (detail::function_signature_t<Callback>*)nullptr);
 }
 
-// Impl a callback with the signature:
-// void action(T* dest, std::optional<V> val);
-// T is called the DestType. V is called the ValueType.
 class ActionCallback {
  public:
   virtual ~ActionCallback() {}
@@ -917,7 +913,8 @@ class Argument {
   virtual bool IsOption() const = 0;
   virtual int GetKey() const = 0;
   virtual void FormatArgsDoc(std::ostream& os) const = 0;
-  virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) const = 0;
+  virtual void CompileToArgpOptions(
+      std::vector<argp_option>* options) const = 0;
   virtual bool AppearsBefore(const Argument* that) const = 0;
 
   virtual ~Argument() {}
@@ -984,7 +981,7 @@ class ArgumentImpl : public Argument {
     callback_resolver_.reset();
   }
 
-  void CompileToArgpOptions(std::vector<ArgpOption>* options) const override;
+  void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 
   bool AppearsBefore(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
@@ -1116,12 +1113,13 @@ class ArgpParser {
     virtual Argument* FindOptionalArgument(int key) = 0;
     virtual Argument* FindPositionalArgument(int index) = 0;
     virtual std::size_t PositionalArgumentCount() = 0;
-    virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) = 0;
+    virtual void CompileToArgpOptions(std::vector<argp_option>* options) = 0;
     virtual void GenerateArgsDoc(std::string* args_doc) = 0;
     virtual ~Delegate() {}
   };
 
   struct Options {
+    int flags = 0;
     const char* program_version = {};
     const char* description = {};
     const char* after_doc = {};
@@ -1129,7 +1127,6 @@ class ArgpParser {
     const char* bug_address = {};
     ArgpProgramVersionCallback program_version_callback = {};
     HelpFilterCallback help_filter;
-    int flags = 0;
   };
 
   // Initialize from a few options (user's options).
@@ -1163,7 +1160,7 @@ class ArgumentContainer {
   virtual Argument* AddArgument(Names names) = 0;
 };
 
-inline void PrintArgpOptionArray(const std::vector<ArgpOption>& options) {
+inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
   for (const auto& opt : options) {
     printf("name=%s, key=%d, arg=%s, doc=%s, group=%d\n", opt.name, opt.key,
            opt.arg, opt.doc, opt.group);
@@ -1242,7 +1239,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   // ArgpParser::Delegate:
   static constexpr int kAverageAliasCount = 4;
 
-  void CompileToArgpOptions(std::vector<ArgpOption>* options) override;
+  void CompileToArgpOptions(std::vector<argp_option>* options) override;
   void GenerateArgsDoc(std::string* args_doc) override;
 
   Argument* FindOptionalArgument(int key) override {
@@ -1274,10 +1271,10 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
     void IncRef() { ++members_; }
 
-    void CompileToArgpOption(std::vector<ArgpOption>* options) const {
+    void CompileToArgpOption(std::vector<argp_option>* options) const {
       if (!members_)
         return;
-      ArgpOption opt{};
+      argp_option opt{};
       opt.group = group_;
       opt.doc = header_.c_str();
       return options->push_back(opt);
@@ -1422,7 +1419,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   argp argp_ = {};
   std::string program_doc_;
   std::string args_doc_;
-  std::vector<ArgpOption> argp_options_;
+  std::vector<argp_option> argp_options_;
   HelpFilterCallback help_filter_;
 };
 
