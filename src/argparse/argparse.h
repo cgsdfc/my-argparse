@@ -988,8 +988,6 @@ class ArgumentImpl : public Argument {
   }
 
  private:
-  friend class ArgpParserImpl;
-
   enum Keys {
     kKeyForNothing = 0,
     kKeyForPositional = -1,
@@ -1352,15 +1350,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
 class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
  public:
   // When this is constructed, Delegate must have been added options.
-  explicit ArgpParserImpl(ArgpParser::Delegate* delegate)
-      : delegate_(delegate) {
-    argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
-    positional_count_ = delegate_->PositionalArgumentCount();
-    delegate_->CompileToArgpOptions(&argp_options_);
-    argp_.options = argp_options_.data();
-    delegate_->GenerateArgsDoc(&args_doc_);
-    argp_.args_doc = args_doc_.c_str();
-  }
+  explicit ArgpParserImpl(ArgpParser::Delegate* delegate);
 
   void Init(const Options& options) override;
   void ParseArgs(ArgArray args) override {
@@ -1398,8 +1388,6 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
     // ctx->state.ErrorF("error parsing argument %s: %s", )
   }
 
-  static constexpr unsigned kSpecialKeyMask = 0x1000000;
-
   error_t DoParse(int key, char* arg, ArgpState state);
 
   static error_t ArgpParserCallbackImpl(int key, char* arg, argp_state* state) {
@@ -1412,6 +1400,8 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
                                           void* input);
 
   unsigned positional_count() const { return positional_count_; }
+
+  static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
   int parser_flags_ = 0;
   unsigned positional_count_ = 0;

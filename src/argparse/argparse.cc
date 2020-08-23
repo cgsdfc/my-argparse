@@ -207,6 +207,16 @@ void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
   }
 }
 
+ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
+    : delegate_(delegate) {
+  argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
+  positional_count_ = delegate_->PositionalArgumentCount();
+  delegate_->CompileToArgpOptions(&argp_options_);
+  argp_.options = argp_options_.data();
+  delegate_->GenerateArgsDoc(&args_doc_);
+  argp_.args_doc = args_doc_.c_str();
+}
+
 void ArgpParserImpl::Init(const Options& options) {
   if (options.program_version)
     ::argp_program_version = options.program_version;
