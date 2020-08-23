@@ -1085,7 +1085,7 @@ enum class HelpFilterResult {
 using HelpFilterCallback =
     std::function<HelpFilterResult(const Argument&, std::string* text)>;
 
-using ProgramVersionCallback = std::function<void(std::FILE*)>;
+using ProgramVersionCallback = void(*)(std::FILE*, argp_state*);
 
 class ArgArray {
  public:
@@ -1125,7 +1125,7 @@ class ArgpParser {
     const char* description = {};
     const char* after_doc = {};
     const char* domain = {};
-    const char* bug_address = {};
+    const char* email = {};
     ProgramVersionCallback program_version_callback;
     HelpFilterCallback help_filter;
   };
@@ -1392,14 +1392,14 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
                                           const char* text,
                                           void* input);
 
-  static void ArgpProgramVersionHookImpl(FILE* file, argp_state* state) {
-    auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
-    printf("program hook, input ptr: %p\n", self);
-    if (self) {
-      //TODO: argp pass us nullptr input..
-      std::invoke(self->version_callback_, file);
-    }
-  }
+  // static void ArgpProgramVersionHookImpl(FILE* file, argp_state* state) {
+  //   auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
+  //   printf("program hook, input ptr: %p\n", self);
+  //   if (self) {
+  //     //TODO: argp pass us nullptr input..
+  //     std::invoke(self->version_callback_, file);
+  //   }
+  // }
 
   unsigned positional_count() const { return positional_count_; }
 
@@ -1413,7 +1413,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   std::string args_doc_;
   std::vector<argp_option> argp_options_;
   HelpFilterCallback help_filter_;
-  ProgramVersionCallback version_callback_;
+  // ProgramVersionCallback version_callback_;
 };
 
 inline std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
@@ -1457,7 +1457,7 @@ struct Options {
     return *this;
   }
   Options& email(const char* b) {
-    options.bug_address = b;
+    options.email = b;
     return *this;
   }
   Options& flags(Flags f) {

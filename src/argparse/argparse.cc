@@ -221,11 +221,10 @@ void ArgpParserImpl::Init(const Options& options) {
   if (options.program_version)
     argp_program_version = options.program_version;
   if (options.program_version_callback) {
-    argp_program_version_hook = &ArgpParserImpl::ArgpProgramVersionHookImpl;
-    version_callback_ = options.program_version_callback;
+    argp_program_version_hook = options.program_version_callback;
   }
-  if (options.bug_address)
-    ::argp_program_bug_address = options.bug_address;
+  if (options.email)
+    argp_program_bug_address = options.email;
   if (options.help_filter) {
     argp_.help_filter = &ArgpHelpFilterCallbackImpl;
     help_filter_ = options.help_filter;
