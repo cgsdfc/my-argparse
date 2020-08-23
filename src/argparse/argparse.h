@@ -296,9 +296,6 @@ struct Context {
   const Argument* argument;
   ArgpState state;
   std::string value;
-  Status status_;
-  std::any result_;
-  std::unique_ptr<Any> any_;
 };
 
 // The default impl for the types we know (bulitin-types like int).
@@ -461,14 +458,14 @@ using ActionCallbackPrototype = void(T*, Result<V>);
 // Perform data conversion..
 class TypeCallback {
  public:
-  struct Results {
+  struct ConversionResult {
     bool has_error = false;
     std::unique_ptr<Any> value;
     std::string msg;
   };
   virtual ~TypeCallback() {}
   virtual std::type_index GetValueType() = 0;
-  virtual void Run(const std::string& in, Results* out) {}
+  virtual void Run(const std::string& in, ConversionResult* out) {}
 };
 
 template <typename T>
@@ -476,16 +473,15 @@ class TypeCallbackBase : public TypeCallback {
  public:
   std::type_index GetValueType() override { return typeid(T); }
 
-  void Run(const std::string& in, Results* out) override {
+  void Run(const std::string& in, ConversionResult* out) override {
     Result<T> result;
     RunImpl(in, &result);
 
+    out->has_error = result.has_error();
     if (result.has_value()) {
       out->value = WrapAny(&result);
-      out->has_error = false;
     } else if (result.has_error()) {
       out->msg = result.release_error();
-      out->has_error = true;
     }
   }
 
@@ -695,7 +691,7 @@ class CallbackRunner {
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void HandleError(std::string msg) = 0;
+    virtual void HandleError(Context* ctx, std::string msg) = 0;
   };
   virtual void Run(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
@@ -716,11 +712,11 @@ class CallbackRunnerImpl : public CallbackRunner {
       : type_(std::move(type)), action_(std::move(action)) {}
 
   void Run(Context* ctx, Delegate* delegate) override {
-    TypeCallback::Results results;
+    TypeCallback::ConversionResult results;
     if (ctx->has_value)
       type_->Run(ctx->value, &results);
     if (results.has_error)
-      delegate->HandleError(std::move(results.msg));
+      delegate->HandleError(ctx, std::move(results.msg));
     else
       action_->Run(std::move(results.value));
   }
@@ -1658,8 +1654,6 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
     for (int i = arg_index; i < args.argc(); ++i) {
       rest->emplace_back(args[i]);
     }
-    // TODO: may just return bool. ctx.error() just call argp_error, don't store
-    // status.
     return false;
   }
 
@@ -1676,7 +1670,9 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   }
 
   // CallbackRunner::Delegate:
-  void HandleError(std::string msg) override {}
+  void HandleError(Context* ctx, std::string msg) override {
+    // ctx->state.ErrorF("error parsing argument %s: %s", )
+  }
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
