@@ -12,7 +12,13 @@ endif()
 
 include_directories(src)
 
+add_library(argparse 
+    src/argparse/argparse.h 
+    src/argparse/argparse.cc
+)
+
 add_executable(test_main test_main.cc)
+target_link_libraries(test_main argparse)
 
 find_package(GTest)
 add_executable(argparse_unittests src/argparse/argparse_unittests.cc)
