@@ -186,53 +186,6 @@ class ArgumentError final : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-// Internal class to represent error.
-class Status {
- public:
-  // If succeeded, just return true, or if failed but nothing to say, just
-  // return false.
-  /* implicit */ Status(bool success) : success_(success) {}
-
-  // If failed with a msg, just say the msg.
-  /* implicit */ Status(const std::string& message) : Status(false, message) {}
-
-  // This is needed since const char* => bool is higher than const char* =>
-  // std::string.
-  Status(const char* message) : Status(false, message) {}
-
-  // Or you prefer to do it canonically, use this.
-  Status(bool success, const std::string& message)
-      : success_(success), message_(message) {}
-
-  // Default to success.
-  Status() : Status(true) {}
-
-  Status(Status&& that) = default;
-
-  Status(const Status& that) = default;
-  Status& operator=(const Status& that) = default;
-
-  explicit operator bool() const { return success_; }
-  const std::string& message() const { return message_; }
-
- private:
-  bool success_;
-  std::string message_;
-};
-
-// Status-NG.
-class Error {
- public:
-  Error() { DCHECK(ok()); }
-  explicit Error(const char* msg) : msg_(msg) { DCHECK(msg); }
-  explicit Error(std::string&& msg) : msg_(std::move(msg)) {}
-  bool ok() const { return !has_error(); }
-  bool has_error() const { return msg_.has_value(); }
-
- private:
-  std::optional<std::string> msg_;
-};
-
 // Our version of any.
 class Any {
  public:
@@ -685,7 +638,7 @@ class CallbackRunner {
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void HandleError(Context* ctx, std::string msg) = 0;
+    virtual void HandleCallbackError(Context* ctx, const std::string& msg) = 0;
   };
   virtual void Run(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
@@ -710,7 +663,7 @@ class CallbackRunnerImpl : public CallbackRunner {
     if (ctx->has_value)
       type_->Run(ctx->value, &results);
     if (results.has_error)
-      delegate->HandleError(ctx, std::move(results.msg));
+      delegate->HandleCallbackError(ctx, results.msg);
     else
       action_->Run(std::move(results.value));
   }
@@ -1185,7 +1138,7 @@ class ArgpParser {
   virtual void ParseArgs(ArgArray args) = 0;
   // Parse args, collect unknown args into rest, don't exit, report error via
   // Status.
-  virtual Status ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
+  virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
     ParseArgs(args);
     return true;
   }
@@ -1419,8 +1372,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
     argp_parse(&argp_, args.argc(), args.argv(), parser_flags_, nullptr, this);
   }
 
-  Status ParseKnownArgs(ArgArray args,
-                        std::vector<std::string>* rest) override {
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override {
     int arg_index;
     error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
                                &arg_index, this);
@@ -1445,7 +1397,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   }
 
   // CallbackRunner::Delegate:
-  void HandleError(Context* ctx, std::string msg) override {
+  void HandleCallbackError(Context* ctx, const std::string& msg) override {
     // ctx->state.ErrorF("error parsing argument %s: %s", )
   }
 
@@ -1467,7 +1419,6 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   int parser_flags_ = 0;
   unsigned positional_count_ = 0;
   ArgpParser::Delegate* delegate_;
-  Status status_;
   argp argp_ = {};
   std::string program_doc_;
   std::string args_doc_;
