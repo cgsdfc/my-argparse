@@ -24,7 +24,7 @@
 #include <vector>
 
 #define DCHECK(expr) assert(expr)
-#define DCHECK2(expr, msg) assert(expr&& msg)
+#define DCHECK2(expr, msg) assert(expr && msg)
 
 namespace argparse {
 
@@ -135,15 +135,9 @@ class Result {
     DCHECK(has_value());
     return std::get<kValueIndex>(data_);
   }
-  // right-valued caster.
-  // Result<T> r; T v = std::move(r);
-  // operator T() && { return release_value(); }
-  // // const& caster.
-  // operator const T&() const& { return get_value(); }
-
   // Goes back to empty state.
   void reset() {
-    data_.emplace<kEmptyIndex>(EmptyType{});
+    data_.template emplace<kEmptyIndex>(EmptyType{});
     DCHECK(empty());
   }
 
@@ -267,20 +261,21 @@ class AnyImpl : public Any {
 
 // Wrap T into Any.
 template <typename T>
-std::unique_ptr<Any> WrapAny(Result<T>* result) {
-  std::unique_ptr<Any> any;
+void WrapAny(Result<T>* result, std::unique_ptr<Any>* out) {
   if (result->has_value())
-    any.reset(new AnyImpl<T>(result->release_value()));
-  return any;
-  // return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
+    out->reset(new AnyImpl<T>(result->release_value()));
+  else
+    out->reset();
 }
 
-// Steal the T from Any.
+// Steal the T from Any and store into Result<T>.
 template <typename T>
 void UnwrapAny(std::unique_ptr<Any> any, Result<T>* out) {
   if (any) {
     auto* any_impl = AnyImpl<T>::FromAny(any.get());
     out->set_value(any_impl->ReleaseValue());
+  } else {
+    out->reset();
   }
 }
 
@@ -479,7 +474,7 @@ class TypeCallbackBase : public TypeCallback {
 
     out->has_error = result.has_error();
     if (result.has_value()) {
-      out->value = WrapAny(&result);
+      WrapAny(&result, &out->value);
     } else if (result.has_error()) {
       out->msg = result.release_error();
     }
@@ -529,14 +524,13 @@ TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
 template <typename Callback, typename T>
 TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
                                            TypeCallbackPrototypeThrows<T>*) {
-  auto adapter = [cb](const std::string& in, Result<T>* out) {
+  return new CustomTypeCallback<T>([cb](const std::string& in, Result<T>* out) {
     try {
       *out = std::invoke(cb, in);
     } catch (const ArgumentError& e) {
       out->set_error(e.what());
     }
-  };
-  return new CustomTypeCallback<T>(adapter);
+  });
 }
 
 template <typename Callback>
@@ -968,9 +962,7 @@ class Argument {
   virtual CallbackRunner* GetCallbackRunner() = 0;
 
   virtual bool IsOption() const = 0;
-  virtual bool IsInitialized() const = 0;
   virtual int GetKey() const = 0;
-  virtual int GetGroup() const = 0;
   virtual void FormatArgsDoc(std::ostream& os) const = 0;
   virtual void CompileToArgpOptions(std::vector<ArgpOption>* options) const = 0;
   virtual bool AppearsBefore(const Argument* that) const = 0;
@@ -981,14 +973,7 @@ class Argument {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
  public:
-  ArgumentImpl(Delegate* delegate, const Names& names, int group)
-      : callback_resolver_(new CallbackResolverImpl()),
-        delegate_(delegate),
-        group_(group) {
-    InitNames(names);
-    InitKey(names.is_option);
-    delegate_->OnArgumentCreated(this);
-  }
+  ArgumentImpl(Delegate* delegate, const Names& names, int group);
 
   void SetHelpDoc(const char* help_doc) override {
     DCHECK(help_doc);
@@ -1001,9 +986,7 @@ class ArgumentImpl : public Argument {
     meta_var_ = meta_var;
   }
   bool IsOption() const override { return is_option(); }
-  bool IsInitialized() const override { return initialized(); }
   int GetKey() const override { return key(); }
-  int GetGroup() const override { return group(); }
 
   bool initialized() const { return key_ != 0; }
   int key() const { return key_; }
@@ -1272,7 +1255,8 @@ class ArgumentHolderImpl : public ArgumentHolder,
   Argument* AddArgumentToGroup(Names names, int group) override {
     // First check if this arg will conflict with existing ones.
     DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
-    DCHECK(group <= groups_.size());
+    DCHECK2(group <= groups_.size(), "No such group");
+    GroupFromID(group)->IncRef();
     Argument& arg = arguments_.emplace_back(this, names, group);
     return &arg;
   }
@@ -1335,7 +1319,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
         header_.push_back(':');
     }
 
-    void AddMember() { ++members_; }
+    void IncRef() { ++members_; }
 
     void CompileToArgpOption(std::vector<ArgpOption>* options) const {
       if (!members_)
@@ -1368,8 +1352,6 @@ class ArgumentHolderImpl : public ArgumentHolder,
   int NextOptionKey() override { return next_key_++; }
 
   void OnArgumentCreated(Argument* arg) override {
-    DCHECK(arg->IsInitialized());
-    GroupFromID(arg->GetGroup())->AddMember();
     if (arg->IsOption()) {
       bool inserted = optional_arguments_.emplace(arg->GetKey(), arg).second;
       DCHECK(inserted);
@@ -1422,7 +1404,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   // When this is constructed, Delegate must have been added options.
   explicit ArgpParserImpl(ArgpParser::Delegate* delegate)
       : delegate_(delegate) {
-    argp_.parser = &ArgpParserImpl::Callback;
+    argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
     positional_count_ = delegate_->PositionalArgumentCount();
     delegate_->CompileToArgpOptions(&argp_options_);
     argp_.options = argp_options_.data();
@@ -1469,14 +1451,16 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
 
-  error_t ParseImpl(int key, char* arg, ArgpState state);
+  error_t DoParse(int key, char* arg, ArgpState state);
 
-  static error_t Callback(int key, char* arg, argp_state* state) {
+  static error_t ArgpParserCallbackImpl(int key, char* arg, argp_state* state) {
     auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
-    return self->ParseImpl(key, arg, state);
+    return self->DoParse(key, arg, state);
   }
 
-  static char* HelpFilterImpl(int key, const char* text, void* input);
+  static char* ArgpHelpFilterCallbackImpl(int key,
+                                          const char* text,
+                                          void* input);
 
   unsigned positional_count() const { return positional_count_; }
 

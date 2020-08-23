@@ -73,6 +73,16 @@ void Names::InitOptions(std::initializer_list<const char*> names) {
     meta_var = ToUpper({&short_names[0], 1});
 }
 
+// ArgumentImpl:
+ArgumentImpl::ArgumentImpl(Delegate* delegate, const Names& names, int group)
+    : callback_resolver_(new CallbackResolverImpl()),
+      delegate_(delegate),
+      group_(group) {
+  InitNames(names);
+  InitKey(names.is_option);
+  delegate_->OnArgumentCreated(this);
+}
+
 void ArgumentImpl::CompileToArgpOptions(
     std::vector<ArgpOption>* options) const {
   ArgpOption opt{};
@@ -205,7 +215,7 @@ void ArgpParserImpl::Init(const Options& options) {
   if (options.bug_address)
     ::argp_program_bug_address = options.bug_address;
   if (options.help_filter) {
-    argp_.help_filter = &HelpFilterImpl;
+    argp_.help_filter = &ArgpHelpFilterCallbackImpl;
     help_filter_ = options.help_filter;
   }
 
@@ -226,7 +236,7 @@ void ArgpParserImpl::Init(const Options& options) {
     set_doc(program_doc_.c_str());
 }
 
-error_t ArgpParserImpl::ParseImpl(int key, char* arg, ArgpState state) {
+error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
   // Positional argument.
   if (key == ARGP_KEY_ARG) {
     const int arg_num = state->arg_num;
@@ -267,7 +277,7 @@ error_t ArgpParserImpl::ParseImpl(int key, char* arg, ArgpState state) {
   return 0;
 }
 
-char* ArgpParserImpl::HelpFilterImpl(int key, const char* text, void* input) {
+char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key, const char* text, void* input) {
   if (!input || !text)
     return (char*)text;
   auto* self = reinterpret_cast<ArgpParserImpl*>(input);
