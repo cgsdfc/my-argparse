@@ -219,9 +219,11 @@ ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
 
 void ArgpParserImpl::Init(const Options& options) {
   if (options.program_version)
-    ::argp_program_version = options.program_version;
-  if (options.program_version_callback)
-    ::argp_program_version_hook = options.program_version_callback;
+    argp_program_version = options.program_version;
+  if (options.program_version_callback) {
+    argp_program_version_hook = &ArgpParserImpl::ArgpProgramVersionHookImpl;
+    version_callback_ = options.program_version_callback;
+  }
   if (options.bug_address)
     ::argp_program_bug_address = options.bug_address;
   if (options.help_filter) {
@@ -246,12 +248,25 @@ void ArgpParserImpl::Init(const Options& options) {
     set_doc(program_doc_.c_str());
 }
 
+bool ArgpParserImpl::ParseKnownArgs(ArgArray args,
+                                   std::vector<std::string>* rest) {
+  int arg_index;
+  error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
+                             &arg_index, this);
+  if (!error)
+    return true;
+  for (int i = arg_index; i < args.argc(); ++i) {
+    rest->emplace_back(args[i]);
+  }
+  return false;
+}
+
 error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
   // Positional argument.
   if (key == ARGP_KEY_ARG) {
     const int arg_num = state->arg_num;
     if (Argument* argument = delegate_->FindPositionalArgument(arg_num)) {
-      InvokeUserCallback(argument, arg, state);
+      RunCallback(argument, arg, state);
       return 0;
     }
     // Too many arguments.
@@ -267,7 +282,7 @@ error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
     Argument* argument = delegate_->FindOptionalArgument(key);
     if (!argument)
       return ARGP_ERR_UNKNOWN;
-    InvokeUserCallback(argument, arg, state);
+    RunCallback(argument, arg, state);
     return 0;
   }
 

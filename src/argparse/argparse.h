@@ -47,6 +47,7 @@ using ::argp_parse;
 using ::argp_parser_t;
 using ::argp_program_bug_address;
 using ::argp_program_version;
+using ::argp_program_version_hook;
 using ::argp_state;
 using ::argp_state_help;
 using ::argp_usage;
@@ -1084,6 +1085,8 @@ enum class HelpFilterResult {
 using HelpFilterCallback =
     std::function<HelpFilterResult(const Argument&, std::string* text)>;
 
+using ProgramVersionCallback = std::function<void(std::FILE*)>;
+
 class ArgArray {
  public:
   ArgArray(int argc, const char** argv)
@@ -1123,7 +1126,7 @@ class ArgpParser {
     const char* after_doc = {};
     const char* domain = {};
     const char* bug_address = {};
-    ArgpProgramVersionCallback program_version_callback = {};
+    ProgramVersionCallback program_version_callback;
     HelpFilterCallback help_filter;
   };
 
@@ -1275,7 +1278,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
       argp_option opt{};
       opt.group = group_;
       opt.doc = header_.c_str();
-      return options->push_back(opt);
+      options->push_back(opt);
     }
 
    private:
@@ -1359,17 +1362,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
     argp_parse(&argp_, args.argc(), args.argv(), parser_flags_, nullptr, this);
   }
 
-  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override {
-    int arg_index;
-    error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
-                               &arg_index, this);
-    if (!error)
-      return true;
-    for (int i = arg_index; i < args.argc(); ++i) {
-      rest->emplace_back(args[i]);
-    }
-    return false;
-  }
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override;
 
  private:
   void set_doc(const char* doc) { argp_.doc = doc; }
@@ -1378,7 +1371,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
   // TODO: Change this scheme.
-  void InvokeUserCallback(Argument* arg, char* value, ArgpState state) {
+  void RunCallback(Argument* arg, char* value, ArgpState state) {
     Context ctx(arg, value, state);
     arg->GetCallbackRunner()->Run(&ctx, this);
   }
@@ -1399,6 +1392,15 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
                                           const char* text,
                                           void* input);
 
+  static void ArgpProgramVersionHookImpl(FILE* file, argp_state* state) {
+    auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
+    printf("program hook, input ptr: %p\n", self);
+    if (self) {
+      //TODO: argp pass us nullptr input..
+      std::invoke(self->version_callback_, file);
+    }
+  }
+
   unsigned positional_count() const { return positional_count_; }
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
@@ -1411,6 +1413,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   std::string args_doc_;
   std::vector<argp_option> argp_options_;
   HelpFilterCallback help_filter_;
+  ProgramVersionCallback version_callback_;
 };
 
 inline std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
@@ -1433,16 +1436,14 @@ struct Options {
     options.program_version = version;
     options.description = description;
   }
-  // Options() = default;
-
   Options& version(const char* v) {
     options.program_version = v;
     return *this;
   }
-  // Options& version(ArgpProgramVersionCallback callback) {
-  //   program_version_callback_ = callback;
-  //   return *this;
-  // }
+  Options& version(ProgramVersionCallback callback) {
+    options.program_version_callback = callback;
+    return *this;
+  }
   Options& description(const char* d) {
     options.description = d;
     return *this;
@@ -1455,7 +1456,7 @@ struct Options {
     options.domain = d;
     return *this;
   }
-  Options& bug_address(const char* b) {
+  Options& email(const char* b) {
     options.bug_address = b;
     return *this;
   }

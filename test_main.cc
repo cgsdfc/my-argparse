@@ -21,12 +21,11 @@ int main(int argc, char const* argv[]) {
 
   // auto a = std::make_any<std::ofstream>();
 
-  ArgumentParser parser(Options()
-                            .description("a test program")
-                            .bug_address("xxx@xxx.com"));
-                            // .version([](FILE* f, ArgpState state) {
-                            //   std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
-                            // }));
+  ArgumentParser parser(
+      Options()
+          .description("a test program")
+          .email("xxx@xxx.com")
+          .version([](FILE* f) { std::fprintf(f, "%d.%d.%d\n", 1, 2, 3); }));
 
   std::string output;
   parser.add_argument("output", &output, "output to this file");
