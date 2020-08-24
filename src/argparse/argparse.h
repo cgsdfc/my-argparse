@@ -51,6 +51,7 @@ using ::argp_usage;
 using ::error_t;
 using ::program_invocation_name;
 using ::program_invocation_short_name;
+using std::FILE;
 
 // Try to use move, fall back to copy.
 template <typename T>
@@ -209,13 +210,19 @@ class AnyImpl : public Any {
   T value_;
 };
 
+template <typename T>
+void WrapAny(T&& in, std::unique_ptr<Any>* out) {
+  using Type = std::remove_cv_t<std::remove_reference_t<T>>;
+  out->reset(new AnyImpl<Type>(std::forward<T>(in)));
+}
+
 // Wrap T into Any.
 template <typename T>
 void WrapAny(Result<T>* result, std::unique_ptr<Any>* out) {
   if (result->has_value())
     out->reset(new AnyImpl<T>(result->release_value()));
-  else
-    out->reset();
+  // else
+  //   out->reset();
 }
 
 // Steal the T from Any and store into Result<T>.
@@ -1543,25 +1550,93 @@ struct DefaultParserTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
   }
 };
 
-// template <typename T, std::ios_base::openmode mode>
-// struct FileStreamTypeCallbackTraits {
-//   static_assert(!std::is_base_of<std::istream, T>{} || mode == std::ios_base)
-//   static void Run(const std::string& in, Result<T>* out) {
-//     T stream;
-//     stream.open(in, mode);
+// Default handling of FILE* is to open it for reading.
+template <>
+struct DefaultParserTraits<FILE*> {
+  static void Run(const std::string& in, Result<FILE*>* out) {
+  }
+};
 
-//   }
-// };
+// Handling of FileType.
+// User can give FileType(mode) in type() to indicate he want to open a file.
+// But the actual opening operation depends on dest.
+// Thus we define a FileOpener interface to erase the opening logic once dest is given.
+// And FileTypeCallback uses a FileOpener to do type-independent opening.
 
-// template <>
-// struct DefaultTypeCallbackTraits<std::ofstream> {
-//   static void Run(const std::string& in, Result<std::ofstream>* out) {
-//     std::ofstream file(in);
-//     if (file.bad())
-//       return out->set_error("cannot open file in write mode");
-//     *out = std::move(file);
-//   }
-// };
+// File open mode.
+enum class Mode : unsigned {
+  kRead = 0x0,
+  kWrite = 0x1,
+  kAppend = 0x2,
+  kTruncate = 0x4,
+};
+
+template <typename T>
+struct EnumOpTraits {
+  using U = std::underlying_type_t<T>;
+  static T And(T a, T b) {
+    return static_cast<T>(static_cast<U>(a) & static_cast<U>(b));
+  }
+  static T Or(T a, T b) {
+    return static_cast<T>(static_cast<U>(a) | static_cast<U>(b));
+  }
+};
+
+inline Mode operator&(Mode a, Mode b) {
+  return EnumOpTraits<Mode>::And(a, b);
+}
+inline Mode operator|(Mode a, Mode b) {
+  return EnumOpTraits<Mode>::Or(a, b);
+}
+
+class FileOpener {
+ public:
+  struct OpenResult {
+    std::unique_ptr<Any> file;  // null if error.
+    std::string errmsg;
+  };
+  virtual ~FileOpener() {}
+  virtual void Open(const char* filename, Mode mode, OpenResult* result) = 0;
+};
+
+class FileTypeCallback : public TypeCallback {
+ public:
+  explicit FileTypeCallback(Mode mode) : mode_(mode) {}
+  void SetOpener(std::unique_ptr<FileOpener> opener) {
+    opener_ = std::move(opener);
+  }
+
+  void Run(const std::string& in, ConversionResult* out) override {
+    DCHECK(opener_);
+    FileOpener::OpenResult open_result;
+    opener_->Open(in.c_str(), mode_, &open_result);
+    out->has_error = !open_result.file;
+    out->value = std::move(open_result.file);
+    out->msg = std::move(open_result.errmsg);
+  }
+
+ private:
+  Mode mode_;
+  std::unique_ptr<FileOpener> opener_;
+};
+
+class CFileOpener : public FileOpener {
+ public:
+  void Open(const char* filename, Mode mode, OpenResult* result) override {
+    TranslateMode(mode);
+    FILE* f = std::fopen(filename, mode_chars_.c_str());
+    if (f) {
+      WrapAny(f, &result->file);
+      return;
+    }
+    // handling..
+    result->errmsg = "Failed to open file";
+  }
+
+ private:
+  void TranslateMode(Mode mode);
+  std::string mode_chars_;
+};
 
 }  // namespace argparse
 
