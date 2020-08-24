@@ -347,26 +347,26 @@ class CallbackFactory {
 };
 
 // This is a meta-function that tests if A can be performed on T.
-template <typename T, Actions A, typename Enable = void>
+template <typename T, Actions A>
 struct IsActionSupported : std::false_type {};
 
 // Store will copy or move the value produced by type() into dest.
 template <typename T>
-struct IsActionSupported<T, Actions::kStore, void>
+struct IsActionSupported<T, Actions::kStore>
     : std::bool_constant<std::is_copy_assignable<T>{} ||
                          std::is_move_assignable<T>{}> {};
 
 // Store Const will copy the const into dest. Since the action may be taken many
 // times, T must be copy-assignable.
 template <typename T>
-struct IsActionSupported<T, Actions::kStoreConst, void>
+struct IsActionSupported<T, Actions::kStoreConst>
     : std::is_copy_constructible<T> {};
 
 template <typename T>
-struct IsActionSupported<T, Actions::kAppend, void> : IsAppendSupported<T> {};
+struct IsActionSupported<T, Actions::kAppend> : IsAppendSupported<T> {};
 
 template <typename T>
-struct IsActionSupported<T, Actions::kAppendConst, void>
+struct IsActionSupported<T, Actions::kAppendConst>
     : std::bool_constant<IsAppendSupported<T>{} &&
                          std::is_copy_constructible<T>{}> {};
 
