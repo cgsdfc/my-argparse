@@ -4,8 +4,7 @@
 #include <algorithm>
 #include <any>
 #include <cassert>
-#include <cmath>
-#include <cstdlib>
+#include <cstdlib>  // malloc()
 #include <cstring>  // strlen()
 #include <deque>
 #include <fstream>
@@ -13,7 +12,6 @@
 #include <list>
 #include <map>
 #include <memory>
-#include <optional>
 #include <set>
 #include <sstream>
 #include <stdexcept>  // to define ArgumentError.
@@ -38,7 +36,6 @@ class Options;
 class ActionCallback;
 class TypeCallback;
 
-using ArgpProgramVersionCallback = decltype(::argp_program_version_hook);
 using ::argp;
 using ::argp_error;
 using ::argp_failure;
@@ -499,18 +496,15 @@ class ActionCallback {
   // For performing runtime type check.
   virtual std::type_index GetDestType() = 0;
   virtual std::type_index GetValueType() = 0;
-
-  bool WorksWith(DestInfo* dest, TypeCallback* type) {
-    // return GetDestType() == dest->GetDestType() &&
-    //        GetValueType() == type->GetValueType();
-    // TODO: check this at runtime.
-    return true;
-  }
-
   virtual void Run(std::unique_ptr<Any> any) = 0;
 
+  bool WorksWith(DestInfo* dest, TypeCallback* type) {
+    return (!dest || dest->GetDestType() == GetDestType()) &&
+           (!type || type->GetValueType() == GetValueType());
+  }
+
   void SetDest(DestInfo* dest_info) {
-    DCHECK(GetDestType() == dest_info->GetDestType());
+    DCHECK(dest_info && GetDestType() == dest_info->GetDestType());
     dest_ = dest_info->ptr();
   }
 
@@ -655,15 +649,7 @@ class CallbackRunnerImpl : public CallbackRunner {
                      std::unique_ptr<ActionCallback> action)
       : type_(std::move(type)), action_(std::move(action)) {}
 
-  void Run(Context* ctx, Delegate* delegate) override {
-    TypeCallback::ConversionResult results;
-    if (ctx->has_value)
-      type_->Run(ctx->value, &results);
-    if (results.has_error)
-      delegate->HandleCallbackError(ctx, results.msg);
-    else
-      action_->Run(std::move(results.value));
-  }
+  void Run(Context* ctx, Delegate* delegate) override;
 
  private:
   std::unique_ptr<TypeCallback> type_;
@@ -995,20 +981,10 @@ class ArgumentImpl : public Argument {
   };
 
   // Fill in members to do with names.
-  void InitNames(Names names) {
-    long_names_ = std::move(names.long_names);
-    short_names_ = std::move(names.short_names);
-    meta_var_ = std::move(names.meta_var);
-  }
+  void InitNames(Names names);
 
   // Initialize the key member. Must be called after InitNames().
-  void InitKey(bool is_option) {
-    if (!is_option) {
-      key_ = kKeyForPositional;
-      return;
-    }
-    key_ = short_names_.empty() ? delegate_->NextOptionKey() : short_names_[0];
-  }
+  void InitKey(bool is_option);
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
@@ -1150,9 +1126,9 @@ class ArgumentContainer {
   ArgumentBuilder add_argument(Names names,
                                Dest dest = {},
                                const char* help = {},
-                               Type type = {}) {
+                               Action action = {}) {
     auto builder = ArgumentBuilder(AddArgument(std::move(names)));
-    return builder.dest(std::move(dest)).help(help).type(std::move(type));
+    return builder.dest(std::move(dest)).help(help).action(std::move(action));
   }
 
   virtual ~ArgumentContainer() {}
@@ -1197,33 +1173,17 @@ class ArgumentHolderImpl : public ArgumentHolder,
                            public Argument::Delegate,
                            public ArgpParser::Delegate {
  public:
-  ArgumentHolderImpl() {
-    AddGroup("optional arguments");
-    AddGroup("positional arguments");
-  }
+  ArgumentHolderImpl();
 
   // Add an arg to a specific group.
-  Argument* AddArgumentToGroup(Names names, int group) override {
-    // First check if this arg will conflict with existing ones.
-    DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
-    DCHECK2(group <= groups_.size(), "No such group");
-    GroupFromID(group)->IncRef();
-    Argument& arg = arguments_.emplace_back(this, names, group);
-    return &arg;
-  }
+  Argument* AddArgumentToGroup(Names names, int group) override;
 
   // TODO: since in most cases, parse_args() is only called once, we may
   // compile all the options in one shot before parse_args() is called and
   // throw the options array away after using it.
-  Argument* AddArgument(Names names) override {
-    int group = names.is_option ? kOptionGroup : kPositionalGroup;
-    return AddArgumentToGroup(std::move(names), group);
-  }
+  Argument* AddArgument(Names names) override;
 
-  ArgumentGroup AddArgumentGroup(const char* header) override {
-    int group = AddGroup(header);
-    return ArgumentGroup(this, group);
-  }
+  ArgumentGroup AddArgumentGroup(const char* header) override;
 
   std::unique_ptr<ArgpParser> CreateParser() override {
     return ArgpParser::Create(this);
@@ -1242,17 +1202,8 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
   void CompileToArgpOptions(std::vector<argp_option>* options) override;
   void GenerateArgsDoc(std::string* args_doc) override;
-
-  Argument* FindOptionalArgument(int key) override {
-    auto iter = optional_arguments_.find(key);
-    return iter == optional_arguments_.end() ? nullptr : iter->second;
-  }
-
-  Argument* FindPositionalArgument(int index) override {
-    return (0 <= index && index < positional_arguments_.size())
-               ? positional_arguments_[index]
-               : nullptr;
-  }
+  Argument* FindOptionalArgument(int key) override;
+  Argument* FindPositionalArgument(int index) override;
 
   std::size_t PositionalArgumentCount() override {
     return positional_arguments_.size();
@@ -1269,17 +1220,8 @@ class ArgumentHolderImpl : public ArgumentHolder,
       if (header_.back() != ':')
         header_.push_back(':');
     }
-
     void IncRef() { ++members_; }
-
-    void CompileToArgpOption(std::vector<argp_option>* options) const {
-      if (!members_)
-        return;
-      argp_option opt{};
-      opt.group = group_;
-      opt.doc = header_.c_str();
-      options->push_back(opt);
-    }
+    void CompileToArgpOption(std::vector<argp_option>* options) const;
 
    private:
     unsigned group_;        // The group id.
@@ -1302,14 +1244,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   // Argument::Delegate:
   int NextOptionKey() override { return next_key_++; }
 
-  void OnArgumentCreated(Argument* arg) override {
-    if (arg->IsOption()) {
-      bool inserted = optional_arguments_.emplace(arg->GetKey(), arg).second;
-      DCHECK(inserted);
-    } else {
-      positional_arguments_.push_back(arg);
-    }
-  }
+  void OnArgumentCreated(Argument* arg) override;
 
   bool CheckNamesConflict(const Names& names) {
     for (auto&& long_name : names.long_names)
@@ -1392,15 +1327,6 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
                                           const char* text,
                                           void* input);
 
-  // static void ArgpProgramVersionHookImpl(FILE* file, argp_state* state) {
-  //   auto* self = reinterpret_cast<ArgpParserImpl*>(state->input);
-  //   printf("program hook, input ptr: %p\n", self);
-  //   if (self) {
-  //     //TODO: argp pass us nullptr input..
-  //     std::invoke(self->version_callback_, file);
-  //   }
-  // }
-
   unsigned positional_count() const { return positional_count_; }
 
   static constexpr unsigned kSpecialKeyMask = 0x1000000;
@@ -1413,7 +1339,6 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   std::string args_doc_;
   std::vector<argp_option> argp_options_;
   HelpFilterCallback help_filter_;
-  // ProgramVersionCallback version_callback_;
 };
 
 inline std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
@@ -1493,9 +1418,7 @@ class ArgumentParser : public ArgumentContainer {
 
   // Helper for demo and testing.
   void parse_args(std::initializer_list<const char*> args) {
-    // init-er is not mutable.
     std::vector<const char*> args_copy(args.begin(), args.end());
-    // args_copy.push_back(nullptr);
     return parse_args(args.size(), args_copy.data());
   }
   // TODO: parse_known_args()
@@ -1505,7 +1428,6 @@ class ArgumentParser : public ArgumentContainer {
     return program_invocation_short_name;
   }
   const char* program_version() const { return argp_program_version; }
-  // TODO: rename to email.
   const char* program_bug_address() const { return argp_program_bug_address; }
 
  private:

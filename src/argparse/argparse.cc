@@ -83,6 +83,20 @@ ArgumentImpl::ArgumentImpl(Delegate* delegate, const Names& names, int group)
   delegate_->OnArgumentCreated(this);
 }
 
+void ArgumentImpl::InitNames(Names names) {
+  long_names_ = std::move(names.long_names);
+  short_names_ = std::move(names.short_names);
+  meta_var_ = std::move(names.meta_var);
+}
+
+void ArgumentImpl::InitKey(bool is_option) {
+  if (!is_option) {
+    key_ = kKeyForPositional;
+    return;
+  }
+  key_ = short_names_.empty() ? delegate_->NextOptionKey() : short_names_[0];
+}
+
 void ArgumentImpl::CompileToArgpOptions(
     std::vector<argp_option>* options) const {
   argp_option opt{};
@@ -324,5 +338,69 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
       return std::strcpy(s, repl.c_str());
     }
   }
+}
+
+void CallbackRunnerImpl::Run(Context* ctx, Delegate* delegate) {
+  TypeCallback::ConversionResult results;
+  if (ctx->has_value)
+    type_->Run(ctx->value, &results);
+  if (results.has_error)
+    delegate->HandleCallbackError(ctx, results.msg);
+  else
+    action_->Run(std::move(results.value));
+}
+
+Argument* ArgumentHolderImpl::AddArgumentToGroup(Names names, int group) {
+  // First check if this arg will conflict with existing ones.
+  DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
+  DCHECK2(group <= groups_.size(), "No such group");
+  GroupFromID(group)->IncRef();
+  Argument& arg = arguments_.emplace_back(this, names, group);
+  return &arg;
+}
+
+Argument* ArgumentHolderImpl::AddArgument(Names names) {
+  int group = names.is_option ? kOptionGroup : kPositionalGroup;
+  return AddArgumentToGroup(std::move(names), group);
+}
+
+ArgumentGroup ArgumentHolderImpl::AddArgumentGroup(const char* header) {
+  int group = AddGroup(header);
+  return ArgumentGroup(this, group);
+}
+
+void ArgumentHolderImpl::OnArgumentCreated(Argument* arg) {
+  if (arg->IsOption()) {
+    bool inserted = optional_arguments_.emplace(arg->GetKey(), arg).second;
+    DCHECK(inserted);
+  } else {
+    positional_arguments_.push_back(arg);
+  }
+}
+
+void ArgumentHolderImpl::Group::CompileToArgpOption(
+    std::vector<argp_option>* options) const {
+  if (!members_)
+    return;
+  argp_option opt{};
+  opt.group = group_;
+  opt.doc = header_.c_str();
+  options->push_back(opt);
+}
+
+ArgumentHolderImpl::ArgumentHolderImpl() {
+  AddGroup("optional arguments");
+  AddGroup("positional arguments");
+}
+
+Argument* ArgumentHolderImpl::FindOptionalArgument(int key) {
+  auto iter = optional_arguments_.find(key);
+  return iter == optional_arguments_.end() ? nullptr : iter->second;
+}
+
+Argument* ArgumentHolderImpl::FindPositionalArgument(int index) {
+  return (0 <= index && index < positional_arguments_.size())
+             ? positional_arguments_[index]
+             : nullptr;
 }
 }  // namespace argparse
