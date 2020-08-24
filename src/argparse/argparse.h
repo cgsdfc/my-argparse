@@ -250,7 +250,7 @@ struct DefaultParserTraits {
   // This is selected when user use a custom type without specializing
   // TypeCallbackTraits.
   static void Run(const std::string&, Result<T>* out) {
-    DCHECK2(false, "Please specialize TypeCallbackTrait<T> for your type");
+    DCHECK2(false, "Please specialize ParserTraits<T> for your type");
   }
 };
 
