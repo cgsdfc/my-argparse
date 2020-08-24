@@ -28,15 +28,9 @@ int main(int argc, char const* argv[]) {
                               std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
                             }));
 
-  std::string output;
+  std::ofstream output;
   parser.add_argument("output", &output, "output to this file");
-  int input;
-  parser.add_argument("input", &input, "input file")
-      .type([](const std::string& in, Result<int>* out) { out->set_value(1); })
-      .action([](int* out, Result<int> in) { *out = in.get_value(); });
 
   parser.parse_args(argc, argv);
-  std::cout << "output: " << output << '\n';
-  std::cout << "input: " << input << '\n';
 
 }

@@ -350,21 +350,25 @@ class CallbackFactory {
 template <typename T, Actions A, typename Enable = void>
 struct IsActionSupported : std::false_type {};
 
-// Store is always supported if T is copy-assignable.
+// Store will copy or move the value produced by type() into dest.
 template <typename T>
 struct IsActionSupported<T, Actions::kStore, void>
-    : std::is_copy_assignable<T> {};
+    : std::bool_constant<std::is_copy_assignable<T>{} ||
+                         std::is_move_assignable<T>{}> {};
 
-// Store Const is supported only if Store is supported.
+// Store Const will copy the const into dest. Since the action may be taken many
+// times, T must be copy-assignable.
 template <typename T>
 struct IsActionSupported<T, Actions::kStoreConst, void>
-    : IsActionSupported<T, Actions::kStore, void> {};
+    : std::is_copy_constructible<T> {};
 
 template <typename T>
-struct IsActionSupported<T,
-                         Actions::kAppend,
-                         std::enable_if_t<IsAppendSupported<T>{}>>
-    : std::true_type {};
+struct IsActionSupported<T, Actions::kAppend, void> : IsAppendSupported<T> {};
+
+template <typename T>
+struct IsActionSupported<T, Actions::kAppendConst, void>
+    : std::bool_constant<IsAppendSupported<T>{} &&
+                         std::is_copy_constructible<T>{}> {};
 
 // This is a meta-function that handles static-runtime mix of selecting action
 // factory.
@@ -1544,10 +1548,15 @@ struct DefaultTypeCallbackTraits<T,
                                  std::enable_if_t<has_stl_number_parser_t<T>{}>>
     : STLNumberTypeCallbackTraits<T> {};
 
-// template <>
-// struct DefaultTypeCallbackTraits<std::ofstream> {
-
-// };
+template <>
+struct DefaultTypeCallbackTraits<std::ofstream> {
+  static void Run(const std::string& in, Result<std::ofstream>* out) {
+    std::ofstream file(in);
+    if (file.bad())
+      return out->set_error("cannot open file in write mode");
+    *out = std::move(file);
+  }
+};
 
 }  // namespace argparse
 
