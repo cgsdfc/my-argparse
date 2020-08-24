@@ -246,7 +246,7 @@ struct Context {
 // The default impl for the types we know (bulitin-types like int).
 // This traits shouldn't be overriden by users.
 template <typename T, typename SFINAE = void>
-struct DefaultTypeCallbackTraits {
+struct DefaultParserTraits {
   // This is selected when user use a custom type without specializing
   // TypeCallbackTraits.
   static void Run(const std::string&, Result<T>* out) {
@@ -258,7 +258,7 @@ struct DefaultTypeCallbackTraits {
 // The user can specialize this to provide traits for their custom types
 // or override global (existing) types.
 template <typename T>
-struct TypeCallbackTraits : DefaultTypeCallbackTraits<T> {};
+struct ParserTraits : DefaultParserTraits<T> {};
 
 inline bool AnyHasType(const std::any& val, std::type_index type) {
   return type == val.type();
@@ -451,7 +451,7 @@ template <typename T>
 class DefaultTypeCallback : public TypeCallbackBase<T> {
  private:
   void RunImpl(const std::string& in, Result<T>* out) override {
-    TypeCallbackTraits<T>::Run(in, out);
+    ParserTraits<T>::Run(in, out);
   }
 };
 
@@ -1444,14 +1444,14 @@ class ArgumentParser : public ArgumentContainer {
 
 // wstring is not supported now.
 template <>
-struct DefaultTypeCallbackTraits<std::string> {
+struct DefaultParserTraits<std::string> {
   static void Run(const std::string& in, Result<std::string>* out) {
     *out = in;
   }
 };
 // char is an unquoted single character.
 template <>
-struct DefaultTypeCallbackTraits<char> {
+struct DefaultParserTraits<char> {
   static void Run(const std::string& in, Result<char>* out) {
     if (in.size() != 1)
       return out->set_error("char must be exactly one character");
@@ -1461,7 +1461,7 @@ struct DefaultTypeCallbackTraits<char> {
   }
 };
 template <>
-struct DefaultTypeCallbackTraits<bool> {
+struct DefaultParserTraits<bool> {
   static void Run(const std::string& in, Result<bool>* out) {
     static const std::map<std::string, bool> kStringToBools{
         {"true", true},   {"True", true},   {"1", true},
@@ -1531,7 +1531,7 @@ T StlParseNumber(const std::string& in) {
 }
 
 template <typename T>
-struct STLNumberTypeCallbackTraits {
+struct DefaultParserTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
   static void Run(const std::string& in, Result<T>* out) {
     try {
       *out = StlParseNumber<T>(in);
@@ -1543,20 +1543,25 @@ struct STLNumberTypeCallbackTraits {
   }
 };
 
-template <typename T>
-struct DefaultTypeCallbackTraits<T,
-                                 std::enable_if_t<has_stl_number_parser_t<T>{}>>
-    : STLNumberTypeCallbackTraits<T> {};
+// template <typename T, std::ios_base::openmode mode>
+// struct FileStreamTypeCallbackTraits {
+//   static_assert(!std::is_base_of<std::istream, T>{} || mode == std::ios_base)
+//   static void Run(const std::string& in, Result<T>* out) {
+//     T stream;
+//     stream.open(in, mode);
 
-template <>
-struct DefaultTypeCallbackTraits<std::ofstream> {
-  static void Run(const std::string& in, Result<std::ofstream>* out) {
-    std::ofstream file(in);
-    if (file.bad())
-      return out->set_error("cannot open file in write mode");
-    *out = std::move(file);
-  }
-};
+//   }
+// };
+
+// template <>
+// struct DefaultTypeCallbackTraits<std::ofstream> {
+//   static void Run(const std::string& in, Result<std::ofstream>* out) {
+//     std::ofstream file(in);
+//     if (file.bad())
+//       return out->set_error("cannot open file in write mode");
+//     *out = std::move(file);
+//   }
+// };
 
 }  // namespace argparse
 
