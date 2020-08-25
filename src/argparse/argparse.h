@@ -399,6 +399,19 @@ class DestInfo {
   void* ptr_ = nullptr;
 };
 
+// # Ops classes.
+// Ops classes is a finer-grained erasure of different operations supported by
+// different types. The factory of Ops is DestInfo, which creates various known
+// subclasses of them to support both type-callback and action-callback. Ops
+// aims to be the common mechanism underlying both type and action. By moving
+// the type-operation logic into ops, type and action are allows to be more
+// complicated (not just as a simple type eraser). Subclasses of them now can
+// contain customized data and require non-default ctors to support states.
+// This also enable a cleaner design, by adding one layer between the upper one
+// (type and action) the lower one (the operations defined by a T) and thus
+// reuse code, like the StoreConst and Store both use the StoreOps, etc.
+// DestInfo now becomes a factory of Ops.
+
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
 
