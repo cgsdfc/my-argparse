@@ -492,7 +492,6 @@ class DestPtr {
   void* ptr_ = nullptr;
 };
 
-
 // File open mode.
 enum class Mode : unsigned {
   kRead = 0x0,
@@ -659,6 +658,47 @@ class DestInfo {
  private:
   std::unique_ptr<OpsFactory> ops_factory_;
   DestPtr dest_ptr_;
+};
+
+// The function pointer table for Ops impl.
+// For each type used by user, generate a vtable for all available operations.
+// Null entries in the table means this op is not supported (or banned) for this
+// type. For example, it is banned to open a file and turn it into a double, but
+// it might be true that an opened file can be turned into an int (fd).
+// The table for each type is shared once created.
+
+struct Operations {
+  struct OpsResult {
+    std::unique_ptr<Any> file;  // null if error.
+    std::string errmsg;
+  };
+
+  using StoreOps = void(DestPtr, std::unique_ptr<Any>);
+  using AppendOps = void(DestPtr, std::unique_ptr<Any>);
+  using ParseOps = void(const std::string&, OpsResult*);
+  using OpenFileOps = void(const std::string&, Mode, OpsResult*);
+
+  // How to create a vtable?
+  class Factory {
+   public:
+    virtual void Create(std::unique_ptr<Operations>* out) = 0;
+    virtual ~Factory() {}
+  };
+
+  // Map type_index to vtable. Create them when absent.
+  class TypeMap {
+   public:
+    // If not found, return null.
+    virtual Operations* Find(std::type_index index) = 0;
+    // If not found, create a new one with factory.
+    virtual Operations* SetDefault(std::type_index index, Factory* factory) = 0;
+    virtual ~TypeMap() {}
+  };
+
+  StoreOps* store;
+  AppendOps* append;
+  ParseOps* parse;
+  OpenFileOps* open_file;
 };
 
 template <typename T>
