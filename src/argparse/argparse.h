@@ -36,6 +36,12 @@ class Options;
 class ActionCallback;
 class TypeCallback;
 
+class DestPtr;
+class StoreOps;
+class OpenFileOps;
+class ParseOps;
+class AppendOps;
+
 using ::argp;
 using ::argp_error;
 using ::argp_failure;
@@ -361,6 +367,9 @@ class CallbackFactory {
   virtual ~CallbackFactory() {}
 };
 
+template <typename Ops, typename T>
+struct IsOpsSupported : std::false_type {};
+
 // This is a meta-function that tests if A can be performed on T.
 template <typename T, Actions A>
 struct IsActionSupported : std::false_type {};
@@ -370,6 +379,20 @@ template <typename T>
 struct IsActionSupported<T, Actions::kStore>
     : std::bool_constant<std::is_copy_assignable<T>{} ||
                          std::is_move_assignable<T>{}> {};
+
+template <typename T>
+struct IsOpsSupported<StoreOps, T>
+    : std::bool_constant<std::is_copy_assignable<T>{} ||
+                         std::is_move_assignable<T>{}> {};
+
+template <typename T>
+struct IsOpsSupported<AppendOps, T> : IsAppendSupported<T> {};
+
+template <typename T>
+struct IsFileLike : std::false_type {};
+
+template <typename T>
+struct IsOpsSupported<OpenFileOps, T> : IsFileLike<T> {};
 
 // Store Const will copy the const into dest. Since the action may be taken many
 // times, T must be copy-assignable.
@@ -395,12 +418,6 @@ struct CallbackFactorySelector<T, A, false> /* Not supported */ {
   static CallbackFactory* Run() { return nullptr; }
 };
 
-class DestPtr;
-class StoreOps;
-class OpenFileOps;
-class ParseOps;
-class AppendOps;
-
 class OpsFactory {
  public:
   virtual ~OpsFactory() {}
@@ -410,9 +427,6 @@ class OpsFactory {
   virtual ParseOps* CreateParseOps() = 0;
   virtual ParseOps* CreateParseOpsForValueType() = 0;
 };
-
-template <typename Ops, typename T>
-struct IsOpsSupported : std::false_type {};
 
 template <typename Ops,
           template <typename>
@@ -428,18 +442,6 @@ struct OpsFactoryHelper<Ops, OpsImpl, T, false> {
 template <typename Ops, template <typename> class OpsImpl, typename T>
 struct OpsFactoryHelper<Ops, OpsImpl, T, true> {
   static Ops* Create() { return new OpsImpl<T>(); }
-};
-
-class DestInfo {
- public:
-  virtual CallbackFactory* CreateFactory(Actions action) = 0;
-  virtual std::type_index GetDestType() = 0;
-  virtual ~DestInfo() {}
-  void* ptr() const { return ptr_; }
-
- protected:
-  explicit DestInfo(void* ptr) : ptr_(ptr) {}
-  void* ptr_ = nullptr;
 };
 
 class DestPtr {
@@ -489,6 +491,7 @@ class DestPtr {
   std::type_index type_ = typeid(NoneType);
   void* ptr_ = nullptr;
 };
+
 
 // File open mode.
 enum class Mode : unsigned {
@@ -644,6 +647,19 @@ class OpsFactoryImpl : public OpsFactory {
   }
 };
 
+class DestInfo {
+ public:
+  template <typename T>
+  explicit DestInfo(T* ptr)
+      : ops_factory_(new OpsFactoryImpl<T>), dest_ptr_(ptr) {}
+
+  OpsFactory* GetOpsFactory() { return ops_factory_.get(); }
+  DestPtr GetDestPtr() { return dest_ptr_; }
+
+ private:
+  std::unique_ptr<OpsFactory> ops_factory_;
+  DestPtr dest_ptr_;
+};
 
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
@@ -751,26 +767,20 @@ class ActionCallback {
  public:
   virtual ~ActionCallback() {}
   // For performing runtime type check.
-  virtual std::type_index GetDestType() {
-    return typeid(void);
-  }
-  virtual std::type_index GetValueType() {
-    return typeid(void);
-  }
+  virtual std::type_index GetDestType() { return typeid(void); }
+  virtual std::type_index GetValueType() { return typeid(void); }
   virtual void Run(std::unique_ptr<Any> any) = 0;
 
-  bool WorksWith(DestInfo* dest, TypeCallback* type) {
-    return (!dest || dest->GetDestType() == GetDestType()) &&
-           (!type || type->GetValueType() == GetValueType());
-  }
+  // bool WorksWith(DestInfo* dest, TypeCallback* type) {
+  //   return (!dest || dest->GetDestType() == GetDestType()) &&
+  //          (!type || type->GetValueType() == GetValueType());
+  // }
 
-  void SetDest(DestInfo* dest_info) {
-    DCHECK(dest_info && GetDestType() == dest_info->GetDestType());
-    dest_ = dest_info->ptr();
-  }
-  void SetDest(DestPtr dest_ptr) {
-    dest_ptr_ = dest_ptr;
-  }
+  // void SetDest(DestInfo* dest_info) {
+  //   DCHECK(dest_info && GetDestType() == dest_info->GetDestType());
+  //   dest_ = dest_info->ptr();
+  // }
+  void SetDest(DestPtr dest_ptr) { dest_ptr_ = dest_ptr; }
 
   // Set an const value to this action (must be a valid value.)
   void SetConstValue(std::any value) {
@@ -928,23 +938,26 @@ class CallbackRunnerImpl : public CallbackRunner {
 template <typename T>
 class DestInfoImpl : public DestInfo {
  public:
-  explicit DestInfoImpl(T* ptr) : DestInfo(ptr) {}
-  std::type_index GetDestType() override { return typeid(T); }
+ private:
+  // std::unique_ptr<OpsFactory> ops_factory_;
+  // DestPtr
+  // explicit DestInfoImpl(T* ptr) : DestInfo(ptr) {}
+  // std::type_index GetDestType() override { return typeid(T); }
 
-  CallbackFactory* CreateFactory(Actions action) override {
-    switch (action) {
-      case Actions::kStore:
-        return CallbackFactorySelector<T, Actions::kStore>::Run();
-      case Actions::kAppend:
-        return CallbackFactorySelector<T, Actions::kAppend>::Run();
-      case Actions::kStoreConst:
-        return CallbackFactorySelector<T, Actions::kStoreConst>::Run();
-      case Actions::kAppendConst:
-        return CallbackFactorySelector<T, Actions::kAppendConst>::Run();
-      default:
-        return nullptr;
-    }
-  }
+  // CallbackFactory* CreateFactory(Actions action) override {
+  //   switch (action) {
+  //     case Actions::kStore:
+  //       return CallbackFactorySelector<T, Actions::kStore>::Run();
+  //     case Actions::kAppend:
+  //       return CallbackFactorySelector<T, Actions::kAppend>::Run();
+  //     case Actions::kStoreConst:
+  //       return CallbackFactorySelector<T, Actions::kStoreConst>::Run();
+  //     case Actions::kAppendConst:
+  //       return CallbackFactorySelector<T, Actions::kAppendConst>::Run();
+  //     default:
+  //       return nullptr;
+  //   }
+  // }
 };
 
 template <typename ActionCallbackT, typename TypeCallbackT>
@@ -968,7 +981,8 @@ struct CallbackFactoryGenerator {
 
 // template <typename T>
 // struct CallbackFactorySelector<T, Actions::kStore, true>
-//     : CallbackFactoryGenerator<StoreActionCallback<T>, DefaultTypeCallback<T>> {
+//     : CallbackFactoryGenerator<StoreActionCallback<T>,
+//     DefaultTypeCallback<T>> {
 // };
 
 // template <typename T>
@@ -1038,7 +1052,7 @@ struct Dest {
   template <typename T>
   /* implicit */ Dest(T* ptr) {
     DCHECK2(ptr, "nullptr passed to Dest()");
-    dest_info.reset(new DestInfoImpl<T>(ptr));
+    dest_info.reset(new DestInfo(ptr));
   }
 };
 
