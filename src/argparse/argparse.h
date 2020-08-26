@@ -236,6 +236,14 @@ void UnwrapAny(std::unique_ptr<Any> any, Result<T>* out) {
   }
 }
 
+template <typename T>
+void UnwrapAny(std::unique_ptr<Any> any, T* out) {
+  if (any) {
+    auto* any_impl = AnyImpl<T>::FromAny(any.get());
+    *out = any_impl->ReleaseValue();
+  }
+}
+
 // This is an internal class to communicate data/state between user's callback.
 struct Context {
   Context(const Argument* argument, const char* value, ArgpState state)
@@ -399,6 +407,57 @@ class DestInfo {
   void* ptr_ = nullptr;
 };
 
+class DestPtr {
+ public:
+  template <typename T>
+  explicit DestPtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {}
+
+  // Copy content to out.
+  template <typename T>
+  void load(T* out) const {
+    DCHECK(type_ == typeid(T));
+    *out = *reinterpret_cast<T*>(ptr_);
+  }
+
+  template <typename T>
+  void load_ptr(T** ptr_out) const {
+    DCHECK(type_ == typeid(T));
+    *ptr_out = reinterpret_cast<T*>(ptr_);
+  }
+
+  template <typename T>
+  void store(T&& val) {
+    using Type = std::remove_reference_t<T>;
+    DCHECK(type_ == typeid(Type));
+    *reinterpret_cast<T*>(ptr_) = std::forward<T>(val);
+  }
+
+  template <typename T>
+  void reset(T* ptr) {
+    DestPtr that(ptr);
+    swap(that);
+  }
+
+  void swap(DestPtr& that) {
+    std::swap(this->type_, that.type_);
+    std::swap(this->ptr_, that.ptr_);
+  }
+
+  explicit operator bool() const { return !!ptr_; }
+
+ private:
+  std::type_index type_;
+  void* ptr_;
+};
+
+// File open mode.
+enum class Mode : unsigned {
+  kRead = 0x0,
+  kWrite = 0x1,
+  kAppend = 0x2,
+  kTruncate = 0x4,
+};
+
 // # Ops classes.
 // Ops classes is a finer-grained erasure of different operations supported by
 // different types. The factory of Ops is DestInfo, which creates various known
@@ -411,6 +470,106 @@ class DestInfo {
 // (type and action) the lower one (the operations defined by a T) and thus
 // reuse code, like the StoreConst and Store both use the StoreOps, etc.
 // DestInfo now becomes a factory of Ops.
+// Ops only defines the functionality naturally supported by a T (deducted from
+// T). User's functor is not supported. Think of Ops as a builtin set of
+// minimal function offered by the lib.
+
+// The minimal interface.
+class Ops {
+ public:
+  virtual ~Ops() {}
+};
+
+// Used by StoreConst and Store.
+class StoreOps : public Ops {
+ public:
+  virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
+};
+
+template <typename T>
+class StoreOpsImpl : public StoreOps {
+ public:
+  void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
+    if (data) {
+      T val;
+      UnwrapAny(std::move(data), &val);
+      ptr.store(MoveOrCopy(&val));
+    }
+  }
+};
+
+// Used by Append and AppendConst. This only erase the operation defined by
+// AppendTraits.
+class AppendOps : public Ops {
+ public:
+  virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
+};
+
+// Only instantiate if Append is supported.
+template <typename T>
+class AppendOpsImpl : public AppendOps {
+ public:
+  static_assert(IsAppendSupported<T>{});
+  using Traits = AppendTraits<T>;
+  using ValueType = ValueTypeOf<T>;
+
+  void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
+    if (data) {
+      T* obj;
+      ptr.load_ptr(&obj);
+      ValueType val;
+      UnwrapAny(std::move(data), &val);
+      Traits::Run(obj, MoveOrCopy(val));
+    }
+  }
+};
+
+// Used by ParseTypeCallback. This only erase parsers defined by
+// ParserTraits (TODO: ParseTraits).
+class ParseOps : public Ops {
+ public:
+  struct ParseResult {
+    bool has_error = false;
+    std::unique_ptr<Any> value;  // null if error.
+    std::string errmsg;
+  };
+  virtual void Run(const std::string& in, ParseResult* result) = 0;
+};
+
+template <typename T>
+class ParseOpsImpl : public ParseOps {
+ public:
+  using Traits = ParserTraits<T>;
+  void Run(const std::string& in, ParseResult* out) override {
+    Result<T> result;
+    Traits::Run(in, &result);
+    out->has_error = result.has_error();
+    if (result.has_value()) {
+      WrapAny(&result, &out->value);
+    } else if (result.has_error()) {
+      out->errmsg = result.release_error();
+    }
+  }
+};
+
+// Previously known as FileOpener. Used by FileTypeCallback.
+class OpenFileOps : public Ops {
+ public:
+  struct Result {
+    std::unique_ptr<Any> file;  // null if error.
+    std::string errmsg;
+  };
+  // TODO: Mode or custom mode?
+  virtual void Run(const char* filename, Mode mode, Result* result) = 0;
+  virtual Mode DefaultMode() = 0;
+};
+
+// Open FILE*.
+class OpenCFileOps : public OpenFileOps {};
+
+// Open std::fstream/ifstream/ofstream.
+template <typename T>
+class OpenFileStreamOps : public OpenFileOps {};
 
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
@@ -582,13 +741,15 @@ class ActionCallbackBase : public ActionCallback {
 };
 
 // This impls store and store-const.
-template <typename T, typename V = T>
-class StoreActionCallback : public ActionCallbackBase<T, V> {
- private:
-  void RunImpl(Result<V> data) override {
-    if (data.has_value())
-      *(this->dest()) = data.release_value();
-  }
+// template <typename T, typename V = T>
+class StoreActionCallback : public ActionCallback {
+public:
+  // void Run()
+//  private:
+//   void RunImpl(Result<V> data) override {
+//     if (data.has_value())
+//       *(this->dest()) = data.release_value();
+//   }
 };
 
 template <typename T, typename V = T>
@@ -1085,7 +1246,7 @@ enum class HelpFilterResult {
 using HelpFilterCallback =
     std::function<HelpFilterResult(const Argument&, std::string* text)>;
 
-using ProgramVersionCallback = void(*)(std::FILE*, argp_state*);
+using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
 
 class ArgArray {
  public:
@@ -1566,23 +1727,14 @@ struct DefaultParserTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
 // Default handling of FILE* is to open it for reading.
 template <>
 struct DefaultParserTraits<FILE*> {
-  static void Run(const std::string& in, Result<FILE*>* out) {
-  }
+  static void Run(const std::string& in, Result<FILE*>* out) {}
 };
 
 // Handling of FileType.
 // User can give FileType(mode) in type() to indicate he want to open a file.
 // But the actual opening operation depends on dest.
-// Thus we define a FileOpener interface to erase the opening logic once dest is given.
-// And FileTypeCallback uses a FileOpener to do type-independent opening.
-
-// File open mode.
-enum class Mode : unsigned {
-  kRead = 0x0,
-  kWrite = 0x1,
-  kAppend = 0x2,
-  kTruncate = 0x4,
-};
+// Thus we define a FileOpener interface to erase the opening logic once dest is
+// given. And FileTypeCallback uses a FileOpener to do type-independent opening.
 
 template <typename T>
 struct EnumOpTraits {

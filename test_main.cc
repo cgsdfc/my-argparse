@@ -31,6 +31,10 @@ int main(int argc, char const* argv[]) {
   std::ofstream output;
   parser.add_argument("output", &output, "output to this file");
 
+  std::type_index i=typeid(int), e = typeid(void);
+  std::swap(i, e);
+  // i = typeid(void);
+
   parser.parse_args(argc, argv);
 
 }
