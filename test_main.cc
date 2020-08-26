@@ -28,8 +28,8 @@ int main(int argc, char const* argv[]) {
                               std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
                             }));
 
-  std::ofstream output;
-  parser.add_argument("output", &output, "output to this file");
+  // std::ofstream output;
+  // parser.add_argument("output", &output, "output to this file");
 
   std::type_index i=typeid(int), e = typeid(void);
   std::swap(i, e);

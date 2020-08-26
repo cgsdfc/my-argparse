@@ -395,6 +395,41 @@ struct CallbackFactorySelector<T, A, false> /* Not supported */ {
   static CallbackFactory* Run() { return nullptr; }
 };
 
+class DestPtr;
+class StoreOps;
+class OpenFileOps;
+class ParseOps;
+class AppendOps;
+
+class OpsFactory {
+ public:
+  virtual ~OpsFactory() {}
+  virtual StoreOps* CreateStoreOps() = 0;
+  virtual AppendOps* CreateAppendOps() = 0;
+  virtual OpenFileOps* CreateOpenFileOps() = 0;
+  virtual ParseOps* CreateParseOps() = 0;
+  virtual ParseOps* CreateParseOpsForValueType() = 0;
+};
+
+template <typename Ops, typename T>
+struct IsOpsSupported : std::false_type {};
+
+template <typename Ops,
+          template <typename>
+          class OpsImpl,
+          typename T,
+          bool ok = IsOpsSupported<Ops, T>{}>
+struct OpsFactoryHelper;
+
+template <typename Ops, template <typename> class OpsImpl, typename T>
+struct OpsFactoryHelper<Ops, OpsImpl, T, false> {
+  static Ops* Create() { return nullptr; }
+};
+template <typename Ops, template <typename> class OpsImpl, typename T>
+struct OpsFactoryHelper<Ops, OpsImpl, T, true> {
+  static Ops* Create() { return new OpsImpl<T>(); }
+};
+
 class DestInfo {
  public:
   virtual CallbackFactory* CreateFactory(Actions action) = 0;
@@ -411,6 +446,7 @@ class DestPtr {
  public:
   template <typename T>
   explicit DestPtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {}
+  DestPtr() = default;
 
   // Copy content to out.
   template <typename T>
@@ -445,9 +481,13 @@ class DestPtr {
 
   explicit operator bool() const { return !!ptr_; }
 
+  std::type_index type() const { return type_; }
+  void* ptr() const { return ptr_; }
+
  private:
-  std::type_index type_;
-  void* ptr_;
+  struct NoneType {};
+  std::type_index type_ = typeid(NoneType);
+  void* ptr_ = nullptr;
 };
 
 // File open mode.
@@ -572,6 +612,40 @@ template <typename T>
 class OpenFileStreamOps : public OpenFileOps {};
 
 template <typename T>
+class OpenFileOpsImpl {};
+
+template <>
+class OpenFileOpsImpl<FILE*> : public OpenCFileOps {};
+
+// template <>
+// class OpenFileOpsImpl<std::ofstream> : public  {};
+// template <>
+// class OpenFileOpsImpl<> : public  {};
+// template <>
+// class OpenFileOpsImpl<> : public  {};
+
+template <typename T>
+class OpsFactoryImpl : public OpsFactory {
+ public:
+  StoreOps* CreateStoreOps() override {
+    return OpsFactoryHelper<StoreOps, StoreOpsImpl, T>::Create();
+  }
+  AppendOps* CreateAppendOps() override {
+    return OpsFactoryHelper<AppendOps, AppendOpsImpl, T>::Create();
+  }
+  OpenFileOps* CreateOpenFileOps() override {
+    return OpsFactoryHelper<OpenFileOps, OpenFileOpsImpl, T>::Create();
+  }
+  ParseOps* CreateParseOps() override {
+    return OpsFactoryHelper<ParseOps, ParseOpsImpl, T>::Create();
+  }
+  ParseOps* CreateParseOpsForValueType() override {
+    return OpsFactoryHelper<ParseOps, ParseOpsImpl, ValueTypeOf<T>>::Create();
+  }
+};
+
+
+template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
 
 // There is an alternative for those using exception.
@@ -677,8 +751,12 @@ class ActionCallback {
  public:
   virtual ~ActionCallback() {}
   // For performing runtime type check.
-  virtual std::type_index GetDestType() = 0;
-  virtual std::type_index GetValueType() = 0;
+  virtual std::type_index GetDestType() {
+    return typeid(void);
+  }
+  virtual std::type_index GetValueType() {
+    return typeid(void);
+  }
   virtual void Run(std::unique_ptr<Any> any) = 0;
 
   bool WorksWith(DestInfo* dest, TypeCallback* type) {
@@ -690,6 +768,9 @@ class ActionCallback {
     DCHECK(dest_info && GetDestType() == dest_info->GetDestType());
     dest_ = dest_info->ptr();
   }
+  void SetDest(DestPtr dest_ptr) {
+    dest_ptr_ = dest_ptr;
+  }
 
   // Set an const value to this action (must be a valid value.)
   void SetConstValue(std::any value) {
@@ -700,6 +781,7 @@ class ActionCallback {
 
  protected:
   void* dest_ = nullptr;
+  DestPtr dest_ptr_;
   std::any const_value_;
 };
 
@@ -741,15 +823,17 @@ class ActionCallbackBase : public ActionCallback {
 };
 
 // This impls store and store-const.
-// template <typename T, typename V = T>
 class StoreActionCallback : public ActionCallback {
-public:
-  // void Run()
-//  private:
-//   void RunImpl(Result<V> data) override {
-//     if (data.has_value())
-//       *(this->dest()) = data.release_value();
-//   }
+ public:
+  explicit StoreActionCallback(StoreOps* ops) : store_ops_(ops) {}
+
+  void Run(std::unique_ptr<Any> data) override {
+    DCHECK(store_ops_);
+    store_ops_->Run(dest_ptr_, std::move(data));
+  }
+
+ private:
+  std::unique_ptr<StoreOps> store_ops_;
 };
 
 template <typename T, typename V = T>
@@ -758,15 +842,15 @@ class StoreConstActionCallback : public ActionCallbackBase<T, V> {
   void RunImpl(Result<V>) override { *(this->dest()) = this->ConstValue(); }
 };
 
-template <typename T,
-          typename Traits = AppendTraits<T>,
-          typename ValueType = typename Traits::ValueType>
-class AppendActionCallback : public ActionCallbackBase<T, ValueType> {
- private:
-  void RunImpl(Result<ValueType> data) override {
-    if (data.has_value())
-      Traits::Append(this->dest(), data.release_value());
+class AppendActionCallback : public ActionCallback {
+ public:
+  explicit AppendActionCallback(AppendOps* ops) : append_ops_(ops) {}
+  void Run(std::unique_ptr<Any> data) override {
+    append_ops_->Run(dest_ptr_, std::move(data));
   }
+
+ private:
+  std::unique_ptr<AppendOps> append_ops_;
 };
 
 template <typename T,
@@ -882,15 +966,15 @@ struct CallbackFactoryGenerator {
   }
 };
 
-template <typename T>
-struct CallbackFactorySelector<T, Actions::kStore, true>
-    : CallbackFactoryGenerator<StoreActionCallback<T>, DefaultTypeCallback<T>> {
-};
+// template <typename T>
+// struct CallbackFactorySelector<T, Actions::kStore, true>
+//     : CallbackFactoryGenerator<StoreActionCallback<T>, DefaultTypeCallback<T>> {
+// };
 
-template <typename T>
-struct CallbackFactorySelector<T, Actions::kAppend, true>
-    : CallbackFactoryGenerator<AppendActionCallback<T>,
-                               DefaultTypeCallback<ValueTypeOf<T>>> {};
+// template <typename T>
+// struct CallbackFactorySelector<T, Actions::kAppend, true>
+//     : CallbackFactoryGenerator<AppendActionCallback<T>,
+//                                DefaultTypeCallback<ValueTypeOf<T>>> {};
 
 template <typename T>
 struct CallbackFactorySelector<T, Actions::kStoreConst, true>
