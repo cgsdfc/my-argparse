@@ -359,15 +359,17 @@ enum class Actions {
   kStoreFalse,
   kAppend,
   kAppendConst,
+  kPrintHelp,
+  kPrintUsage,
   kCustom,
 };
 
-class CallbackFactory {
- public:
-  virtual ActionCallback* CreateActionCallback() = 0;
-  virtual TypeCallback* CreateTypeCallback() = 0;
-  virtual ~CallbackFactory() {}
-};
+// class CallbackFactory {
+//  public:
+//   virtual ActionCallback* CreateActionCallback() = 0;
+//   virtual TypeCallback* CreateTypeCallback() = 0;
+//   virtual ~CallbackFactory() {}
+// };
 
 template <typename Ops, typename T>
 struct IsOpsSupported : std::false_type {};
@@ -412,39 +414,39 @@ struct IsActionSupported<T, Actions::kAppendConst>
 
 // This is a meta-function that handles static-runtime mix of selecting action
 // factory.
-template <typename T, Actions A, bool Supported = IsActionSupported<T, A>{}>
-struct CallbackFactorySelector;
+// template <typename T, Actions A, bool Supported = IsActionSupported<T, A>{}>
+// struct CallbackFactorySelector;
 
-template <typename T, Actions A>
-struct CallbackFactorySelector<T, A, false> /* Not supported */ {
-  static CallbackFactory* Run() { return nullptr; }
-};
+// template <typename T, Actions A>
+// struct CallbackFactorySelector<T, A, false> /* Not supported */ {
+//   static CallbackFactory* Run() { return nullptr; }
+// };
 
-class OpsFactory {
- public:
-  virtual ~OpsFactory() {}
-  virtual StoreOps* CreateStoreOps() = 0;
-  virtual AppendOps* CreateAppendOps() = 0;
-  virtual OpenFileOps* CreateOpenFileOps() = 0;
-  virtual ParseOps* CreateParseOps() = 0;
-  virtual ParseOps* CreateParseOpsForValueType() = 0;
-};
+// class OpsFactory {
+//  public:
+//   virtual ~OpsFactory() {}
+//   virtual StoreOps* CreateStoreOps() = 0;
+//   virtual AppendOps* CreateAppendOps() = 0;
+//   virtual OpenFileOps* CreateOpenFileOps() = 0;
+//   virtual ParseOps* CreateParseOps() = 0;
+//   virtual ParseOps* CreateParseOpsForValueType() = 0;
+// };
 
-template <typename Ops,
-          template <typename>
-          class OpsImpl,
-          typename T,
-          bool ok = IsOpsSupported<Ops, T>{}>
-struct OpsFactoryHelper;
+// template <typename Ops,
+//           template <typename>
+//           class OpsImpl,
+//           typename T,
+//           bool ok = IsOpsSupported<Ops, T>{}>
+// struct OpsFactoryHelper;
 
-template <typename Ops, template <typename> class OpsImpl, typename T>
-struct OpsFactoryHelper<Ops, OpsImpl, T, false> {
-  static Ops* Create() { return nullptr; }
-};
-template <typename Ops, template <typename> class OpsImpl, typename T>
-struct OpsFactoryHelper<Ops, OpsImpl, T, true> {
-  static Ops* Create() { return new OpsImpl<T>(); }
-};
+// template <typename Ops, template <typename> class OpsImpl, typename T>
+// struct OpsFactoryHelper<Ops, OpsImpl, T, false> {
+//   static Ops* Create() { return nullptr; }
+// };
+// template <typename Ops, template <typename> class OpsImpl, typename T>
+// struct OpsFactoryHelper<Ops, OpsImpl, T, true> {
+//   static Ops* Create() { return new OpsImpl<T>(); }
+// };
 
 class DestPtr {
  public:
@@ -519,107 +521,107 @@ enum class Mode : unsigned {
 // minimal function offered by the lib.
 
 // The minimal interface.
-class Ops {
- public:
-  virtual ~Ops() {}
-};
+// class Ops {
+//  public:
+//   virtual ~Ops() {}
+// };
 
 // Used by StoreConst and Store.
-class StoreOps : public Ops {
- public:
-  virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
-};
+// class StoreOps : public Ops {
+//  public:
+//   virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
+// };
 
-template <typename T>
-class StoreOpsImpl : public StoreOps {
- public:
-  void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
-    if (data) {
-      T val;
-      UnwrapAny(std::move(data), &val);
-      ptr.store(MoveOrCopy(&val));
-    }
-  }
-};
+// template <typename T>
+// class StoreOpsImpl : public StoreOps {
+//  public:
+//   void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
+//     if (data) {
+//       T val;
+//       UnwrapAny(std::move(data), &val);
+//       ptr.store(MoveOrCopy(&val));
+//     }
+//   }
+// };
 
-// Used by Append and AppendConst. This only erase the operation defined by
-// AppendTraits.
-class AppendOps : public Ops {
- public:
-  virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
-};
+// // Used by Append and AppendConst. This only erase the operation defined by
+// // AppendTraits.
+// class AppendOps : public Ops {
+//  public:
+//   virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
+// };
 
-// Only instantiate if Append is supported.
-template <typename T>
-class AppendOpsImpl : public AppendOps {
- public:
-  static_assert(IsAppendSupported<T>{});
-  using Traits = AppendTraits<T>;
-  using ValueType = ValueTypeOf<T>;
+// // Only instantiate if Append is supported.
+// template <typename T>
+// class AppendOpsImpl : public AppendOps {
+//  public:
+//   static_assert(IsAppendSupported<T>{});
+//   using Traits = AppendTraits<T>;
+//   using ValueType = ValueTypeOf<T>;
 
-  void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
-    if (data) {
-      T* obj;
-      ptr.load_ptr(&obj);
-      ValueType val;
-      UnwrapAny(std::move(data), &val);
-      Traits::Run(obj, MoveOrCopy(val));
-    }
-  }
-};
+//   void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
+//     if (data) {
+//       T* obj;
+//       ptr.load_ptr(&obj);
+//       ValueType val;
+//       UnwrapAny(std::move(data), &val);
+//       Traits::Run(obj, MoveOrCopy(val));
+//     }
+//   }
+// };
 
-// Used by ParseTypeCallback. This only erase parsers defined by
-// ParserTraits (TODO: ParseTraits).
-class ParseOps : public Ops {
- public:
-  struct ParseResult {
-    bool has_error = false;
-    std::unique_ptr<Any> value;  // null if error.
-    std::string errmsg;
-  };
-  virtual void Run(const std::string& in, ParseResult* result) = 0;
-};
+// // Used by ParseTypeCallback. This only erase parsers defined by
+// // ParserTraits (TODO: ParseTraits).
+// class ParseOps : public Ops {
+//  public:
+//   struct ParseResult {
+//     bool has_error = false;
+//     std::unique_ptr<Any> value;  // null if error.
+//     std::string errmsg;
+//   };
+//   virtual void Run(const std::string& in, ParseResult* result) = 0;
+// };
 
-template <typename T>
-class ParseOpsImpl : public ParseOps {
- public:
-  using Traits = ParserTraits<T>;
-  void Run(const std::string& in, ParseResult* out) override {
-    Result<T> result;
-    Traits::Run(in, &result);
-    out->has_error = result.has_error();
-    if (result.has_value()) {
-      WrapAny(&result, &out->value);
-    } else if (result.has_error()) {
-      out->errmsg = result.release_error();
-    }
-  }
-};
+// template <typename T>
+// class ParseOpsImpl : public ParseOps {
+//  public:
+//   using Traits = ParserTraits<T>;
+//   void Run(const std::string& in, ParseResult* out) override {
+//     Result<T> result;
+//     Traits::Run(in, &result);
+//     out->has_error = result.has_error();
+//     if (result.has_value()) {
+//       WrapAny(&result, &out->value);
+//     } else if (result.has_error()) {
+//       out->errmsg = result.release_error();
+//     }
+//   }
+// };
 
-// Previously known as FileOpener. Used by FileTypeCallback.
-class OpenFileOps : public Ops {
- public:
-  struct Result {
-    std::unique_ptr<Any> file;  // null if error.
-    std::string errmsg;
-  };
-  // TODO: Mode or custom mode?
-  virtual void Run(const char* filename, Mode mode, Result* result) = 0;
-  virtual Mode DefaultMode() = 0;
-};
+// // Previously known as FileOpener. Used by FileTypeCallback.
+// class OpenFileOps : public Ops {
+//  public:
+//   struct Result {
+//     std::unique_ptr<Any> file;  // null if error.
+//     std::string errmsg;
+//   };
+//   // TODO: Mode or custom mode?
+//   virtual void Run(const char* filename, Mode mode, Result* result) = 0;
+//   virtual Mode DefaultMode() = 0;
+// };
 
-// Open FILE*.
-class OpenCFileOps : public OpenFileOps {};
+// // Open FILE*.
+// class OpenCFileOps : public OpenFileOps {};
 
-// Open std::fstream/ifstream/ofstream.
-template <typename T>
-class OpenFileStreamOps : public OpenFileOps {};
+// // Open std::fstream/ifstream/ofstream.
+// template <typename T>
+// class OpenFileStreamOps : public OpenFileOps {};
 
-template <typename T>
-class OpenFileOpsImpl {};
+// template <typename T>
+// class OpenFileOpsImpl {};
 
-template <>
-class OpenFileOpsImpl<FILE*> : public OpenCFileOps {};
+// template <>
+// class OpenFileOpsImpl<FILE*> : public OpenCFileOps {};
 
 // template <>
 // class OpenFileOpsImpl<std::ofstream> : public  {};
@@ -628,38 +630,38 @@ class OpenFileOpsImpl<FILE*> : public OpenCFileOps {};
 // template <>
 // class OpenFileOpsImpl<> : public  {};
 
-template <typename T>
-class OpsFactoryImpl : public OpsFactory {
- public:
-  StoreOps* CreateStoreOps() override {
-    return OpsFactoryHelper<StoreOps, StoreOpsImpl, T>::Create();
-  }
-  AppendOps* CreateAppendOps() override {
-    return OpsFactoryHelper<AppendOps, AppendOpsImpl, T>::Create();
-  }
-  OpenFileOps* CreateOpenFileOps() override {
-    return OpsFactoryHelper<OpenFileOps, OpenFileOpsImpl, T>::Create();
-  }
-  ParseOps* CreateParseOps() override {
-    return OpsFactoryHelper<ParseOps, ParseOpsImpl, T>::Create();
-  }
-  ParseOps* CreateParseOpsForValueType() override {
-    return OpsFactoryHelper<ParseOps, ParseOpsImpl, ValueTypeOf<T>>::Create();
-  }
-};
+// template <typename T>
+// class OpsFactoryImpl : public OpsFactory {
+//  public:
+//   StoreOps* CreateStoreOps() override {
+//     return OpsFactoryHelper<StoreOps, StoreOpsImpl, T>::Create();
+//   }
+//   AppendOps* CreateAppendOps() override {
+//     return OpsFactoryHelper<AppendOps, AppendOpsImpl, T>::Create();
+//   }
+//   OpenFileOps* CreateOpenFileOps() override {
+//     return OpsFactoryHelper<OpenFileOps, OpenFileOpsImpl, T>::Create();
+//   }
+//   ParseOps* CreateParseOps() override {
+//     return OpsFactoryHelper<ParseOps, ParseOpsImpl, T>::Create();
+//   }
+//   ParseOps* CreateParseOpsForValueType() override {
+//     return OpsFactoryHelper<ParseOps, ParseOpsImpl, ValueTypeOf<T>>::Create();
+//   }
+// };
 
 class DestInfo {
- public:
-  template <typename T>
-  explicit DestInfo(T* ptr)
-      : ops_factory_(new OpsFactoryImpl<T>), dest_ptr_(ptr) {}
+//  public:
+//   template <typename T>
+//   explicit DestInfo(T* ptr)
+//       : ops_factory_(new OpsFactoryImpl<T>), dest_ptr_(ptr) {}
 
-  OpsFactory* GetOpsFactory() { return ops_factory_.get(); }
-  DestPtr GetDestPtr() { return dest_ptr_; }
+//   OpsFactory* GetOpsFactory() { return ops_factory_.get(); }
+//   DestPtr GetDestPtr() { return dest_ptr_; }
 
- private:
-  std::unique_ptr<OpsFactory> ops_factory_;
-  DestPtr dest_ptr_;
+//  private:
+//   std::unique_ptr<OpsFactory> ops_factory_;
+//   DestPtr dest_ptr_;
 };
 
 // The function pointer table for Ops impl.
@@ -1063,24 +1065,24 @@ class DestInfoImpl : public DestInfo {
   // }
 };
 
-template <typename ActionCallbackT, typename TypeCallbackT>
-struct CallbackFactoryGenerator {
-  static_assert(std::is_base_of<ActionCallback, ActionCallbackT>{});
-  static_assert(std::is_base_of<TypeCallback, TypeCallbackT>{});
+// template <typename ActionCallbackT, typename TypeCallbackT>
+// struct CallbackFactoryGenerator {
+//   static_assert(std::is_base_of<ActionCallback, ActionCallbackT>{});
+//   static_assert(std::is_base_of<TypeCallback, TypeCallbackT>{});
 
-  static CallbackFactory* Run() {
-    class FactoryImpl : public CallbackFactory {
-     public:
-      ActionCallback* CreateActionCallback() override {
-        return new ActionCallbackT();
-      }
-      TypeCallback* CreateTypeCallback() override {
-        return new TypeCallbackT();
-      }
-    };
-    return new FactoryImpl();
-  }
-};
+//   static CallbackFactory* Run() {
+//     class FactoryImpl : public CallbackFactory {
+//      public:
+//       ActionCallback* CreateActionCallback() override {
+//         return new ActionCallbackT();
+//       }
+//       TypeCallback* CreateTypeCallback() override {
+//         return new TypeCallbackT();
+//       }
+//     };
+//     return new FactoryImpl();
+//   }
+// };
 
 // template <typename T>
 // struct CallbackFactorySelector<T, Actions::kStore, true>
