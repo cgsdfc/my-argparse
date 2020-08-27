@@ -670,11 +670,18 @@ class DestInfo {
 // type. For example, it is banned to open a file and turn it into a double, but
 // it might be true that an opened file can be turned into an int (fd).
 // The table for each type is shared once created.
-
 struct Operations {
   struct OpsResult {
     std::unique_ptr<Any> file;  // null if error.
     std::string errmsg;
+  };
+
+  // For defining actual functions.
+  enum {
+    kStore,
+    kAppend,
+    kParse,
+    kOpenFile,
   };
 
   using StoreOps = void(DestPtr, std::unique_ptr<Any>);
@@ -754,20 +761,20 @@ class TypeCallbackBase : public TypeCallback {
 
 // A subclass that always return nullptr. Used for actions without a need of
 // value.
-class NullTypeCallback : public TypeCallback {
- public:
-  NullTypeCallback() = default;
-  std::type_index GetValueType() override { return typeid(void); }
-};
+// class NullTypeCallback : public TypeCallback {
+//  public:
+//   NullTypeCallback() = default;
+//   std::type_index GetValueType() override { return typeid(void); }
+// };
 
 // A subclass that parses string into value using a Traits.
-template <typename T>
-class DefaultTypeCallback : public TypeCallbackBase<T> {
- private:
-  void RunImpl(const std::string& in, Result<T>* out) override {
-    ParserTraits<T>::Run(in, out);
-  }
-};
+// template <typename T>
+// class DefaultTypeCallback : public TypeCallbackBase<T> {
+//  private:
+//   void RunImpl(const std::string& in, Result<T>* out) override {
+//     ParserTraits<T>::Run(in, out);
+//   }
+// };
 
 template <typename T>
 class CustomTypeCallback : public TypeCallbackBase<T> {
@@ -877,46 +884,46 @@ class ActionCallbackBase : public ActionCallback {
   }
 };
 
-// This impls store and store-const.
-class StoreActionCallback : public ActionCallback {
- public:
-  explicit StoreActionCallback(StoreOps* ops) : store_ops_(ops) {}
+// // This impls store and store-const.
+// class StoreActionCallback : public ActionCallback {
+//  public:
+//   explicit StoreActionCallback(StoreOps* ops) : store_ops_(ops) {}
 
-  void Run(std::unique_ptr<Any> data) override {
-    DCHECK(store_ops_);
-    store_ops_->Run(dest_ptr_, std::move(data));
-  }
+//   void Run(std::unique_ptr<Any> data) override {
+//     DCHECK(store_ops_);
+//     store_ops_->Run(dest_ptr_, std::move(data));
+//   }
 
- private:
-  std::unique_ptr<StoreOps> store_ops_;
-};
+//  private:
+//   std::unique_ptr<StoreOps> store_ops_;
+// };
 
-template <typename T, typename V = T>
-class StoreConstActionCallback : public ActionCallbackBase<T, V> {
- private:
-  void RunImpl(Result<V>) override { *(this->dest()) = this->ConstValue(); }
-};
+// template <typename T, typename V = T>
+// class StoreConstActionCallback : public ActionCallbackBase<T, V> {
+//  private:
+//   void RunImpl(Result<V>) override { *(this->dest()) = this->ConstValue(); }
+// };
 
-class AppendActionCallback : public ActionCallback {
- public:
-  explicit AppendActionCallback(AppendOps* ops) : append_ops_(ops) {}
-  void Run(std::unique_ptr<Any> data) override {
-    append_ops_->Run(dest_ptr_, std::move(data));
-  }
+// class AppendActionCallback : public ActionCallback {
+//  public:
+//   explicit AppendActionCallback(AppendOps* ops) : append_ops_(ops) {}
+//   void Run(std::unique_ptr<Any> data) override {
+//     append_ops_->Run(dest_ptr_, std::move(data));
+//   }
 
- private:
-  std::unique_ptr<AppendOps> append_ops_;
-};
+//  private:
+//   std::unique_ptr<AppendOps> append_ops_;
+// };
 
-template <typename T,
-          typename Traits = AppendTraits<T>,
-          typename V = typename Traits::ValueType>
-class AppendConstActionCallback : public ActionCallbackBase<T, V> {
- private:
-  void RunImpl(Result<V>) override {
-    Traits::Append(this->dest(), this->ConstValue());
-  }
-};
+// template <typename T,
+//           typename Traits = AppendTraits<T>,
+//           typename V = typename Traits::ValueType>
+// class AppendConstActionCallback : public ActionCallbackBase<T, V> {
+//  private:
+//   void RunImpl(Result<V>) override {
+//     Traits::Append(this->dest(), this->ConstValue());
+//   }
+// };
 
 // Provided by user's callable obj.
 template <typename T, typename V>
@@ -960,11 +967,11 @@ class CallbackRunner {
 };
 
 // Used for no dest, no type no action.
-class DummyCallbackRunner : public CallbackRunner {
- public:
-  void Run(Context*, Delegate*) override {}
-  ~DummyCallbackRunner() override {}
-};
+// class DummyCallbackRunner : public CallbackRunner {
+//  public:
+//   void Run(Context*, Delegate*) override {}
+//   ~DummyCallbackRunner() override {}
+// };
 
 // Run TypeCallback and ActionCallback.
 class CallbackRunnerImpl : public CallbackRunner {
