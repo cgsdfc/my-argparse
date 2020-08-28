@@ -2,8 +2,8 @@
 
 namespace argparse {
 
-CallbackRunner* CallbackResolverImpl::CreateCallbackRunner() {
-  if (!dest_) {
+// CallbackRunner* CallbackResolverImpl::CreateCallbackRunner() {
+//   if (!dest_) {
   //   // everything is null.
   //   if (!custom_action_)  // The user don't give any action and dest, the type
   //                         // is discarded if given.
@@ -15,42 +15,42 @@ CallbackRunner* CallbackResolverImpl::CreateCallbackRunner() {
   //   }
   //   return new CallbackRunnerImpl(std::move(custom_type_),
   //                                 std::move(custom_action_));
-  }
-
-  auto* factory = dest_->CreateOpsFactory();
-
-  if (action_ == Actions::kNoAction)
-    action_ = Actions::kStore;
-
-  if (action_ != Actions::kCustom) {
-    // user does not provide an action callback, we need to infer.
-    // custom_action_.reset(factory->CreateActionCallback());
-  }
-
-
-  // // The factory is used as a fall-back when user don't specify.
-  // auto* factory = dest_->CreateFactory(action_);
-  // // if we need the factory (action_ or type_ is null), but it is invalid.
-  // DCHECK2((custom_action_ && custom_type_) || factory,
-  //         "The provided action is not supported by the type of dest");
-
-  // // If there is a dest, send it to action anyway (may not be needed by the
-  // // action, but we generally don't know that.).
-  // custom_action_->SetDest(dest_.get());
-
-  // if (value_.has_value()) {
-  //   // If user gave us a value, send it to the action.
-  //   custom_action_->SetConstValue(std::move(value_));
   // }
 
-  // if (!custom_type_) {
-  //   custom_type_.reset(factory->CreateTypeCallback());
-  // }
-  // DCHECK2(custom_action_->WorksWith(dest_.get(), custom_type_.get()),
-  //         "The provide dest, action and type are not compatible");
-  // return new CallbackRunnerImpl(std::move(custom_type_),
-  //                               std::move(custom_action_));
-}
+//   auto* factory = dest_->CreateOpsFactory();
+
+//   if (action_ == Actions::kNoAction)
+//     action_ = Actions::kStore;
+
+//   if (action_ != Actions::kCustom) {
+//     // user does not provide an action callback, we need to infer.
+//     // custom_action_.reset(factory->CreateActionCallback());
+//   }
+
+
+//   // // The factory is used as a fall-back when user don't specify.
+//   // auto* factory = dest_->CreateFactory(action_);
+//   // // if we need the factory (action_ or type_ is null), but it is invalid.
+//   // DCHECK2((custom_action_ && custom_type_) || factory,
+//   //         "The provided action is not supported by the type of dest");
+
+//   // // If there is a dest, send it to action anyway (may not be needed by the
+//   // // action, but we generally don't know that.).
+//   // custom_action_->SetDest(dest_.get());
+
+//   // if (value_.has_value()) {
+//   //   // If user gave us a value, send it to the action.
+//   //   custom_action_->SetConstValue(std::move(value_));
+//   // }
+
+//   // if (!custom_type_) {
+//   //   custom_type_.reset(factory->CreateTypeCallback());
+//   // }
+//   // DCHECK2(custom_action_->WorksWith(dest_.get(), custom_type_.get()),
+//   //         "The provide dest, action and type are not compatible");
+//   // return new CallbackRunnerImpl(std::move(custom_type_),
+//   //                               std::move(custom_action_));
+// }
 
 void Names::InitOptions(std::initializer_list<const char*> names) {
   DCHECK2(names.size(), "At least one name must be provided");
@@ -78,7 +78,7 @@ void Names::InitOptions(std::initializer_list<const char*> names) {
 
 // ArgumentImpl:
 ArgumentImpl::ArgumentImpl(Delegate* delegate, const Names& names, int group)
-    : callback_resolver_(new CallbackResolverImpl()),
+    : callback_resolver_(OpsCallbackRunner::CreateResolver()),
       delegate_(delegate),
       group_(group) {
   InitNames(names);
@@ -343,16 +343,16 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
   }
 }
 
-void CallbackRunnerImpl::Run(Context* ctx, Delegate* delegate) {
-  OpsResult results;
-  // TypeCallback::ConversionResult results;
-  if (ctx->has_value)
-    type_->Run(ctx->value, &results);
-  if (results.has_error)
-    delegate->HandleCallbackError(ctx, results.errmsg);
-  else
-    action_->Run(std::move(results.value));
-}
+// void CallbackRunnerImpl::Run(Context* ctx, Delegate* delegate) {
+//   OpsResult results;
+//   // TypeCallback::ConversionResult results;
+//   if (ctx->has_value)
+//     type_->Run(ctx->value, &results);
+//   if (results.has_error)
+//     delegate->HandleCallbackError(ctx, results.errmsg);
+//   else
+//     action_->Run(std::move(results.value));
+// }
 
 Argument* ArgumentHolderImpl::AddArgumentToGroup(Names names, int group) {
   // First check if this arg will conflict with existing ones.
