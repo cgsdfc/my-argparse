@@ -751,17 +751,7 @@ class CustomTypeCallback : public TypeCallback {
 class ActionCallback {
  public:
   virtual ~ActionCallback() {}
-  virtual void Run(std::unique_ptr<Any> data) = 0;
-
-  void SetDest(DestPtr dest_ptr) {
-    DCHECK2(dest_ptr, "dest_ptr should not be null");
-    dest_ptr_ = dest_ptr;
-  }
-
-  const DestPtr& dest() const { return dest_ptr_; }
-
- private:
-  DestPtr dest_ptr_;
+  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
 };
 
 // Deprecated.
@@ -775,10 +765,10 @@ class CustomActionCallback : public ActionCallback {
   }
 
  private:
-  void Run(std::unique_ptr<Any> data) override {
+  void Run(DestPtr dest, std::unique_ptr<Any> data) override {
     Result<V> result;
     UnwrapAny(std::move(data), &result);
-    auto* obj = dest().template load_ptr<T>();
+    auto* obj = dest.template load_ptr<T>();
     std::invoke(callback_, obj, std::move(result));
   }
 
@@ -981,7 +971,7 @@ class OpsCallbackRunner : public CallbackRunner {
         break;
       case Actions::kCustom:
         DCHECK(custom_action_);
-        custom_action_->Run(std::move(data));
+        custom_action_->Run(dest(), std::move(data));
         break;
     }
   }
