@@ -552,10 +552,11 @@ class Operations {
   virtual void Append(DestPtr dest, std::unique_ptr<Any> data) = 0;
   virtual void AppendConst(DestPtr dest, const Any& data) = 0;
 
-  virtual void Parse(const std::string&, OpsResult*) = 0;
-  virtual void Open(const std::string&, Mode, OpsResult*) = 0;
+  virtual void Parse(const std::string& in, OpsResult* out) = 0;
+  virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
 
   virtual Operations* ValueTypeOps() = 0;
+  virtual ~Operations() {}
 };
 
 class OpsFactory;
@@ -578,6 +579,32 @@ class OpsFactory {
   virtual ~OpsFactory() {}
 };
 
+template <typename T>
+class OperationsImpl : public Operations {
+ public:
+  void Store(DestPtr dest, std::unique_ptr<Any> data);
+  void StoreConst(DestPtr dest, const Any& data);
+  void Append(DestPtr dest, std::unique_ptr<Any> data);
+  void AppendConst(DestPtr dest, const Any& data);
+
+  void Parse(const std::string& in, OpsResult* out);
+  void Open(const std::string& in, Mode, OpsResult* out);
+
+  Operations* ValueTypeOps();
+};
+
+class OpsTypeMapImpl : public OpsTypeMap {
+ public:
+  Operations* Find(std::type_index index) override { return nullptr; }
+  Operations* SetDefault(std::type_index index, OpsFactory* factory) override {
+    return nullptr;
+  }
+
+ private:
+  std::map<std::type_index, std::unique_ptr<Operations>> map_;
+};
+
+// template <ty
   // For defining actual functions.
   // enum Kind {
   //   kStore,
@@ -587,26 +614,26 @@ class OpsFactory {
   //   kOpenFile,
   // };
 
-template <typename T, Operations::Kind OpsKind>
-struct IsOpsEnabled : std::false_type {};
+// template <typename T, Operations::Kind OpsKind>
+// struct IsOpsEnabled : std::false_type {};
 
-template <typename T,
-          Operations::Kind OpsKind,
-          bool Enabled = IsOpsEnabled<T, OpsKind>{}>
-struct OpsImpl;
+// template <typename T,
+//           Operations::Kind OpsKind,
+//           bool Enabled = IsOpsEnabled<T, OpsKind>{}>
+// struct OpsImpl;
 
-template <typename T>
-struct OpsImpl<T, Operations::kStore, false> {
-  static void Run(DestPtr, std::unique_ptr<Any>) {
-    DCHECK2(false, "StoreOps is not supported by this type");
-  }
-};
-template <typename T>
-struct OpsImpl<T, Operations::kStore, true> {
-  static void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) {
-    // DCHECK2(false, "StoreOps is not supported by this type");
-  }
-};
+// template <typename T>
+// struct OpsImpl<T, Operations::kStore, false> {
+//   static void Run(DestPtr, std::unique_ptr<Any>) {
+//     DCHECK2(false, "StoreOps is not supported by this type");
+//   }
+// };
+// template <typename T>
+// struct OpsImpl<T, Operations::kStore, true> {
+//   static void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) {
+//     // DCHECK2(false, "StoreOps is not supported by this type");
+//   }
+// };
 
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
@@ -629,13 +656,12 @@ class TypeCallback {
     std::string msg;
   };
   virtual ~TypeCallback() {}
-  // virtual std::type_index GetValueType() = 0;
   virtual void Run(const std::string& in, ConversionResult* out) {}
 };
 
 class DefaultTypeCallback : public TypeCallback {
  public:
-  explicit DefaultTypeCallback(Operations* ops) ops_(ops) {}
+  explicit DefaultTypeCallback(Operations* ops) : ops_(ops) {}
 
   void Run(const std::string& in, ConversionResult* out) override {
     Operations::OpsResult ops_result;
@@ -651,16 +677,16 @@ class DefaultTypeCallback : public TypeCallback {
 
 class FileTypeCallback : public TypeCallback {
  public:
-  explicit FileTypeCallback(Operations* ops) ops_(ops) {}
+  explicit FileTypeCallback(Operations* ops) : ops_(ops) {}
   void SetMode(Mode mode) { mode_ = mode; }
 
   void Run(const std::string& in, ConversionResult* out) override {
     Operations::OpsResult ops_result;
     ops_->Open(in, mode_, &ops_result);
 
-    out->has_error = !open_result.value;
-    out->value = std::move(open_result.value);
-    out->msg = std::move(open_result.errmsg);
+    out->has_error = !ops_result.value;
+    out->value = std::move(ops_result.value);
+    out->msg = std::move(ops_result.errmsg);
   }
 
  private:
@@ -674,7 +700,6 @@ class CustomTypeCallback : public TypeCallback {
   using CallbackType = std::function<TypeCallbackPrototype<T>>;
   explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
- private:
   void Run(const std::string& in, ConversionResult* out) override {
     Result<T> user_result;
     std::invoke(callback_, in, &user_result);
@@ -685,6 +710,7 @@ class CustomTypeCallback : public TypeCallback {
       WrapAny(&user_result, &out->value);
   }
 
+ private:
   CallbackType callback_;
 };
 
@@ -716,37 +742,25 @@ TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
 class ActionCallback {
  public:
   virtual ~ActionCallback() {}
-  // For performing runtime type check.
-  virtual std::type_index GetDestType() { return typeid(void); }
-  virtual std::type_index GetValueType() { return typeid(void); }
   virtual void Run(std::unique_ptr<Any> any) = 0;
 
-  // bool WorksWith(DestInfo* dest, TypeCallback* type) {
-  //   return (!dest || dest->GetDestType() == GetDestType()) &&
-  //          (!type || type->GetValueType() == GetValueType());
-  // }
-
-  // void SetDest(DestInfo* dest_info) {
-  //   DCHECK(dest_info && GetDestType() == dest_info->GetDestType());
-  //   dest_ = dest_info->ptr();
-  // }
-  void SetDest(DestPtr dest_ptr) { dest_ptr_ = dest_ptr; }
+  void SetDest(DestPtr dest_ptr) {
+    DCHECK2(dest_ptr, "dest_ptr should not be null");
+    dest_ptr_ = dest_ptr;
+  }
 
   // Set an const value to this action (must be a valid value.)
-  void SetConstValue(std::any value) {
-    // DCHECK(value.has_value());
-    // DCHECK(AnyHasType(value, GetValueType()));
-    // const_value_ = std::move(value);
+  void SetConstValue(std::unique_ptr<Any> val) {
+    DCHECK2(val, "const_value should not be null");
+    const_value_ = std::move(val);
   }
 
   const DestPtr& dest() const { return dest_ptr_; }
   const Any& const_value() const { return *const_value_; }
 
  private:
-  // void* dest_ = nullptr;
   DestPtr dest_ptr_;
   std::unique_ptr<Any> const_value_;
-  // std::any const_value_;
 };
 
 class DefaultActionCallback : public ActionCallback {
@@ -784,7 +798,7 @@ class DefaultActionCallback : public ActionCallback {
 
 // Provided by user's callable obj.
 template <typename T, typename V>
-class CustomActionCallback : public ActionCallbackBase<T, V> {
+class CustomActionCallback : public ActionCallback {
  public:
   using CallbackType = std::function<ActionCallbackPrototype<T, V>>;
   explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {
@@ -792,8 +806,8 @@ class CustomActionCallback : public ActionCallbackBase<T, V> {
   }
 
  private:
-  void RunImpl(Result<V> data) override {
-    std::invoke(callback_, this->dest(), std::move(data));
+  void Run(std::unique_ptr<Any> data) override {
+    // std::invoke(callback_, this->dest(), std::move(data));
   }
 
   CallbackType callback_;
@@ -830,6 +844,7 @@ class CallbackRunner {
 //   ~DummyCallbackRunner() override {}
 // };
 
+// XXX: this schema is kept.
 // Run TypeCallback and ActionCallback.
 class CallbackRunnerImpl : public CallbackRunner {
  public:
@@ -844,14 +859,14 @@ class CallbackRunnerImpl : public CallbackRunner {
   std::unique_ptr<ActionCallback> action_;
 };
 
-// Instruction for how to run TypeCallback.
-enum class TypeCallbackKind {
-  kDoNothing,
-  kParse,
-  kParseValueType,
-  kOpenFile,
-  kCustom,
-};
+// // Instruction for how to run TypeCallback.
+// enum class TypeCallbackKind {
+//   kDoNothing,
+//   kParse,
+//   kParseValueType,
+//   kOpenFile,
+//   kCustom,
+// };
 
 // CallbackRunner as an interpreter.
 // Instead of using various subclasses of ActionCallback and TypeCallback to
@@ -859,50 +874,50 @@ enum class TypeCallbackKind {
 // something like interpreter -- all states in one class and do a switch() based
 // on instructions (enum value). Then Action/TypeCallback is for wrapping user's
 // callback, as their names note.
-class OpsCallbackRunner : public CallbackRunner {
- public:
-  void Run(Context* ctx, Delegate* delegate) {}
+// class OpsCallbackRunner : public CallbackRunner {
+//  public:
+//   void Run(Context* ctx, Delegate* delegate) {}
 
- private:
-  void RunTypeCallback(const std::string& in, Operations::OpsResult* out) {
-    switch (type_kind_) {
-      case TypeCallbackKind::kParse:
-        ops_->parse(in, out);
-        break;
-      case TypeCallbackKind::kParseValueType:
-        ops_->parse_value_type(in, out);
-        break;
-      case TypeCallbackKind::kOpenFile:
-        ops_->open_file(in, open_mode_, out);
-        break;
-      case TypeCallbackKind::kCustom:
-        // TODO:
-        custom_type_->Run(in, nullptr);
-        break;
-      case TypeCallbackKind::kDoNothing:
-        break;
-    }
-  }
+//  private:
+//   void RunTypeCallback(const std::string& in, Operations::OpsResult* out) {
+//     switch (type_kind_) {
+//       case TypeCallbackKind::kParse:
+//         ops_->parse(in, out);
+//         break;
+//       case TypeCallbackKind::kParseValueType:
+//         ops_->parse_value_type(in, out);
+//         break;
+//       case TypeCallbackKind::kOpenFile:
+//         ops_->open_file(in, open_mode_, out);
+//         break;
+//       case TypeCallbackKind::kCustom:
+//         // TODO:
+//         custom_type_->Run(in, nullptr);
+//         break;
+//       case TypeCallbackKind::kDoNothing:
+//         break;
+//     }
+//   }
 
-  void RunActionCallback(std::unique_ptr<Any> data) {
-    switch (action_) {
-      case Actions::kCustom:
-        // custom_action_->Run()
-        break;
-      default:
-        break;
-    }
-  }
+//   void RunActionCallback(std::unique_ptr<Any> data) {
+//     switch (action_) {
+//       case Actions::kCustom:
+//         // custom_action_->Run()
+//         break;
+//       default:
+//         break;
+//     }
+//   }
 
-  Actions action_;
-  TypeCallbackKind type_kind_;
-  Mode open_mode_;  // For FileType.
-  const Operations* ops_;
-  DestPtr dest_ptr_;
-  std::unique_ptr<Any> const_value_;  // copyable.
-  std::unique_ptr<ActionCallback> custom_action_;
-  std::unique_ptr<TypeCallback> custom_type_;
-};
+//   Actions action_;
+//   TypeCallbackKind type_kind_;
+//   Mode open_mode_;  // For FileType.
+//   const Operations* ops_;
+//   DestPtr dest_ptr_;
+//   std::unique_ptr<Any> const_value_;  // copyable.
+//   std::unique_ptr<ActionCallback> custom_action_;
+//   std::unique_ptr<TypeCallback> custom_type_;
+// };
 
 template <typename T>
 class DestInfoImpl : public DestInfo {
@@ -959,15 +974,15 @@ class DestInfoImpl : public DestInfo {
 //     : CallbackFactoryGenerator<AppendActionCallback<T>,
 //                                DefaultTypeCallback<ValueTypeOf<T>>> {};
 
-template <typename T>
-struct CallbackFactorySelector<T, Actions::kStoreConst, true>
-    : CallbackFactoryGenerator<StoreConstActionCallback<T>, NullTypeCallback> {
-};
+// template <typename T>
+// struct CallbackFactorySelector<T, Actions::kStoreConst, true>
+//     : CallbackFactoryGenerator<StoreConstActionCallback<T>, NullTypeCallback> {
+// };
 
-template <typename T>
-struct CallbackFactorySelector<T, Actions::kAppendConst, true>
-    : CallbackFactoryGenerator<AppendConstActionCallback<T>, NullTypeCallback> {
-};
+// template <typename T>
+// struct CallbackFactorySelector<T, Actions::kAppendConst, true>
+//     : CallbackFactoryGenerator<AppendConstActionCallback<T>, NullTypeCallback> {
+// };
 
 struct Type {
   std::unique_ptr<TypeCallback> callback;
@@ -1271,11 +1286,11 @@ class ArgumentBuilder {
     resolver_->SetType(std::move(t));
     return *this;
   }
-  template <typename T>
-  ArgumentBuilder& type() {
-    resolver_->SetType(new DefaultTypeCallback<T>());
-    return *this;
-  }
+  // template <typename T>
+  // ArgumentBuilder& type() {
+  //   resolver_->SetType(new DefaultTypeCallback<T>());
+  //   return *this;
+  // }
   ArgumentBuilder& value(std::any val) {
     resolver_->SetValue(std::move(val));
     return *this;
