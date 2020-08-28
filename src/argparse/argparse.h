@@ -585,27 +585,6 @@ class OpsTypeMapImpl : public OpsTypeMap {
   std::map<std::type_index, std::unique_ptr<Operations>> map_;
 };
 
-// template <typename T, Operations::Kind OpsKind>
-// struct IsOpsEnabled : std::false_type {};
-
-// template <typename T,
-//           Operations::Kind OpsKind,
-//           bool Enabled = IsOpsEnabled<T, OpsKind>{}>
-// struct OpsImpl;
-
-// template <typename T>
-// struct OpsImpl<T, Operations::kStore, false> {
-//   static void Run(DestPtr, std::unique_ptr<Any>) {
-//     DCHECK2(false, "StoreOps is not supported by this type");
-//   }
-// };
-// template <typename T>
-// struct OpsImpl<T, Operations::kStore, true> {
-//   static void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) {
-//     // DCHECK2(false, "StoreOps is not supported by this type");
-//   }
-// };
-
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
 
@@ -1797,34 +1776,6 @@ inline Mode operator&(Mode a, Mode b) {
 inline Mode operator|(Mode a, Mode b) {
   return EnumOpTraits<Mode>::Or(a, b);
 }
-
-// class FileOpener {
-//  public:
-//   struct OpenResult {
-//     std::unique_ptr<Any> file;  // null if error.
-//     std::string errmsg;
-//   };
-//   virtual ~FileOpener() {}
-//   virtual void Open(const char* filename, Mode mode, OpenResult* result) = 0;
-// };
-
-// class CFileOpener : public FileOpener {
-//  public:
-//   void Open(const char* filename, Mode mode, OpenResult* result) override {
-//     TranslateMode(mode);
-//     FILE* f = std::fopen(filename, mode_chars_.c_str());
-//     if (f) {
-//       WrapAny(f, &result->file);
-//       return;
-//     }
-//     // handling..
-//     result->errmsg = "Failed to open file";
-//   }
-
-//  private:
-//   void TranslateMode(Mode mode);
-//   std::string mode_chars_;
-// };
 
 }  // namespace argparse
 
