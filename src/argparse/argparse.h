@@ -388,34 +388,15 @@ template <typename T>
 struct IsOpsSupported<OpsKind::kAppend, T> : IsAppendSupported<T> {};
 
 template <typename T>
+struct IsOpsSupported<OpsKind::kAppendConst, T>
+    : std::bool_constant<IsAppendSupported<T>{} &&
+                         std::is_copy_assignable<ValueTypeOf<T>>{}> {};
+
+template <typename T>
 struct IsFileLike : std::false_type {};
 
 template <typename T>
-struct IsOpsSupported<OpenFileOps, T> : IsFileLike<T> {};
-
-// Store Const will copy the const into dest. Since the action may be taken many
-// times, T must be copy-assignable.
-// template <typename T>
-// struct IsActionSupported<T, Actions::kStoreConst>
-//     : std::is_copy_constructible<T> {};
-
-// template <typename T>
-// struct IsActionSupported<T, Actions::kAppend> : IsAppendSupported<T> {};
-
-// template <typename T>
-// struct IsActionSupported<T, Actions::kAppendConst>
-//     : std::bool_constant<IsAppendSupported<T>{} &&
-//                          std::is_copy_constructible<T>{}> {};
-
-// This is a meta-function that handles static-runtime mix of selecting action
-// factory.
-// template <typename T, Actions A, bool Supported = IsActionSupported<T, A>{}>
-// struct CallbackFactorySelector;
-
-// template <typename T, Actions A>
-// struct CallbackFactorySelector<T, A, false> /* Not supported */ {
-//   static CallbackFactory* Run() { return nullptr; }
-// };
+struct IsOpsSupported<OpsKind::kOpen, T> : IsFileLike<T> {};
 
 class DestPtr {
  public:
@@ -546,10 +527,10 @@ template <typename T>
 class OperationsImpl : public Operations {
  public:
   void Store(DestPtr dest, std::unique_ptr<Any> data) override {
-    StoreImpl(dest, std::move(data), IsOpsSupported<StoreOps, T>{});
+    StoreImpl(dest, std::move(data), IsOpsSupported<OpsKind::kStore, T>{});
   }
   void StoreConst(DestPtr dest, const Any& data) override {
-    StoreConstImpl(dest, data, IsOpsSupported<StoreConstOps, T>{});
+    StoreConstImpl(dest, data, IsOpsSupported<OpsKind::kStoreConst, T>{});
   }
   void Append(DestPtr dest, std::unique_ptr<Any> data);
   void AppendConst(DestPtr dest, const Any& data);
@@ -562,7 +543,7 @@ class OperationsImpl : public Operations {
   class FactoryImpl : public OpsFactory {
    public:
     std::unique_ptr<Operations> Create(OpsTypeMap* map) override {
-      auto* value_ops = GetValueTypeOps(map, IsOpsSupported<AppendOps, T>{});
+      auto* value_ops = GetValueTypeOps(map, IsOpsSupported<OpsKind::kAppend, T>{});
       return std::make_unique<OperationsImpl<T>>(value_ops);
     }
 
