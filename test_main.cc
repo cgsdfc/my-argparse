@@ -14,6 +14,8 @@ struct AppendTraits<Appendable> {
 
 int main(int argc, char const* argv[]) {
 
+  OperationsImpl<int> oi;
+
   ArgumentParser parser(Options()
                             .description("a test program")
                             .email("xxx@xxx.com")

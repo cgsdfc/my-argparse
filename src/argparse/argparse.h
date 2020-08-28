@@ -624,7 +624,7 @@ class OperationsImpl : public Operations {
   void Parse(const std::string& in, OpsResult* out) override {
     ParseImpl(in, out, IsOpsSupported<OpsKind::kParse, T>{});
   }
-  void Open(const std::string& in, Mode mode, OpsResult* out) {
+  void Open(const std::string& in, Mode mode, OpsResult* out) override {
     OpenImpl(in, mode, out, IsOpsSupported<OpsKind::kOpen, T>{});
   }
 
