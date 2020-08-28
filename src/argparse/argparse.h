@@ -470,13 +470,7 @@ enum class Mode : unsigned {
 // T). User's functor is not supported. Think of Ops as a builtin set of
 // minimal function offered by the lib.
 
-
-// The function pointer table for Ops impl.
-// For each type used by user, generate a vtable for all available operations.
-// Null entries in the table means this op is not supported (or banned) for this
-// type. For example, it is banned to open a file and turn it into a double, but
-// it might be true that an opened file can be turned into an int (fd).
-// The table for each type is shared once created.
+// A handle to the function table.
 class Operations {
  public:
   struct OpsResult {
@@ -492,27 +486,15 @@ class Operations {
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
 
-  virtual Operations* ValueTypeOps() = 0;
+  // If this type has a concept of value_type, create a handle.
+  virtual std::unique_ptr<Operations> CreateValueTypeOps() = 0;
   virtual ~Operations() {}
-};
-
-class OpsFactory;
-class OpsTypeMap;
-
-class OpsTypeMap {
- public:
-  // If not found, return null.
-  virtual Operations* Find(std::type_index index) = 0;
-  // If not found, create a new one with factory.
-  virtual Operations* SetDefault(std::type_index index,
-                                 OpsFactory* factory) = 0;
-  virtual ~OpsTypeMap() {}
 };
 
 // How to create a vtable?
 class OpsFactory {
  public:
-  virtual std::unique_ptr<Operations> Create(OpsTypeMap* map) = 0;
+  virtual std::unique_ptr<Operations> Create() = 0;
   virtual ~OpsFactory() {}
 };
 
@@ -532,31 +514,32 @@ class OperationsImpl : public Operations {
   void StoreConst(DestPtr dest, const Any& data) override {
     StoreConstImpl(dest, data, IsOpsSupported<OpsKind::kStoreConst, T>{});
   }
-  void Append(DestPtr dest, std::unique_ptr<Any> data);
+  void Append(DestPtr dest, std::unique_ptr<Any> data) override {
+    AppendImpl();
+  }
   void AppendConst(DestPtr dest, const Any& data);
 
   void Parse(const std::string& in, OpsResult* out);
   void Open(const std::string& in, Mode, OpsResult* out);
 
-  Operations* ValueTypeOps() override { return value_type_ops_; }
+  std::unique_ptr<Operations> CreateValueTypeOps() override {
+    return CreateValueTypeOpsImpl(IsOpsSupported<OpsKind::kAppend, T>{});
+  }
 
   class FactoryImpl : public OpsFactory {
    public:
-    std::unique_ptr<Operations> Create(OpsTypeMap* map) override {
-      auto* value_ops = GetValueTypeOps(map, IsOpsSupported<OpsKind::kAppend, T>{});
-      return std::make_unique<OperationsImpl<T>>(value_ops);
-    }
-
-   private:
-    Operations* GetValueTypeOps(OpsTypeMap* map, std::true_type) {
-      return map->SetDefault(typeid(ValueTypeOf<T>), this);
-    }
-    Operations* GetValueTypeOps(OpsTypeMap* map, std::false_type) {
-      return nullptr;
+    std::unique_ptr<Operations> Create() override {
+      return std::make_unique<OperationsImpl<T>>();
     }
   };
 
 private:
+  static Operations* CreateValueTypeOpsImpl(std::false_type) {
+    return nullptr;
+  }
+  static Operations* CreateValueTypeOpsImpl(std::true_type) {
+    return new OperationsImpl<ValueTypeOf<T>>();
+  }
   static void StoreImpl(DestPtr dest, std::unique_ptr<Any> data, std::false_type) {
     DCHECK2(false, "Store is not supported by T");
   }
@@ -565,24 +548,6 @@ private:
       ///
     }
   }
-  explicit OperationsImpl(Operations* val_ops) : value_type_ops_(val_ops) {}
-
-  Operations* value_type_ops_;
-};
-
-class OpsTypeMapImpl : public OpsTypeMap {
- public:
-  Operations* Find(std::type_index index) override { return nullptr; }
-  Operations* SetDefault(std::type_index index, OpsFactory* factory) override {
-    auto result = map_.emplace(index, nullptr);
-    if (result.second) {
-      result.first->second = factory->Create(this);
-    }
-    return result.first->second.get();
-  }
-
- private:
-  std::map<std::type_index, std::unique_ptr<Operations>> map_;
 };
 
 template <typename T>
@@ -609,11 +574,21 @@ class TypeCallback {
   virtual void Run(const std::string& in, ConversionResult* out) {}
 
  protected:
-  static ConvertResults(const Operations::OpsResult& in,
-                        ConversionResult* out) {
-    out->has_error = !in.value;
-    out->value = std::move(in.value);
-    out->errmsg = std::move(in.errmsg);
+  template <typename T>
+  static void ConvertResults(Result<T>* in, ConversionResult* out) {
+    out->has_error = in->has_error();
+    if (out->has_error) {
+      out->errmsg = in->release_error();
+    } else if (in->has_value()) {
+      // TODO: Any shouldn't known Result<T>;
+      WrapAny(in->release_value(), &out->value);
+    }
+  }
+
+  static void ConvertResults(Operations::OpsResult* in, ConversionResult* out) {
+    out->has_error = !in->value;
+    out->value = std::move(in->value);
+    out->errmsg = std::move(in->errmsg);
   }
 };
 
@@ -624,7 +599,7 @@ class DefaultTypeCallback : public TypeCallback {
   void Run(const std::string& in, ConversionResult* out) override {
     Operations::OpsResult ops_result;
     ops_->Parse(in, &ops_result);
-    ConvertResults(ops_result, out);
+    ConvertResults(&ops_result, out);
   }
 
  private:
@@ -639,7 +614,7 @@ class FileTypeCallback : public TypeCallback {
   void Run(const std::string& in, ConversionResult* out) override {
     Operations::OpsResult ops_result;
     ops_->Open(in, mode_, &ops_result);
-    ConvertResults(ops_result, out);
+    ConvertResults(&ops_result, out);
   }
 
  private:
@@ -656,11 +631,7 @@ class CustomTypeCallback : public TypeCallback {
   void Run(const std::string& in, ConversionResult* out) override {
     Result<T> user_result;
     std::invoke(callback_, in, &user_result);
-    out->has_error = user_result.has_error();
-    if (out->has_error)
-      out->errmsg = user_result.release_error();
-    else if (user_result.has_value())
-      WrapAny(&user_result, &out->value);
+    ConvertResults(&user_result, out);
   }
 
  private:
@@ -725,6 +696,9 @@ class DefaultActionCallback : public ActionCallback {
     switch (action_) {
       case Actions::kNoAction:
         break;
+      case Actions::kCustom:
+        DCHECK2(false, "Custom action shouldn't be here");
+        break;
       case Actions::kStore:
         ops_->Store(dest(), std::move(data));
         break;
@@ -742,6 +716,10 @@ class DefaultActionCallback : public ActionCallback {
         break;
       case Actions::kAppendConst:
         ops_->AppendConst(dest(), const_value());
+        break;
+      case Actions::kPrintHelp:
+        break;
+      case Actions::kPrintUsage:
         break;
     }
   }
