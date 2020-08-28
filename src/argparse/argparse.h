@@ -779,7 +779,7 @@ class CustomTypeCallback : public TypeCallback {
 class ActionCallback {
  public:
   virtual ~ActionCallback() {}
-  virtual void Run(std::unique_ptr<Any> any) = 0;
+  virtual void Run(std::unique_ptr<Any> data) = 0;
 
   void SetDest(DestPtr dest_ptr) {
     DCHECK2(dest_ptr, "dest_ptr should not be null");
@@ -858,7 +858,7 @@ class CustomActionCallback : public ActionCallback {
   void Run(std::unique_ptr<Any> data) override {
     Result<V> result;
     UnwrapAny(std::move(data), &result);
-    auto* obj = dest().load_ptr<T>();
+    auto* obj = dest().template load_ptr<T>();
     std::invoke(callback_, obj, std::move(result));
   }
 

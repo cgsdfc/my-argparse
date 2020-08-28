@@ -3,7 +3,7 @@
 namespace argparse {
 
 CallbackRunner* CallbackResolverImpl::CreateCallbackRunner() {
-  // if (!dest_) {
+  if (!dest_) {
   //   // everything is null.
   //   if (!custom_action_)  // The user don't give any action and dest, the type
   //                         // is discarded if given.
@@ -15,21 +15,24 @@ CallbackRunner* CallbackResolverImpl::CreateCallbackRunner() {
   //   }
   //   return new CallbackRunnerImpl(std::move(custom_type_),
   //                                 std::move(custom_action_));
-  // }
+  }
 
-  // if (action_ == Actions::kNoAction)
-  //   action_ = Actions::kStore;
+  auto* factory = dest_->CreateOpsFactory();
+
+  if (action_ == Actions::kNoAction)
+    action_ = Actions::kStore;
+
+  if (action_ != Actions::kCustom) {
+    // user does not provide an action callback, we need to infer.
+    // custom_action_.reset(factory->CreateActionCallback());
+  }
+
 
   // // The factory is used as a fall-back when user don't specify.
   // auto* factory = dest_->CreateFactory(action_);
   // // if we need the factory (action_ or type_ is null), but it is invalid.
   // DCHECK2((custom_action_ && custom_type_) || factory,
   //         "The provided action is not supported by the type of dest");
-
-  // if (!custom_action_) {
-  //   // user does not provide an action callback, we need to infer.
-  //   custom_action_.reset(factory->CreateActionCallback());
-  // }
 
   // // If there is a dest, send it to action anyway (may not be needed by the
   // // action, but we generally don't know that.).
