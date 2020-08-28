@@ -36,10 +36,7 @@ class ActionCallback;
 class TypeCallback;
 
 class DestPtr;
-class StoreOps;
-class OpenFileOps;
-class ParseOps;
-class AppendOps;
+class Operations;
 
 using ::argp;
 using ::argp_error;
@@ -330,7 +327,7 @@ template <typename T>
 struct DefaultAppendTraits : std::true_type {
   using ValueType = typename T::value_type;
 
-  static void Append(T* obj, ValueType&& item) {
+  static void Run(T* obj, ValueType item) {
     // By default use the push_back() method of T.
     obj->push_back(std::forward<ValueType>(item));
   }
@@ -345,7 +342,7 @@ struct AppendTraits {
 
 // Extracted the bool value from AppendTraits.
 template <typename T>
-using IsAppendSupported = std::bool_constant<AppendTraits<T>::Run == nullptr>;
+using IsAppendSupported = std::bool_constant<bool(AppendTraits<T>::Run)>;
 
 // Get the value-type for a appendable, only use it when IsAppendSupported<T>.
 template <typename T>
@@ -462,6 +459,7 @@ enum class OpsKind {
   kAppendConst,
   kParse,
   kOpen,
+  kValueType,
 };
 
 template <OpsKind Ops, typename T>
@@ -478,14 +476,24 @@ struct IsOpsSupported<OpsKind::kStoreConst, T> : std::is_copy_assignable<T> {};
 template <typename T>
 struct IsOpsSupported<OpsKind::kAppend, T> : IsAppendSupported<T> {};
 
+// 2 level spec here..
+template <typename T, bool = IsAppendSupported<T>{}>
+struct IsAppendConstSupported;
 template <typename T>
-struct IsOpsSupported<OpsKind::kAppendConst, T>
-    : std::bool_constant<IsAppendSupported<T>{} &&
-                         std::is_copy_assignable<ValueTypeOf<T>>{}> {};
+struct IsAppendConstSupported<T, false> : std::false_type {};
+template <typename T>
+struct IsAppendConstSupported<T, true>
+    : std::is_copy_assignable<ValueTypeOf<T>> {};
+
+template <typename T>
+struct IsOpsSupported<OpsKind::kAppendConst, T> : IsAppendConstSupported<T> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>
-    : std::bool_constant<OpenTraits<T>::Run == nullptr> {};
+    : std::bool_constant<bool(OpenTraits<T>::Run)> {};
+
+template <typename T>
+struct IsOpsSupported<OpsKind::kValueType, T> : IsAppendSupported<T> {};
 
 class DestPtr {
  public:
@@ -606,30 +614,97 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
   }
 }
 
+template <OpsKind Ops, typename T, bool Supported = IsOpsSupported<Ops, T>{}>
+struct OpsImpl;
+
+template <OpsKind Ops, typename T>
+struct OpsImpl<Ops, T, false> {
+  template <typename... Args>
+  static void Run(Args&&...) {
+    DCHECK2(false, "Operation not supported by this type");
+  }
+};
+
+template <typename T>
+struct OpsImpl<OpsKind::kStore, T, true> {
+  static void Run(DestPtr dest, std::unique_ptr<Any> data) {
+    if (!data) {
+      auto value = UnwrapAny<T>(std::move(data));
+      dest.store(MoveOrCopy(&value));
+    }
+  }
+};
+
+template <typename T>
+struct OpsImpl<OpsKind::kStoreConst, T, true> {
+  static void Run(DestPtr dest, const Any& data) {
+    dest.store(UnwrapAny<T>(data));
+  }
+};
+
+template <typename T>
+struct OpsImpl<OpsKind::kAppend, T, true> {
+  static void Run(DestPtr dest, std::unique_ptr<Any> data) {
+    if (data) {
+      auto* ptr = dest.load_ptr<T>();
+      auto value = UnwrapAny<ValueTypeOf<T>>(std::move(data));
+      AppendTraits<T>::Run(ptr, MoveOrCopy(&value));
+    }
+  }
+};
+
+template <typename T>
+struct OpsImpl<OpsKind::kAppendConst, T, true> {
+  static void Run(DestPtr dest, const Any& data) {
+    auto* ptr = dest.load_ptr<T>();
+    auto value = UnwrapAny<ValueTypeOf<T>>(data);
+    AppendTraits<T>::Run(ptr, value);
+  }
+};
+
+template <typename T>
+struct OpsImpl<OpsKind::kParse, T, true> {
+  static void Run(const std::string& in, OpsResult* out) {
+    Result<T> result;
+    ParseTraits<T>::Run(in, &result);
+    ConvertResults(&result, out);
+  }
+};
+
+template <typename T>
+struct OpsImpl<OpsKind::kOpen, T, true> {
+  static void Run(const std::string& in, Mode mode, OpsResult* out) {
+    Result<T> result;
+    OpenTraits<T>::Run(in, mode, &result);
+    ConvertResults(&result, out);
+  }
+};
+
 template <typename T>
 class OperationsImpl : public Operations {
  public:
   void Store(DestPtr dest, std::unique_ptr<Any> data) override {
-    StoreImpl(dest, std::move(data), IsOpsSupported<OpsKind::kStore, T>{});
+    OpsImpl<OpsKind::kStore, T>::Run(dest, std::move(data));
   }
   void StoreConst(DestPtr dest, const Any& data) override {
-    StoreConstImpl(dest, data, IsOpsSupported<OpsKind::kStoreConst, T>{});
+    OpsImpl<OpsKind::kStoreConst, T>::Run(dest, data);
   }
   void Append(DestPtr dest, std::unique_ptr<Any> data) override {
-    AppendImpl(dest, std::move(data), IsOpsSupported<OpsKind::kAppend, T>{});
+    OpsImpl<OpsKind::kAppend, T>::Run(dest, std::move(data));
   }
   void AppendConst(DestPtr dest, const Any& data) override {
-    AppendConstImpl(dest, data, IsOpsSupported<OpsKind::kAppendConst, T>{});
+    OpsImpl<OpsKind::kAppendConst, T>::Run(dest, data);
   }
   void Parse(const std::string& in, OpsResult* out) override {
-    ParseImpl(in, out, IsOpsSupported<OpsKind::kParse, T>{});
+    OpsImpl<OpsKind::kParse, T>::Run(in, out);
   }
   void Open(const std::string& in, Mode mode, OpsResult* out) override {
-    OpenImpl(in, mode, out, IsOpsSupported<OpsKind::kOpen, T>{});
+    OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
   }
 
   std::unique_ptr<Operations> CreateValueTypeOps() override {
-    return CreateValueTypeOpsImpl(IsOpsSupported<OpsKind::kAppend, T>{});
+    auto* ops = OpsImpl<OpsKind::kValueType, T>::Run();
+    return std::unique_ptr<Operations>(ops);
   }
 
   class FactoryImpl : public OpsFactory {
@@ -638,71 +713,16 @@ class OperationsImpl : public Operations {
       return std::make_unique<OperationsImpl<T>>();
     }
   };
+};
 
- private:
-  // Not supported versions:
-  static Operations* CreateValueTypeOpsImpl(std::false_type) { return nullptr; }
-  static void StoreImpl(DestPtr, std::unique_ptr<Any>, std::false_type) {
-    // TODO: unify user error reporting.
-    DCHECK2(false, "Store is not supported by T");
-  }
-  static void StoreConstImpl(DestPtr dest, const Any& data, std::false_type) {
-    DCHECK2(false, "StoreConst is not supported by T");
-  }
-  static void AppendImpl(DestPtr, std::unique_ptr<Any>, std::false_type) {
-    DCHECK2(false, "Append is not supported by T");
-  }
-  static void AppendConstImpl(DestPtr, const Any&, std::false_type) {
-    DCHECK2(false, "AppendConst is not supported by T");
-  }
-  static void ParseImpl(const std::string&, OpsResult*, std::false_type) {
-    DCHECK2(false, "Parse is not supported by T");
-  }
-  static void OpenImpl(const std::string&, Mode, OpsResult*, std::false_type) {
-    DCHECK2(false, "Open is not supported by T");
-  }
-
-  // Supported versions:
-  static Operations* CreateValueTypeOpsImpl(std::true_type) {
+template <typename T>
+struct OpsImpl<OpsKind::kValueType, T, false> {
+  static Operations* Run() { return nullptr; }
+};
+template <typename T>
+struct OpsImpl<OpsKind::kValueType, T, true> {
+  static Operations* Run() {
     return new OperationsImpl<ValueTypeOf<T>>();
-  }
-  static void StoreImpl(DestPtr dest,
-                        std::unique_ptr<Any> data,
-                        std::true_type) {
-    if (!data) {
-      auto value = UnwrapAny<T>(std::move(data));
-      dest.store(MoveOrCopy(&value));
-    }
-  }
-  static void StoreConstImpl(DestPtr dest, const Any& data, std::true_type) {
-    dest.store(UnwrapAny<T>(data));
-  }
-  static void AppendImpl(DestPtr dest,
-                         std::unique_ptr<Any> data,
-                         std::true_type) {
-    if (data) {
-      auto* ptr = dest.load_ptr<T>();
-      auto value = UnwrapAny<ValueTypeOf<T>>(std::move(data));
-      AppendTraits<T>::Run(ptr, MoveOrCopy(&value));
-    }
-  }
-  static void AppendConstImpl(DestPtr dest, const Any& data, std::true_type) {
-    auto* ptr = dest.load_ptr<T>();
-    const auto& value = UnwrapAny<ValueTypeOf<T>>(data);
-    AppendTraits<T>::Run(ptr, value);
-  }
-  static void ParseImpl(const std::string& in, OpsResult* out, std::true_type) {
-    Result<T> result;
-    ParseTraits<T>::Run(in, &result);
-    ConvertResults(&result, out);
-  }
-  static void OpenImpl(const std::string& in,
-                       Mode mode,
-                       OpsResult* out,
-                       std::true_type) {
-    Result<T> result;
-    OpenTraits<T>::Run(in, mode, &result);
-    ConvertResults(&result, out);
   }
 };
 
