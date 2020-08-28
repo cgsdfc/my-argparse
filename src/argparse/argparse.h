@@ -364,33 +364,28 @@ enum class Actions {
   kCustom,
 };
 
-// class CallbackFactory {
-//  public:
-//   virtual ActionCallback* CreateActionCallback() = 0;
-//   virtual TypeCallback* CreateTypeCallback() = 0;
-//   virtual ~CallbackFactory() {}
-// };
+enum OpsKind {
+  kStore,
+  kStoreConst,
+  kAppend,
+  kAppendConst,
+  kParse,
+  kOpen,
+};
 
-template <typename Ops, typename T>
+template <OpsKind Ops, typename T>
 struct IsOpsSupported : std::false_type {};
 
-// This is a meta-function that tests if A can be performed on T.
-// template <typename T, Actions A>
-// struct IsActionSupported : std::false_type {};
-
-// Store will copy or move the value produced by type() into dest.
-// template <typename T>
-// struct IsActionSupported<T, Actions::kStore>
-//     : std::bool_constant<std::is_copy_assignable<T>{} ||
-//                          std::is_move_assignable<T>{}> {};
-
 template <typename T>
-struct IsOpsSupported<StoreOps, T>
+struct IsOpsSupported<OpsKind::kStore, T>
     : std::bool_constant<std::is_copy_assignable<T>{} ||
                          std::is_move_assignable<T>{}> {};
 
 template <typename T>
-struct IsOpsSupported<AppendOps, T> : IsAppendSupported<T> {};
+struct IsOpsSupported<OpsKind::kStoreConst, T> : std::is_copy_assignable<T> {};
+
+template <typename T>
+struct IsOpsSupported<OpsKind::kAppend, T> : IsAppendSupported<T> {};
 
 template <typename T>
 struct IsFileLike : std::false_type {};
@@ -420,32 +415,6 @@ struct IsOpsSupported<OpenFileOps, T> : IsFileLike<T> {};
 // template <typename T, Actions A>
 // struct CallbackFactorySelector<T, A, false> /* Not supported */ {
 //   static CallbackFactory* Run() { return nullptr; }
-// };
-
-// class OpsFactory {
-//  public:
-//   virtual ~OpsFactory() {}
-//   virtual StoreOps* CreateStoreOps() = 0;
-//   virtual AppendOps* CreateAppendOps() = 0;
-//   virtual OpenFileOps* CreateOpenFileOps() = 0;
-//   virtual ParseOps* CreateParseOps() = 0;
-//   virtual ParseOps* CreateParseOpsForValueType() = 0;
-// };
-
-// template <typename Ops,
-//           template <typename>
-//           class OpsImpl,
-//           typename T,
-//           bool ok = IsOpsSupported<Ops, T>{}>
-// struct OpsFactoryHelper;
-
-// template <typename Ops, template <typename> class OpsImpl, typename T>
-// struct OpsFactoryHelper<Ops, OpsImpl, T, false> {
-//   static Ops* Create() { return nullptr; }
-// };
-// template <typename Ops, template <typename> class OpsImpl, typename T>
-// struct OpsFactoryHelper<Ops, OpsImpl, T, true> {
-//   static Ops* Create() { return new OpsImpl<T>(); }
 // };
 
 class DestPtr {
@@ -520,19 +489,6 @@ enum class Mode : unsigned {
 // T). User's functor is not supported. Think of Ops as a builtin set of
 // minimal function offered by the lib.
 
-class DestInfo {
-//  public:
-//   template <typename T>
-//   explicit DestInfo(T* ptr)
-//       : ops_factory_(new OpsFactoryImpl<T>), dest_ptr_(ptr) {}
-
-//   OpsFactory* GetOpsFactory() { return ops_factory_.get(); }
-//   DestPtr GetDestPtr() { return dest_ptr_; }
-
-//  private:
-//   std::unique_ptr<OpsFactory> ops_factory_;
-//   DestPtr dest_ptr_;
-};
 
 // The function pointer table for Ops impl.
 // For each type used by user, generate a vtable for all available operations.
@@ -579,40 +535,74 @@ class OpsFactory {
   virtual ~OpsFactory() {}
 };
 
+class DestInfo {
+ public:
+  virtual OpsFactory* CreateOpsFactory() = 0;
+  virtual DestPtr GetDestPtr() = 0;
+  virtual ~DestInfo() {}
+};
+
 template <typename T>
 class OperationsImpl : public Operations {
  public:
-  void Store(DestPtr dest, std::unique_ptr<Any> data);
-  void StoreConst(DestPtr dest, const Any& data);
+  void Store(DestPtr dest, std::unique_ptr<Any> data) override {
+    StoreImpl(dest, std::move(data), IsOpsSupported<StoreOps, T>{});
+  }
+  void StoreConst(DestPtr dest, const Any& data) override {
+    StoreConstImpl(dest, data, IsOpsSupported<StoreConstOps, T>{});
+  }
   void Append(DestPtr dest, std::unique_ptr<Any> data);
   void AppendConst(DestPtr dest, const Any& data);
 
   void Parse(const std::string& in, OpsResult* out);
   void Open(const std::string& in, Mode, OpsResult* out);
 
-  Operations* ValueTypeOps();
+  Operations* ValueTypeOps() override { return value_type_ops_; }
+
+  class FactoryImpl : public OpsFactory {
+   public:
+    std::unique_ptr<Operations> Create(OpsTypeMap* map) override {
+      auto* value_ops = GetValueTypeOps(map, IsOpsSupported<AppendOps, T>{});
+      return std::make_unique<OperationsImpl<T>>(value_ops);
+    }
+
+   private:
+    Operations* GetValueTypeOps(OpsTypeMap* map, std::true_type) {
+      return map->SetDefault(typeid(ValueTypeOf<T>), this);
+    }
+    Operations* GetValueTypeOps(OpsTypeMap* map, std::false_type) {
+      return nullptr;
+    }
+  };
+
+private:
+  static void StoreImpl(DestPtr dest, std::unique_ptr<Any> data, std::false_type) {
+    DCHECK2(false, "Store is not supported by T");
+  }
+  static void StoreImpl(DestPtr dest, std::unique_ptr<Any> data, std::true_type) {
+    if (data) {
+      ///
+    }
+  }
+  explicit OperationsImpl(Operations* val_ops) : value_type_ops_(val_ops) {}
+
+  Operations* value_type_ops_;
 };
 
 class OpsTypeMapImpl : public OpsTypeMap {
  public:
   Operations* Find(std::type_index index) override { return nullptr; }
   Operations* SetDefault(std::type_index index, OpsFactory* factory) override {
-    return nullptr;
+    auto result = map_.emplace(index, nullptr);
+    if (result.second) {
+      result.first->second = factory->Create(this);
+    }
+    return result.first->second.get();
   }
 
  private:
   std::map<std::type_index, std::unique_ptr<Operations>> map_;
 };
-
-// template <ty
-  // For defining actual functions.
-  // enum Kind {
-  //   kStore,
-  //   kAppend,
-  //   kParse,
-  //   kParseValueType,
-  //   kOpenFile,
-  // };
 
 // template <typename T, Operations::Kind OpsKind>
 // struct IsOpsEnabled : std::false_type {};
@@ -770,6 +760,8 @@ class DefaultActionCallback : public ActionCallback {
 
   void Run(std::unique_ptr<Any> data) override {
     switch (action_) {
+      case Actions::kNoAction:
+        break;
       case Actions::kStore:
         ops_->Store(dest(), std::move(data));
         break;
@@ -922,26 +914,15 @@ class CallbackRunnerImpl : public CallbackRunner {
 template <typename T>
 class DestInfoImpl : public DestInfo {
  public:
- private:
-  // std::unique_ptr<OpsFactory> ops_factory_;
-  // DestPtr
-  // explicit DestInfoImpl(T* ptr) : DestInfo(ptr) {}
-  // std::type_index GetDestType() override { return typeid(T); }
+  explicit DestInfoImpl(T* ptr) : dest_(ptr) {}
 
-  // CallbackFactory* CreateFactory(Actions action) override {
-  //   switch (action) {
-  //     case Actions::kStore:
-  //       return CallbackFactorySelector<T, Actions::kStore>::Run();
-  //     case Actions::kAppend:
-  //       return CallbackFactorySelector<T, Actions::kAppend>::Run();
-  //     case Actions::kStoreConst:
-  //       return CallbackFactorySelector<T, Actions::kStoreConst>::Run();
-  //     case Actions::kAppendConst:
-  //       return CallbackFactorySelector<T, Actions::kAppendConst>::Run();
-  //     default:
-  //       return nullptr;
-  //   }
-  // }
+  OpsFactory* CreateOpsFactory() override {
+    return new typename OperationsImpl<T>::FactoryImpl();
+  }
+  DestPtr GetDestPtr() override { return dest_; }
+
+ private:
+  DestPtr dest_;
 };
 
 // template <typename ActionCallbackT, typename TypeCallbackT>
@@ -1036,7 +1017,7 @@ struct Dest {
   template <typename T>
   /* implicit */ Dest(T* ptr) {
     DCHECK2(ptr, "nullptr passed to Dest()");
-    dest_info.reset(new DestInfo(ptr));
+    dest_info.reset(new DestInfoImpl<T>(ptr));
   }
 };
 
