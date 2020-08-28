@@ -194,7 +194,7 @@ class ArgumentError final : public std::runtime_error {
 class Any {
  public:
   virtual ~Any() {}
-  virtual std::type_index GetType() = 0;
+  virtual std::type_index GetType()const = 0;
 };
 
 template <typename T>
@@ -203,13 +203,18 @@ class AnyImpl : public Any {
   explicit AnyImpl(T&& val) : value_(std::move(val)) {}
   explicit AnyImpl(const T& val) : value_(val) {}
   ~AnyImpl() override {}
-  std::type_index GetType() override { return typeid(T); }
+  std::type_index GetType() const override { return typeid(T); }
 
   T ReleaseValue() { return MoveOrCopy(&value_); }
+  const T& value() const { return value_; }
 
   static AnyImpl* FromAny(Any* any) {
     DCHECK(any && any->GetType() == typeid(T));
     return static_cast<AnyImpl*>(any);
+  }
+  static const AnyImpl& FromAny(const Any& any) {
+    DCHECK(any.GetType() == typeid(T));
+    return static_cast<const AnyImpl&>(any);
   }
 
  private:
@@ -235,18 +240,25 @@ void WrapAny(Result<T>* result, std::unique_ptr<Any>* out) {
 template <typename T>
 void UnwrapAny(std::unique_ptr<Any> any, Result<T>* out) {
   if (any) {
-    auto* any_impl = AnyImpl<T>::FromAny(any.get());
-    out->set_value(any_impl->ReleaseValue());
-  } else {
-    out->reset();
+    out->set_value(UnwrapAny<T>(std::move(any)));
   }
+}
+
+template <typename T>
+T UnwrapAny(std::unique_ptr<Any> any) {
+  DCHECK(any);
+  return AnyImpl<T>::FromAny(any.get())->ReleaseValue();
+}
+
+template <typename T>
+T UnwrapAny(const Any& any) {
+  return AnyImpl<T>::FromAny(any).value();
 }
 
 template <typename T>
 void UnwrapAny(std::unique_ptr<Any> any, T* out) {
   if (any) {
-    auto* any_impl = AnyImpl<T>::FromAny(any.get());
-    *out = any_impl->ReleaseValue();
+    *out = UnwrapAny<T>(std::move(any));
   }
 }
 
@@ -406,15 +418,24 @@ class DestPtr {
 
   // Copy content to out.
   template <typename T>
-  void load(T* out) const {
+  const T& load() const {
     DCHECK(type_ == typeid(T));
-    *out = *reinterpret_cast<T*>(ptr_);
+    return *reinterpret_cast<const T*>(ptr_);
+  }
+  template <typename T>
+  void load(T* out) const {
+    *out = load<T>();
+  }
+
+  template <typename T>
+  T* load_ptr() const {
+    DCHECK(type_ == typeid(T));
+    return reinterpret_cast<T*>(ptr_);
   }
 
   template <typename T>
   void load_ptr(T** ptr_out) const {
-    DCHECK(type_ == typeid(T));
-    *ptr_out = reinterpret_cast<T*>(ptr_);
+    *ptr_out = load_ptr<T>();
   }
 
   template <typename T>
@@ -470,14 +491,16 @@ enum class Mode : unsigned {
 // T). User's functor is not supported. Think of Ops as a builtin set of
 // minimal function offered by the lib.
 
+struct OpsResult {
+  bool has_error = false;
+  std::unique_ptr<Any> value;  // null if error.
+  std::string errmsg;
+};
+
 // A handle to the function table.
 class Operations {
  public:
-  struct OpsResult {
-    std::unique_ptr<Any> value;  // null if error.
-    std::string errmsg;
-  };
-
+  using OpsResult = OpsResult;
   virtual void Store(DestPtr dest, std::unique_ptr<Any> data) = 0;
   virtual void StoreConst(DestPtr dest, const Any& data) = 0;
   virtual void Append(DestPtr dest, std::unique_ptr<Any> data) = 0;
@@ -506,6 +529,16 @@ class DestInfo {
 };
 
 template <typename T>
+void ConvertResults(Result<T>* in, OpsResult* out) {
+  out->has_error = in->has_error();
+  if (out->has_error) {
+    out->errmsg = in->release_error();
+  } else if (in->has_value()) {
+    WrapAny(in->release_value(), &out->value);
+  }
+}
+
+template <typename T>
 class OperationsImpl : public Operations {
  public:
   void Store(DestPtr dest, std::unique_ptr<Any> data) override {
@@ -515,12 +548,17 @@ class OperationsImpl : public Operations {
     StoreConstImpl(dest, data, IsOpsSupported<OpsKind::kStoreConst, T>{});
   }
   void Append(DestPtr dest, std::unique_ptr<Any> data) override {
-    AppendImpl();
+    AppendImpl(dest, std::move(data), IsOpsSupported<OpsKind::kAppend, T>{});
   }
-  void AppendConst(DestPtr dest, const Any& data);
-
-  void Parse(const std::string& in, OpsResult* out);
-  void Open(const std::string& in, Mode, OpsResult* out);
+  void AppendConst(DestPtr dest, const Any& data) override {
+    AppendConstImpl(dest, data, IsOpsSupported<OpsKind::kAppendConst, T>{});
+  }
+  void Parse(const std::string& in, OpsResult* out) override {
+    ParseImpl(in, out, IsOpsSupported<OpsKind::kParse, T>{});
+  }
+  void Open(const std::string& in, Mode mode, OpsResult* out) {
+    OpenImpl(in, mode, out, IsOpsSupported<OpsKind::kOpen, T>{});
+  }
 
   std::unique_ptr<Operations> CreateValueTypeOps() override {
     return CreateValueTypeOpsImpl(IsOpsSupported<OpsKind::kAppend, T>{});
@@ -533,21 +571,67 @@ class OperationsImpl : public Operations {
     }
   };
 
-private:
-  static Operations* CreateValueTypeOpsImpl(std::false_type) {
-    return nullptr;
+ private:
+  // Not supported versions:
+  static Operations* CreateValueTypeOpsImpl(std::false_type) { return nullptr; }
+  static void StoreImpl(DestPtr, std::unique_ptr<Any>, std::false_type) {
+    // TODO: unify user error reporting.
+    DCHECK2(false, "Store is not supported by T");
   }
+  static void StoreConstImpl(DestPtr dest, const Any& data, std::false_type) {
+    DCHECK2(false, "StoreConst is not supported by T");
+  }
+  static void AppendImpl(DestPtr, std::unique_ptr<Any>, std::false_type) {
+    DCHECK2(false, "Append is not supported by T");
+  }
+  static void AppendConstImpl(DestPtr, const Any&, std::false_type) {
+    DCHECK2(false, "AppendConst is not supported by T");
+  }
+  static void ParseImpl(const std::string&, OpsResult*, std::false_type) {
+    DCHECK2(false, "Parse is not supported by T");
+  }
+  static void OpenImpl(const std::string&, Mode, OpsResult*, std::false_type) {
+    DCHECK2(false, "Open is not supported by T");
+  }
+
+  // Supported versions:
   static Operations* CreateValueTypeOpsImpl(std::true_type) {
     return new OperationsImpl<ValueTypeOf<T>>();
   }
-  static void StoreImpl(DestPtr dest, std::unique_ptr<Any> data, std::false_type) {
-    DCHECK2(false, "Store is not supported by T");
-  }
-  static void StoreImpl(DestPtr dest, std::unique_ptr<Any> data, std::true_type) {
-    if (data) {
-      ///
+  static void StoreImpl(DestPtr dest,
+                        std::unique_ptr<Any> data,
+                        std::true_type) {
+    if (!data) {
+      auto value = UnwrapAny<T>(std::move(data));
+      dest.store(MoveOrCopy(&value));
     }
   }
+  static void StoreConstImpl(DestPtr dest, const Any& data, std::true_type) {
+    dest.store(UnwrapAny<T>(data));
+  }
+  static void AppendImpl(DestPtr dest,
+                         std::unique_ptr<Any> data,
+                         std::true_type) {
+    if (data) {
+      auto* ptr = dest.load_ptr<T>();
+      auto value = UnwrapAny<ValueTypeOf<T>>(std::move(data));
+      AppendTraits<T>::Run(ptr, MoveOrCopy(&value));
+    }
+  }
+  static void AppendConstImpl(DestPtr dest, const Any& data, std::true_type) {
+    auto* ptr = dest.load_ptr<T>();
+    const auto& value = UnwrapAny<ValueTypeOf<T>>(data);
+    AppendTraits<T>::Run(ptr, value);
+  }
+  static void ParseImpl(const std::string& in, OpsResult* out, std::true_type) {
+    Result<T> result;
+    ParserTraits<T>::Run(in, &result);
+    ConvertResults(&result, out);
+  }
+  static void OpenImpl(const std::string& in,
+                       Mode mode,
+                       OpsResult* out,
+                       std::true_type) {}
 };
 
 template <typename T>
@@ -565,60 +649,40 @@ using ActionCallbackPrototype = void(T*, Result<V>);
 // Perform data conversion..
 class TypeCallback {
  public:
-  struct ConversionResult {
-    bool has_error = false;
-    std::unique_ptr<Any> value;
-    std::string errmsg;
-  };
   virtual ~TypeCallback() {}
-  virtual void Run(const std::string& in, ConversionResult* out) {}
+  virtual void Run(const std::string& in, OpsResult* out) {}
+};
 
- protected:
-  template <typename T>
-  static void ConvertResults(Result<T>* in, ConversionResult* out) {
-    out->has_error = in->has_error();
-    if (out->has_error) {
-      out->errmsg = in->release_error();
-    } else if (in->has_value()) {
-      // TODO: Any shouldn't known Result<T>;
-      WrapAny(in->release_value(), &out->value);
-    }
-  }
-
-  static void ConvertResults(Operations::OpsResult* in, ConversionResult* out) {
-    out->has_error = !in->value;
-    out->value = std::move(in->value);
-    out->errmsg = std::move(in->errmsg);
-  }
+enum class Types {
+  kParse,
+  kOpen,
+  kCustom,
 };
 
 class DefaultTypeCallback : public TypeCallback {
  public:
-  explicit DefaultTypeCallback(Operations* ops) : ops_(ops) {}
+  DefaultTypeCallback(std::unique_ptr<Operations> ops, Types type)
+      : ops_(std::move(ops)), type_(type) {}
 
-  void Run(const std::string& in, ConversionResult* out) override {
-    Operations::OpsResult ops_result;
-    ops_->Parse(in, &ops_result);
-    ConvertResults(&ops_result, out);
-  }
-
- private:
-  Operations* ops_;
-};
-
-class FileTypeCallback : public TypeCallback {
- public:
-  explicit FileTypeCallback(Operations* ops) : ops_(ops) {}
   void SetMode(Mode mode) { mode_ = mode; }
 
-  void Run(const std::string& in, ConversionResult* out) override {
-    Operations::OpsResult ops_result;
-    ops_->Open(in, mode_, &ops_result);
-    ConvertResults(&ops_result, out);
+  void Run(const std::string& in, OpsResult* out) override {
+    switch (type_) {
+      case Types::kParse:
+        ops_->Parse(in, out);
+        break;
+      case Types::kOpen:
+        ops_->Open(in, mode_, out);
+        break;
+      case Types::kCustom:
+        DCHECK2(false, "Custom type can't get here");
+        break;
+    }
   }
 
  private:
-  Operations* ops_;
+  std::unique_ptr<Operations> ops_;
+  Types type_;
   Mode mode_;
 };
 
@@ -628,7 +692,7 @@ class CustomTypeCallback : public TypeCallback {
   using CallbackType = std::function<TypeCallbackPrototype<T>>;
   explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
-  void Run(const std::string& in, ConversionResult* out) override {
+  void Run(const std::string& in, OpsResult* out) override {
     Result<T> user_result;
     std::invoke(callback_, in, &user_result);
     ConvertResults(&user_result, out);
@@ -689,15 +753,12 @@ class ActionCallback {
 
 class DefaultActionCallback : public ActionCallback {
  public:
-  DefaultActionCallback(Operations* ops, Actions action)
-      : ops_(ops), action_(action) {}
+  DefaultActionCallback(std::unique_ptr<Operations> ops, Actions action)
+      : ops_(std::move(ops)), action_(action) {}
 
   void Run(std::unique_ptr<Any> data) override {
     switch (action_) {
       case Actions::kNoAction:
-        break;
-      case Actions::kCustom:
-        DCHECK2(false, "Custom action shouldn't be here");
         break;
       case Actions::kStore:
         ops_->Store(dest(), std::move(data));
@@ -721,11 +782,14 @@ class DefaultActionCallback : public ActionCallback {
         break;
       case Actions::kPrintUsage:
         break;
+      case Actions::kCustom:
+        DCHECK2(false, "Custom action shouldn't be here");
+        break;
     }
   }
 
  private:
-  Operations* ops_;
+  std::unique_ptr<Operations> ops_;
   Actions action_;
 };
 
@@ -740,7 +804,11 @@ class CustomActionCallback : public ActionCallback {
 
  private:
   void Run(std::unique_ptr<Any> data) override {
-    // std::invoke(callback_, this->dest(), std::move(data));
+    T* obj = nullptr;
+    dest().load_ptr(&obj);
+    Result<T> result;
+    UnwrapAny(std::move(data), &result);
+    std::invoke(callback_, obj, std::move(result));
   }
 
   CallbackType callback_;

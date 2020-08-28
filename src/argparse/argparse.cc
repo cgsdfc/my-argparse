@@ -341,7 +341,8 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
 }
 
 void CallbackRunnerImpl::Run(Context* ctx, Delegate* delegate) {
-  TypeCallback::ConversionResult results;
+  OpsResult results;
+  // TypeCallback::ConversionResult results;
   if (ctx->has_value)
     type_->Run(ctx->value, &results);
   if (results.has_error)
