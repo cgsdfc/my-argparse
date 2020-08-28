@@ -732,33 +732,6 @@ class TypeCallback {
   virtual void Run(const std::string& in, OpsResult* out) {}
 };
 
-class DefaultTypeCallback : public TypeCallback {
- public:
-  DefaultTypeCallback(std::unique_ptr<Operations> ops, Types type)
-      : ops_(std::move(ops)), type_(type) {}
-
-  void SetMode(Mode mode) { mode_ = mode; }
-
-  void Run(const std::string& in, OpsResult* out) override {
-    switch (type_) {
-      case Types::kParse:
-        ops_->Parse(in, out);
-        break;
-      case Types::kOpen:
-        ops_->Open(in, mode_, out);
-        break;
-      case Types::kCustom:
-        DCHECK2(false, "Custom type can't get here");
-        break;
-    }
-  }
-
- private:
-  std::unique_ptr<Operations> ops_;
-  Types type_;
-  Mode mode_;
-};
-
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
  public:
@@ -791,59 +764,7 @@ class ActionCallback {
   DestPtr dest_ptr_;
 };
 
-class DefaultActionCallback : public ActionCallback {
- public:
-  DefaultActionCallback(std::unique_ptr<Operations> ops, Actions action)
-      : ops_(std::move(ops)), action_(action) {}
-
-  // Set an const value to this action (must be a valid value.)
-  void SetConstValue(std::unique_ptr<Any> val) {
-    DCHECK2(val, "const_value should not be null");
-    const_value_ = std::move(val);
-  }
-  const Any& const_value() const {
-    DCHECK(const_value_);
-    return *const_value_;
-  }
-
-  void Run(std::unique_ptr<Any> data) override {
-    switch (action_) {
-      case Actions::kNoAction:
-        break;
-      case Actions::kStore:
-        ops_->Store(dest(), std::move(data));
-        break;
-      case Actions::kStoreConst:
-        ops_->StoreConst(dest(), const_value());
-        break;
-      case Actions::kStoreTrue:
-        ops_->StoreConst(dest(), AnyImpl<bool>(true));
-        break;
-      case Actions::kStoreFalse:
-        ops_->StoreConst(dest(), AnyImpl<bool>(false));
-        break;
-      case Actions::kAppend:
-        ops_->Append(dest(), std::move(data));
-        break;
-      case Actions::kAppendConst:
-        ops_->AppendConst(dest(), const_value());
-        break;
-      case Actions::kPrintHelp:
-        break;
-      case Actions::kPrintUsage:
-        break;
-      case Actions::kCustom:
-        DCHECK2(false, "Custom action shouldn't be here");
-        break;
-    }
-  }
-
- private:
-  std::unique_ptr<Operations> ops_;
-  Actions action_;
-  std::unique_ptr<Any> const_value_;
-};
-
+// Deprecated.
 // Provided by user's callable obj.
 template <typename T, typename V>
 class CustomActionCallback : public ActionCallback {
@@ -1018,40 +939,82 @@ class OpsCallbackRunner : public CallbackRunner {
   class ResolverImpl;
   OpsCallbackRunner() {}
 
-  void RunActionCallback(std::unique_ptr<Any> data);
-  void RunTypeCallback(const std::string& in, OpsResult* out);
+  const Any& const_value() const {
+    DCHECK(const_value_);
+    return *const_value_;
+  }
 
-  std::unique_ptr<Operations> operations_;
-  std::unique_ptr<Operations> value_type_ops_;
+  const DestPtr& dest() const { 
+    DCHECK(dest_ptr_);
+    return dest_ptr_;
+  }
+
+  // Operations* ops
+  void RunActionCallback(std::unique_ptr<Any> data) {
+    auto* ops = action_ops_.get();
+    DCHECK(ops);
+
+    switch (action_code_) {
+      case Actions::kNoAction:
+        break;
+      case Actions::kStore:
+        ops->Store(dest(), std::move(data));
+        break;
+      case Actions::kStoreConst:
+        ops->StoreConst(dest(), const_value());
+        break;
+      case Actions::kStoreTrue:
+        ops->StoreConst(dest(), AnyImpl<bool>(true));
+        break;
+      case Actions::kStoreFalse:
+        ops->StoreConst(dest(), AnyImpl<bool>(false));
+        break;
+      case Actions::kAppend:
+        ops->Append(dest(), std::move(data));
+        break;
+      case Actions::kAppendConst:
+        ops->AppendConst(dest(), const_value());
+        break;
+      case Actions::kPrintHelp:
+        break;
+      case Actions::kPrintUsage:
+        break;
+      case Actions::kCustom:
+        DCHECK(custom_action_);
+        custom_action_->Run(std::move(data));
+        break;
+    }
+  }
+
+  void RunTypeCallback(const std::string& in, OpsResult* out) {
+    auto* ops = type_ops_.get();
+    DCHECK(ops);
+    switch (type_code_) {
+      case Types::kParse:
+        ops->Parse(in, out);
+        break;
+      case Types::kOpen:
+        ops->Open(in, mode_, out);
+        break;
+      case Types::kNothing:
+        break;
+      case Types::kCustom:
+        DCHECK(custom_type_);
+        custom_type_->Run(in, out);
+        break;
+    }
+  }
+
+  std::unique_ptr<Operations> action_ops_;
+  std::unique_ptr<Operations> type_ops_;
   std::unique_ptr<Any> const_value_;
   std::unique_ptr<ActionCallback> custom_action_;
   std::unique_ptr<TypeCallback> custom_type_;
   Actions action_code_ = Actions::kStore;
   Types type_code_ = Types::kParse;
+  Mode mode_;
   DestPtr dest_ptr_;
 };
-
-// class CallbackResolverImpl : public CallbackResolver {
-//  public:
-//   void SetDest(Dest dest) override { dest_ = std::move(dest.dest_info); }
-//   void SetType(Type type) override { custom_type_ = std::move(type.callback);
-//   } void SetValue(std::unique_ptr<Any> value) override {
-//     value_ = std::move(value);
-//   }
-//   void SetAction(Action action) override {
-//     action_ = action.action;
-//     custom_action_ = std::move(action.callback);
-//   }
-
-//   CallbackRunner* CreateCallbackRunner() override;
-
-//  private:
-//   Actions action_ = Actions::kNoAction;
-//   std::unique_ptr<DestInfo> dest_;
-//   std::unique_ptr<TypeCallback> custom_type_;
-//   std::unique_ptr<ActionCallback> custom_action_;
-//   std::unique_ptr<Any> value_;
-// };
 
 // Directly store user's info into Runner.
 class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
