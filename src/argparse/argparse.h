@@ -811,66 +811,6 @@ class CallbackRunnerImpl : public CallbackRunner {
   std::unique_ptr<ActionCallback> action_;
 };
 
-// // Instruction for how to run TypeCallback.
-// enum class TypeCallbackKind {
-//   kDoNothing,
-//   kParse,
-//   kParseValueType,
-//   kOpenFile,
-//   kCustom,
-// };
-
-// CallbackRunner as an interpreter.
-// Instead of using various subclasses of ActionCallback and TypeCallback to
-// impl builtin actions and types, as well as custom versions, we can use
-// something like interpreter -- all states in one class and do a switch() based
-// on instructions (enum value). Then Action/TypeCallback is for wrapping user's
-// callback, as their names note.
-// class OpsCallbackRunner : public CallbackRunner {
-//  public:
-//   void Run(Context* ctx, Delegate* delegate) {}
-
-//  private:
-//   void RunTypeCallback(const std::string& in, Operations::OpsResult* out) {
-//     switch (type_kind_) {
-//       case TypeCallbackKind::kParse:
-//         ops_->parse(in, out);
-//         break;
-//       case TypeCallbackKind::kParseValueType:
-//         ops_->parse_value_type(in, out);
-//         break;
-//       case TypeCallbackKind::kOpenFile:
-//         ops_->open_file(in, open_mode_, out);
-//         break;
-//       case TypeCallbackKind::kCustom:
-//         // TODO:
-//         custom_type_->Run(in, nullptr);
-//         break;
-//       case TypeCallbackKind::kDoNothing:
-//         break;
-//     }
-//   }
-
-//   void RunActionCallback(std::unique_ptr<Any> data) {
-//     switch (action_) {
-//       case Actions::kCustom:
-//         // custom_action_->Run()
-//         break;
-//       default:
-//         break;
-//     }
-//   }
-
-//   Actions action_;
-//   TypeCallbackKind type_kind_;
-//   Mode open_mode_;  // For FileType.
-//   const Operations* ops_;
-//   DestPtr dest_ptr_;
-//   std::unique_ptr<Any> const_value_;  // copyable.
-//   std::unique_ptr<ActionCallback> custom_action_;
-//   std::unique_ptr<TypeCallback> custom_type_;
-// };
-
 template <typename T>
 class DestInfoImpl : public DestInfo {
  public:
@@ -884,46 +824,6 @@ class DestInfoImpl : public DestInfo {
  private:
   DestPtr dest_;
 };
-
-// template <typename ActionCallbackT, typename TypeCallbackT>
-// struct CallbackFactoryGenerator {
-//   static_assert(std::is_base_of<ActionCallback, ActionCallbackT>{});
-//   static_assert(std::is_base_of<TypeCallback, TypeCallbackT>{});
-
-//   static CallbackFactory* Run() {
-//     class FactoryImpl : public CallbackFactory {
-//      public:
-//       ActionCallback* CreateActionCallback() override {
-//         return new ActionCallbackT();
-//       }
-//       TypeCallback* CreateTypeCallback() override {
-//         return new TypeCallbackT();
-//       }
-//     };
-//     return new FactoryImpl();
-//   }
-// };
-
-// template <typename T>
-// struct CallbackFactorySelector<T, Actions::kStore, true>
-//     : CallbackFactoryGenerator<StoreActionCallback<T>,
-//     DefaultTypeCallback<T>> {
-// };
-
-// template <typename T>
-// struct CallbackFactorySelector<T, Actions::kAppend, true>
-//     : CallbackFactoryGenerator<AppendActionCallback<T>,
-//                                DefaultTypeCallback<ValueTypeOf<T>>> {};
-
-// template <typename T>
-// struct CallbackFactorySelector<T, Actions::kStoreConst, true>
-//     : CallbackFactoryGenerator<StoreConstActionCallback<T>, NullTypeCallback> {
-// };
-
-// template <typename T>
-// struct CallbackFactorySelector<T, Actions::kAppendConst, true>
-//     : CallbackFactoryGenerator<AppendConstActionCallback<T>, NullTypeCallback> {
-// };
 
 struct Type {
   std::unique_ptr<TypeCallback> callback;
@@ -942,8 +842,12 @@ inline Actions StringToActions(const std::string& str) {
   static const std::map<std::string, Actions> kStringToActions{
       {"store", Actions::kStore},
       {"store_const", Actions::kStoreConst},
+      {"store_true", Actions::kStoreTrue},
+      {"store_false", Actions::kStoreFalse},
       {"append", Actions::kAppend},
       {"append_const", Actions::kAppendConst},
+      {"print_help", Actions::kPrintHelp},
+      {"print_usage", Actions::kPrintUsage},
   };
   auto iter = kStringToActions.find(str);
   DCHECK2(iter != kStringToActions.end(), "Unknown action string passed in");
