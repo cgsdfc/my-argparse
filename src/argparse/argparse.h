@@ -373,13 +373,15 @@ enum Mode : unsigned {
   kModeBinary = 0x8,
 };
 
+constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
+
 template <typename T>
-struct FileTraits {
+struct OpenTraits {
   static constexpr void* Run = nullptr;
 };
 
 template <>
-struct FileTraits<FILE*> {
+struct OpenTraits<FILE*> {
   static std::string GetMode(Mode mode) {
     std::string m;
     if (mode & kModeRead)
@@ -402,9 +404,42 @@ struct FileTraits<FILE*> {
       errno = 0;
       return out->set_error(std::strerror(e));
     }
-    out->set_error("Failing to open file");
+    out->set_error(kDefaultOpenFailureMsg);
   }
 };
+
+template <typename T>
+struct StreamOpenTraits {
+  static std::ios_base::openmode GetMode(Mode m) {
+    std::ios_base::openmode out;
+    if (m & kModeRead)
+      out |= std::ios_base::in;
+    if (m & kModeWrite)
+      out |= std::ios_base::out;
+    if (m & kModeAppend)
+      out |= std::ios_base::app;
+    if (m & kModeTruncate)
+      out |= std::ios_base::trunc;
+    if (m & kModeBinary)
+      out |= std::ios_base::binary;
+    return out;
+  }
+
+  static void Run(const std::string& in, Mode mode, Result<T>* out) {
+    auto ios_mode = GetMode(mode);
+    T stream(in, ios_mode);
+    if (stream.is_open())
+      return out->set_value(std::move(stream));
+    out->set_error(kDefaultOpenFailureMsg);
+  }
+};
+
+template <>
+struct OpenTraits<std::fstream> : StreamOpenTraits<std::fstream> {};
+template <>
+struct OpenTraits<std::ifstream> : StreamOpenTraits<std::ifstream> {};
+template <>
+struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
 
 // A more complete module to handle user's callbacks.
 enum class Actions {
@@ -450,7 +485,7 @@ struct IsOpsSupported<OpsKind::kAppendConst, T>
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>
-    : std::bool_constant<FileTraits<T>::Run == nullptr> {};
+    : std::bool_constant<OpenTraits<T>::Run == nullptr> {};
 
 class DestPtr {
  public:
@@ -534,7 +569,6 @@ struct OpsResult {
 // A handle to the function table.
 class Operations {
  public:
-  using OpsResult = OpsResult;
   virtual void Store(DestPtr dest, std::unique_ptr<Any> data) = 0;
   virtual void StoreConst(DestPtr dest, const Any& data) = 0;
   virtual void Append(DestPtr dest, std::unique_ptr<Any> data) = 0;
@@ -666,7 +700,9 @@ class OperationsImpl : public Operations {
                        Mode mode,
                        OpsResult* out,
                        std::true_type) {
-    FileTraits<T>::Run(in, mode, out);
+    Result<T> result;
+    OpenTraits<T>::Run(in, mode, &result);
+    ConvertResults(&result, out);
   }
 };
 
