@@ -520,136 +520,6 @@ enum class Mode : unsigned {
 // T). User's functor is not supported. Think of Ops as a builtin set of
 // minimal function offered by the lib.
 
-// The minimal interface.
-// class Ops {
-//  public:
-//   virtual ~Ops() {}
-// };
-
-// Used by StoreConst and Store.
-// class StoreOps : public Ops {
-//  public:
-//   virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
-// };
-
-// template <typename T>
-// class StoreOpsImpl : public StoreOps {
-//  public:
-//   void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
-//     if (data) {
-//       T val;
-//       UnwrapAny(std::move(data), &val);
-//       ptr.store(MoveOrCopy(&val));
-//     }
-//   }
-// };
-
-// // Used by Append and AppendConst. This only erase the operation defined by
-// // AppendTraits.
-// class AppendOps : public Ops {
-//  public:
-//   virtual void Run(DestPtr ptr, std::unique_ptr<Any> data) = 0;
-// };
-
-// // Only instantiate if Append is supported.
-// template <typename T>
-// class AppendOpsImpl : public AppendOps {
-//  public:
-//   static_assert(IsAppendSupported<T>{});
-//   using Traits = AppendTraits<T>;
-//   using ValueType = ValueTypeOf<T>;
-
-//   void Run(DestPtr ptr, std::unique_ptr<Any> data) override {
-//     if (data) {
-//       T* obj;
-//       ptr.load_ptr(&obj);
-//       ValueType val;
-//       UnwrapAny(std::move(data), &val);
-//       Traits::Run(obj, MoveOrCopy(val));
-//     }
-//   }
-// };
-
-// // Used by ParseTypeCallback. This only erase parsers defined by
-// // ParserTraits (TODO: ParseTraits).
-// class ParseOps : public Ops {
-//  public:
-//   struct ParseResult {
-//     bool has_error = false;
-//     std::unique_ptr<Any> value;  // null if error.
-//     std::string errmsg;
-//   };
-//   virtual void Run(const std::string& in, ParseResult* result) = 0;
-// };
-
-// template <typename T>
-// class ParseOpsImpl : public ParseOps {
-//  public:
-//   using Traits = ParserTraits<T>;
-//   void Run(const std::string& in, ParseResult* out) override {
-//     Result<T> result;
-//     Traits::Run(in, &result);
-//     out->has_error = result.has_error();
-//     if (result.has_value()) {
-//       WrapAny(&result, &out->value);
-//     } else if (result.has_error()) {
-//       out->errmsg = result.release_error();
-//     }
-//   }
-// };
-
-// // Previously known as FileOpener. Used by FileTypeCallback.
-// class OpenFileOps : public Ops {
-//  public:
-//   struct Result {
-//     std::unique_ptr<Any> file;  // null if error.
-//     std::string errmsg;
-//   };
-//   // TODO: Mode or custom mode?
-//   virtual void Run(const char* filename, Mode mode, Result* result) = 0;
-//   virtual Mode DefaultMode() = 0;
-// };
-
-// // Open FILE*.
-// class OpenCFileOps : public OpenFileOps {};
-
-// // Open std::fstream/ifstream/ofstream.
-// template <typename T>
-// class OpenFileStreamOps : public OpenFileOps {};
-
-// template <typename T>
-// class OpenFileOpsImpl {};
-
-// template <>
-// class OpenFileOpsImpl<FILE*> : public OpenCFileOps {};
-
-// template <>
-// class OpenFileOpsImpl<std::ofstream> : public  {};
-// template <>
-// class OpenFileOpsImpl<> : public  {};
-// template <>
-// class OpenFileOpsImpl<> : public  {};
-
-// template <typename T>
-// class OpsFactoryImpl : public OpsFactory {
-//  public:
-//   StoreOps* CreateStoreOps() override {
-//     return OpsFactoryHelper<StoreOps, StoreOpsImpl, T>::Create();
-//   }
-//   AppendOps* CreateAppendOps() override {
-//     return OpsFactoryHelper<AppendOps, AppendOpsImpl, T>::Create();
-//   }
-//   OpenFileOps* CreateOpenFileOps() override {
-//     return OpsFactoryHelper<OpenFileOps, OpenFileOpsImpl, T>::Create();
-//   }
-//   ParseOps* CreateParseOps() override {
-//     return OpsFactoryHelper<ParseOps, ParseOpsImpl, T>::Create();
-//   }
-//   ParseOps* CreateParseOpsForValueType() override {
-//     return OpsFactoryHelper<ParseOps, ParseOpsImpl, ValueTypeOf<T>>::Create();
-//   }
-// };
-
 class DestInfo {
 //  public:
 //   template <typename T>
@@ -717,17 +587,6 @@ class OpsFactory {
   //   kOpenFile,
   // };
 
-  // using StoreOps = void();
-  // using AppendOps = void(DestPtr, std::unique_ptr<Any>);
-  // using ParseOps = void(const std::string&, OpsResult*);
-  // using OpenFileOps = void(const std::string&, Mode, OpsResult*);
-
-  // Map type_index to vtable. Create them when absent.
-  // StoreOps* store;
-  // AppendOps* append;
-  // ParseOps* parse;
-  // ParseOps* parse_value_type;
-  // OpenFileOps* open_file;
 template <typename T, Operations::Kind OpsKind>
 struct IsOpsEnabled : std::false_type {};
 
@@ -748,20 +607,6 @@ struct OpsImpl<T, Operations::kStore, true> {
     // DCHECK2(false, "StoreOps is not supported by this type");
   }
 };
-
-// template <typename T>
-// void StoreImpl(DestPtr dest_ptr, std::unique_ptr<Any> data) {
-
-// }
-
-// template <typename T>
-// void CreateOperations(std::unique_ptr<Operations>* out) {
-//   out->reset(new Operations);
-//   out->store = &OpsImpl<T, Operations::kStore>::Run;
-//   out->append = &OpsImpl<T, Operations::kAppend>::Run;
-//   out->parse = &OpsImpl<T, Operations::kParse>::Run;
-//   out->parse_value_type = &OpsImpl<T, Operations::kParseValueType>::Run;
-// }
 
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
@@ -788,36 +633,6 @@ class TypeCallback {
   virtual void Run(const std::string& in, ConversionResult* out) {}
 };
 
-// template <typename T>
-// class TypeCallbackBase : public TypeCallback {
-//  public:
-//   std::type_index GetValueType() override { return typeid(T); }
-
-//   void Run(const std::string& in, ConversionResult* out) override {
-//     Result<T> result;
-//     RunImpl(in, &result);
-
-//     out->has_error = result.has_error();
-//     if (result.has_value()) {
-//       WrapAny(&result, &out->value);
-//     } else if (result.has_error()) {
-//       out->msg = result.release_error();
-//     }
-//   }
-
-//  private:
-//   virtual void RunImpl(const std::string& in, Result<T>* out) = 0;
-// };
-
-// A subclass that always return nullptr. Used for actions without a need of
-// value.
-// class NullTypeCallback : public TypeCallback {
-//  public:
-//   NullTypeCallback() = default;
-//   std::type_index GetValueType() override { return typeid(void); }
-// };
-
-// template <typename T>
 class DefaultTypeCallback : public TypeCallback {
  public:
   explicit DefaultTypeCallback(Operations* ops) ops_(ops) {}
@@ -851,7 +666,6 @@ class FileTypeCallback : public TypeCallback {
  private:
   Operations* ops_;
   Mode mode_;
-  // std::unique_ptr<FileOpener> opener_;
 };
 
 template <typename T>
@@ -967,84 +781,6 @@ class DefaultActionCallback : public ActionCallback {
   Operations* ops_;
   Actions action_;
 };
-
-// A helper subclass that impl dest-type and value-type.
-// template <typename T, typename V>
-// class ActionCallbackBase : public ActionCallback {
-//  public:
-//   using DestType = T;
-//   using ValueType = V;
-
-//   std::type_index GetDestType() override { return typeid(DestType); }
-//   std::type_index GetValueType() override { return typeid(ValueType); }
-
-//   void Run(std::unique_ptr<Any> data) override {
-//     Result<V> result;
-//     UnwrapAny(std::move(data), &result);
-//     RunImpl(std::move(result));
-//   }
-
-//  protected:
-//   virtual void RunImpl(Result<ValueType> result) = 0;
-//   // Helpers for subclass.
-//   // Access the dest (must be set).
-//   DestType* dest() {
-//     DCHECK(dest_);
-//     return reinterpret_cast<DestType*>(dest_);
-//   }
-//   // Cast data into the correct type.
-//   ValueType ValueOf(std::any data) {
-//     DCHECK(data.has_value());
-//     DCHECK(AnyHasType(data, GetValueType()));
-//     return std::any_cast<ValueType>(std::move(data));
-//   }
-//   // Access the const value.
-//   ValueType ConstValue() {
-//     DCHECK(const_value_.has_value());
-//     return ValueOf(const_value_);
-//   }
-// };
-
-// // This impls store and store-const.
-// class StoreActionCallback : public ActionCallback {
-//  public:
-//   explicit StoreActionCallback(StoreOps* ops) : store_ops_(ops) {}
-
-//   void Run(std::unique_ptr<Any> data) override {
-//     DCHECK(store_ops_);
-//     store_ops_->Run(dest_ptr_, std::move(data));
-//   }
-
-//  private:
-//   std::unique_ptr<StoreOps> store_ops_;
-// };
-
-// template <typename T, typename V = T>
-// class StoreConstActionCallback : public ActionCallbackBase<T, V> {
-//  private:
-//   void RunImpl(Result<V>) override { *(this->dest()) = this->ConstValue(); }
-// };
-
-// class AppendActionCallback : public ActionCallback {
-//  public:
-//   explicit AppendActionCallback(AppendOps* ops) : append_ops_(ops) {}
-//   void Run(std::unique_ptr<Any> data) override {
-//     append_ops_->Run(dest_ptr_, std::move(data));
-//   }
-
-//  private:
-//   std::unique_ptr<AppendOps> append_ops_;
-// };
-
-// template <typename T,
-//           typename Traits = AppendTraits<T>,
-//           typename V = typename Traits::ValueType>
-// class AppendConstActionCallback : public ActionCallbackBase<T, V> {
-//  private:
-//   void RunImpl(Result<V>) override {
-//     Traits::Append(this->dest(), this->ConstValue());
-//   }
-// };
 
 // Provided by user's callable obj.
 template <typename T, typename V>
