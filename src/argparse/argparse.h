@@ -190,7 +190,7 @@ class ArgumentError final : public std::runtime_error {
 class Any {
  public:
   virtual ~Any() {}
-  virtual std::type_index GetType()const = 0;
+  virtual std::type_index GetType() const = 0;
 };
 
 template <typename T>
@@ -233,8 +233,6 @@ template <typename T>
 void WrapAny(Result<T>* result, std::unique_ptr<Any>* out) {
   if (result->has_value())
     out->reset(new AnyImpl<T>(result->release_value()));
-  // else
-  //   out->reset();
 }
 
 // Steal the T from Any and store into Result<T>.
@@ -337,6 +335,7 @@ enum class Actions {
 };
 
 enum class Types {
+  kNothing,
   kParse,
   kOpen,
   kCustom,
@@ -890,7 +889,6 @@ TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
       (detail::function_signature_t<Callback>*)nullptr);
 }
 
-
 template <typename Callback, typename T, typename V>
 ActionCallback* CreateCustomActionCallbackImpl(Callback&& cb,
                                                void (*)(T*, Result<V>)) {
@@ -903,7 +901,6 @@ ActionCallback* CreateCustomActionCallback(Callback&& cb) {
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
 }
-
 
 template <typename T>
 class DestInfoImpl : public DestInfo {
@@ -1002,36 +999,27 @@ class CallbackResolver {
   virtual ~CallbackResolver() {}
 };
 
-// Used for no dest, no type no action.
-// class DummyCallbackRunner : public CallbackRunner {
-//  public:
-//   void Run(Context*, Delegate*) override {}
-//   ~DummyCallbackRunner() override {}
-// };
-
-// XXX: this schema is kept.
-// Run TypeCallback and ActionCallback.
-// class CallbackRunnerImpl : public CallbackRunner {
-//  public:
-//   CallbackRunnerImpl(std::unique_ptr<TypeCallback> type,
-//                      std::unique_ptr<ActionCallback> action)
-//       : type_(std::move(type)), action_(std::move(action)) {}
-
-//   void Run(Context* ctx, Delegate* delegate) override;
-
-//  private:
-//   std::unique_ptr<TypeCallback> type_;
-//   std::unique_ptr<ActionCallback> action_;
-// };
-
 class OpsCallbackRunner : public CallbackRunner {
  public:
-  void Run(Context* ctx, Delegate* delegate) override {}
+  void Run(Context* ctx, Delegate* delegate) override {
+    OpsResult result;
+    if (ctx->has_value)
+      RunTypeCallback(ctx->value, &result);
+    if (result.has_error) {
+      delegate->HandleCallbackError(ctx, result.errmsg);
+      return;
+    }
+    RunActionCallback(std::move(result.value));
+  }
+
   static CallbackResolver* CreateResolver();
 
  private:
-  OpsCallbackRunner() {}
   class ResolverImpl;
+  OpsCallbackRunner() {}
+
+  void RunActionCallback(std::unique_ptr<Any> data);
+  void RunTypeCallback(const std::string& in, OpsResult* out);
 
   std::unique_ptr<Operations> operations_;
   std::unique_ptr<Operations> value_type_ops_;
@@ -1046,8 +1034,8 @@ class OpsCallbackRunner : public CallbackRunner {
 // class CallbackResolverImpl : public CallbackResolver {
 //  public:
 //   void SetDest(Dest dest) override { dest_ = std::move(dest.dest_info); }
-//   void SetType(Type type) override { custom_type_ = std::move(type.callback); }
-//   void SetValue(std::unique_ptr<Any> value) override {
+//   void SetType(Type type) override { custom_type_ = std::move(type.callback);
+//   } void SetValue(std::unique_ptr<Any> value) override {
 //     value_ = std::move(value);
 //   }
 //   void SetAction(Action action) override {
@@ -1838,26 +1826,4 @@ struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
   }
 };
 
-// Default handling of FILE* is to open it for reading.
-template <>
-struct DefaultParseTraits<FILE*> {
-  static void Run(const std::string& in, Result<FILE*>* out) {}
-};
-
-// Handling of FileType.
-// User can give FileType(mode) in type() to indicate he want to open a file.
-// But the actual opening operation depends on dest.
-// Thus we define a FileOpener interface to erase the opening logic once dest is
-// given. And FileTypeCallback uses a FileOpener to do type-independent opening.
-
 }  // namespace argparse
-
-// TODO: about error handling.
-// User's callback should be very concise and contains the very only
-// info user needs.
-// For type-callback, user performs a conversion (only if a arg is present), or
-// tell us error. For action-callback, user performs an action (only if
-// type-callback succeeded) and maybe tell us error. That's enough. User don't
-// print help or usage, it 's what we should do -- catch user's error and do
-// error handling. We allow user to specify error handling policy, deciding what
-// to print, whether to exit, exit with what code... etc.
