@@ -345,7 +345,7 @@ void CallbackRunnerImpl::Run(Context* ctx, Delegate* delegate) {
   if (ctx->has_value)
     type_->Run(ctx->value, &results);
   if (results.has_error)
-    delegate->HandleCallbackError(ctx, results.msg);
+    delegate->HandleCallbackError(ctx, results.errmsg);
   else
     action_->Run(std::move(results.value));
 }

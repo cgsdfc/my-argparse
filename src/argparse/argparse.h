@@ -603,10 +603,18 @@ class TypeCallback {
   struct ConversionResult {
     bool has_error = false;
     std::unique_ptr<Any> value;
-    std::string msg;
+    std::string errmsg;
   };
   virtual ~TypeCallback() {}
   virtual void Run(const std::string& in, ConversionResult* out) {}
+
+ protected:
+  static ConvertResults(const Operations::OpsResult& in,
+                        ConversionResult* out) {
+    out->has_error = !in.value;
+    out->value = std::move(in.value);
+    out->errmsg = std::move(in.errmsg);
+  }
 };
 
 class DefaultTypeCallback : public TypeCallback {
@@ -616,9 +624,7 @@ class DefaultTypeCallback : public TypeCallback {
   void Run(const std::string& in, ConversionResult* out) override {
     Operations::OpsResult ops_result;
     ops_->Parse(in, &ops_result);
-    out->has_error = !ops_result.value;
-    out->value = std::move(ops_result.value);
-    out->msg = std::move(ops_result.errmsg);
+    ConvertResults(ops_result, out);
   }
 
  private:
@@ -633,10 +639,7 @@ class FileTypeCallback : public TypeCallback {
   void Run(const std::string& in, ConversionResult* out) override {
     Operations::OpsResult ops_result;
     ops_->Open(in, mode_, &ops_result);
-
-    out->has_error = !ops_result.value;
-    out->value = std::move(ops_result.value);
-    out->msg = std::move(ops_result.errmsg);
+    ConvertResults(ops_result, out);
   }
 
  private:
@@ -655,7 +658,7 @@ class CustomTypeCallback : public TypeCallback {
     std::invoke(callback_, in, &user_result);
     out->has_error = user_result.has_error();
     if (out->has_error)
-      out->msg = user_result.release_error();
+      out->errmsg = user_result.release_error();
     else if (user_result.has_value())
       WrapAny(&user_result, &out->value);
   }
