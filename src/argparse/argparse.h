@@ -2,7 +2,6 @@
 
 #include <argp.h>
 #include <algorithm>
-#include <any>
 #include <cassert>
 #include <cstdlib>  // malloc()
 #include <cstring>  // strlen()
@@ -222,6 +221,11 @@ class AnyImpl : public Any {
 };
 
 template <typename T>
+std::unique_ptr<Any> MakeAny(T&& val) {
+  return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
+}
+
+template <typename T>
 void WrapAny(T&& in, std::unique_ptr<Any>* out) {
   using Type = std::remove_cv_t<std::remove_reference_t<T>>;
   out->reset(new AnyImpl<Type>(std::forward<T>(in)));
@@ -279,7 +283,7 @@ struct Context {
 // The default impl for the types we know (bulitin-types like int).
 // This traits shouldn't be overriden by users.
 template <typename T, typename SFINAE = void>
-struct DefaultParserTraits {
+struct DefaultParseTraits {
   // This is selected when user use a custom type without specializing
   // TypeCallbackTraits.
   static void Run(const std::string&, Result<T>* out) {
@@ -291,11 +295,7 @@ struct DefaultParserTraits {
 // The user can specialize this to provide traits for their custom types
 // or override global (existing) types.
 template <typename T>
-struct ParserTraits : DefaultParserTraits<T> {};
-
-inline bool AnyHasType(const std::any& val, std::type_index type) {
-  return type == val.type();
-}
+struct ParseTraits : DefaultParseTraits<T> {};
 
 namespace detail {
 // clang-format off
@@ -339,11 +339,13 @@ struct DefaultAppendTraits : std::true_type {
 // This traits indicates whether T supports append operation and if it does,
 // tells us how to do the append.
 template <typename T>
-struct AppendTraits : std::false_type {};  // Not supported.
+struct AppendTraits {
+  static constexpr void* Run = nullptr;
+};
 
 // Extracted the bool value from AppendTraits.
 template <typename T>
-using IsAppendSupported = std::bool_constant<AppendTraits<T>{}>;
+using IsAppendSupported = std::bool_constant<AppendTraits<T>::Run == nullptr>;
 
 // Get the value-type for a appendable, only use it when IsAppendSupported<T>.
 template <typename T>
@@ -362,6 +364,48 @@ struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
 // For user's types, specialize AppendTraits<>, and if your type is
 // standard-compatible, inherits from DefaultAppendTraits<>.
 
+// File open mode.
+enum Mode : unsigned {
+  kModeRead = 0x0,
+  kModeWrite = 0x1,
+  kModeAppend = 0x2,
+  kModeTruncate = 0x4,
+  kModeBinary = 0x8,
+};
+
+template <typename T>
+struct FileTraits {
+  static constexpr void* Run = nullptr;
+};
+
+template <>
+struct FileTraits<FILE*> {
+  static std::string GetMode(Mode mode) {
+    std::string m;
+    if (mode & kModeRead)
+      m.append("r");
+    if (mode & kModeWrite)
+      m.append("w");
+    if (mode & kModeAppend)
+      m.append("a");
+    if (mode & kModeBinary)
+      m.append("b");
+    return m;
+  }
+
+  static void Run(const std::string& in, Mode mode, Result<FILE*>* out) {
+    auto mode_str = GetMode(mode);
+    auto* file = std::fopen(in.c_str(), mode_str.c_str());
+    if (file)
+      return out->set_value(file);
+    if (int e = errno) {
+      errno = 0;
+      return out->set_error(std::strerror(e));
+    }
+    out->set_error("Failing to open file");
+  }
+};
+
 // A more complete module to handle user's callbacks.
 enum class Actions {
   kNoAction,
@@ -376,7 +420,7 @@ enum class Actions {
   kCustom,
 };
 
-enum OpsKind {
+enum class OpsKind {
   kStore,
   kStoreConst,
   kAppend,
@@ -405,10 +449,8 @@ struct IsOpsSupported<OpsKind::kAppendConst, T>
                          std::is_copy_assignable<ValueTypeOf<T>>{}> {};
 
 template <typename T>
-struct IsFileLike : std::false_type {};
-
-template <typename T>
-struct IsOpsSupported<OpsKind::kOpen, T> : IsFileLike<T> {};
+struct IsOpsSupported<OpsKind::kOpen, T>
+    : std::bool_constant<FileTraits<T>::Run == nullptr> {};
 
 class DestPtr {
  public:
@@ -465,14 +507,6 @@ class DestPtr {
   struct NoneType {};
   std::type_index type_ = typeid(NoneType);
   void* ptr_ = nullptr;
-};
-
-// File open mode.
-enum class Mode : unsigned {
-  kRead = 0x0,
-  kWrite = 0x1,
-  kAppend = 0x2,
-  kTruncate = 0x4,
 };
 
 // # Ops classes.
@@ -625,13 +659,15 @@ class OperationsImpl : public Operations {
   }
   static void ParseImpl(const std::string& in, OpsResult* out, std::true_type) {
     Result<T> result;
-    ParserTraits<T>::Run(in, &result);
+    ParseTraits<T>::Run(in, &result);
     ConvertResults(&result, out);
   }
   static void OpenImpl(const std::string& in,
                        Mode mode,
                        OpsResult* out,
-                       std::true_type) {}
+                       std::true_type) {
+    FileTraits<T>::Run(in, mode, out);
+  }
 };
 
 template <typename T>
@@ -737,24 +773,23 @@ class ActionCallback {
     dest_ptr_ = dest_ptr;
   }
 
-  // Set an const value to this action (must be a valid value.)
-  void SetConstValue(std::unique_ptr<Any> val) {
-    DCHECK2(val, "const_value should not be null");
-    const_value_ = std::move(val);
-  }
-
   const DestPtr& dest() const { return dest_ptr_; }
-  const Any& const_value() const { return *const_value_; }
 
  private:
   DestPtr dest_ptr_;
-  std::unique_ptr<Any> const_value_;
 };
 
 class DefaultActionCallback : public ActionCallback {
  public:
   DefaultActionCallback(std::unique_ptr<Operations> ops, Actions action)
       : ops_(std::move(ops)), action_(action) {}
+
+  // Set an const value to this action (must be a valid value.)
+  void SetConstValue(std::unique_ptr<Any> val) {
+    DCHECK2(val, "const_value should not be null");
+    const_value_ = std::move(val);
+  }
+  const Any& const_value() const { return *const_value_; }
 
   void Run(std::unique_ptr<Any> data) override {
     switch (action_) {
@@ -791,6 +826,7 @@ class DefaultActionCallback : public ActionCallback {
  private:
   std::unique_ptr<Operations> ops_;
   Actions action_;
+  std::unique_ptr<Any> const_value_;
 };
 
 // Provided by user's callable obj.
@@ -940,7 +976,7 @@ class CallbackResolver {
  public:
   virtual void SetDest(Dest dest) = 0;
   virtual void SetType(Type type) = 0;
-  virtual void SetValue(std::any value) = 0;
+  virtual void SetValue(std::unique_ptr<Any> value) = 0;
   virtual void SetAction(Action action) = 0;
   virtual CallbackRunner* CreateCallbackRunner() = 0;
   virtual ~CallbackResolver() {}
@@ -950,7 +986,9 @@ class CallbackResolverImpl : public CallbackResolver {
  public:
   void SetDest(Dest dest) override { dest_ = std::move(dest.dest_info); }
   void SetType(Type type) override { custom_type_ = std::move(type.callback); }
-  void SetValue(std::any value) override { value_ = std::move(value); }
+  void SetValue(std::unique_ptr<Any> value) override {
+    value_ = std::move(value);
+  }
   void SetAction(Action action) override {
     action_ = action.action;
     custom_action_ = std::move(action.callback);
@@ -963,7 +1001,7 @@ class CallbackResolverImpl : public CallbackResolver {
   std::unique_ptr<DestInfo> dest_;
   std::unique_ptr<TypeCallback> custom_type_;
   std::unique_ptr<ActionCallback> custom_action_;
-  std::any value_;
+  std::unique_ptr<Any> value_;
 };
 
 inline bool IsValidPositionalName(const char* name, std::size_t len) {
@@ -1185,8 +1223,9 @@ class ArgumentBuilder {
   //   resolver_->SetType(new DefaultTypeCallback<T>());
   //   return *this;
   // }
-  ArgumentBuilder& value(std::any val) {
-    resolver_->SetValue(std::move(val));
+  template <typename T>
+  ArgumentBuilder& value(T&& val) {
+    resolver_->SetValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
@@ -1601,14 +1640,14 @@ class ArgumentParser : public ArgumentContainer {
 
 // wstring is not supported now.
 template <>
-struct DefaultParserTraits<std::string> {
+struct DefaultParseTraits<std::string> {
   static void Run(const std::string& in, Result<std::string>* out) {
     *out = in;
   }
 };
 // char is an unquoted single character.
 template <>
-struct DefaultParserTraits<char> {
+struct DefaultParseTraits<char> {
   static void Run(const std::string& in, Result<char>* out) {
     if (in.size() != 1)
       return out->set_error("char must be exactly one character");
@@ -1618,7 +1657,7 @@ struct DefaultParserTraits<char> {
   }
 };
 template <>
-struct DefaultParserTraits<bool> {
+struct DefaultParseTraits<bool> {
   static void Run(const std::string& in, Result<bool>* out) {
     static const std::map<std::string, bool> kStringToBools{
         {"true", true},   {"True", true},   {"1", true},
@@ -1688,7 +1727,7 @@ T StlParseNumber(const std::string& in) {
 }
 
 template <typename T>
-struct DefaultParserTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
+struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
   static void Run(const std::string& in, Result<T>* out) {
     try {
       *out = StlParseNumber<T>(in);
@@ -1702,7 +1741,7 @@ struct DefaultParserTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
 
 // Default handling of FILE* is to open it for reading.
 template <>
-struct DefaultParserTraits<FILE*> {
+struct DefaultParseTraits<FILE*> {
   static void Run(const std::string& in, Result<FILE*>* out) {}
 };
 
@@ -1711,24 +1750,6 @@ struct DefaultParserTraits<FILE*> {
 // But the actual opening operation depends on dest.
 // Thus we define a FileOpener interface to erase the opening logic once dest is
 // given. And FileTypeCallback uses a FileOpener to do type-independent opening.
-
-template <typename T>
-struct EnumOpTraits {
-  using U = std::underlying_type_t<T>;
-  static T And(T a, T b) {
-    return static_cast<T>(static_cast<U>(a) & static_cast<U>(b));
-  }
-  static T Or(T a, T b) {
-    return static_cast<T>(static_cast<U>(a) | static_cast<U>(b));
-  }
-};
-
-inline Mode operator&(Mode a, Mode b) {
-  return EnumOpTraits<Mode>::And(a, b);
-}
-inline Mode operator|(Mode a, Mode b) {
-  return EnumOpTraits<Mode>::Or(a, b);
-}
 
 }  // namespace argparse
 
