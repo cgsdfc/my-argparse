@@ -1125,21 +1125,8 @@ struct Names {
   bool is_option;
   std::string meta_var;
 
-  Names(const char* name) {
-    if (name[0] == '-') {
-      InitOptions({name});
-      return;
-    }
-    auto len = std::strlen(name);
-    DCHECK2(IsValidPositionalName(name, len), "Not a valid positional name!");
-    is_option = false;
-    std::string positional(name, len);
-    meta_var = ToUpper(positional);
-    long_names.push_back(std::move(positional));
-  }
-
+  Names(const char* name);
   Names(std::initializer_list<const char*> names) { InitOptions(names); }
-
   void InitOptions(std::initializer_list<const char*> names);
 };
 
@@ -1226,11 +1213,7 @@ class ArgumentImpl : public Argument {
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostream& os) const override;
 
-  void InitCallback() override {
-    DCHECK(!callback_runner_ && callback_resolver_);
-    callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
-    callback_resolver_.reset();
-  }
+  void InitCallback() override;
 
   void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 
@@ -1443,6 +1426,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
  public:
   ArgumentHolderImpl();
 
+  // ArgumentHolder:
   // Add an arg to a specific group.
   Argument* AddArgumentToGroup(Names names, int group) override;
 
@@ -1456,15 +1440,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   std::unique_ptr<ArgpParser> CreateParser() override {
     return ArgpParser::Create(this);
   }
-
-  ArgpParser* GetParser() override {
-    if (dirty()) {
-      parser_ = CreateParser();
-      SetDirty(false);
-    }
-    DCHECK(parser_);
-    return parser_.get();
-  }
+  ArgpParser* GetParser() override;
 
   const std::map<int, Argument*>& optional_arguments() const {
     return optional_arguments_;
@@ -1476,12 +1452,10 @@ class ArgumentHolderImpl : public ArgumentHolder,
  private:
   // ArgpParser::Delegate:
   static constexpr int kAverageAliasCount = 4;
-
   void CompileToArgpOptions(std::vector<argp_option>* options) override;
   void GenerateArgsDoc(std::string* args_doc) override;
   Argument* FindOptionalArgument(int key) override;
   Argument* FindPositionalArgument(int index) override;
-
   std::size_t PositionalArgumentCount() override {
     return positional_arguments_.size();
   }
@@ -1507,12 +1481,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   };
 
   // Create a new group.
-  int AddGroup(const char* header) {
-    int group = groups_.size() + 1;
-    groups_.emplace_back(group, header);
-    SetDirty(true);
-    return group;
-  }
+  int AddGroup(const char* header);
 
   Group* GroupFromID(int group) {
     DCHECK(group <= groups_.size());
@@ -1521,19 +1490,9 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
   // Argument::Delegate:
   int NextOptionKey() override { return next_key_++; }
-
   void OnArgumentCreated(Argument* arg) override;
 
-  bool CheckNamesConflict(const Names& names) {
-    for (auto&& long_name : names.long_names)
-      if (!name_set_.insert(long_name).second)
-        return false;
-    // May not use multiple short names.
-    for (char short_name : names.short_names)
-      if (!name_set_.insert(std::string(&short_name, 1)).second)
-        return false;
-    return true;
-  }
+  bool CheckNamesConflict(const Names& names);
 
   void SetDirty(bool dirty) { dirty_ = dirty; }
   bool dirty() const { return dirty_; }
@@ -1573,12 +1532,9 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   explicit ArgpParserImpl(ArgpParser::Delegate* delegate);
 
   void Init(const Options& options) override;
-  void ParseArgs(ArgArray args) override {
-    // If any error happened, just exit the program. No need to check for return
-    // value.
-    argp_parse(&argp_, args.argc(), args.argv(), parser_flags_, nullptr, this);
-  }
-
+  // If any error happened, just exit the program. No need to check for return
+  // value.
+  void ParseArgs(ArgArray args) override;
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override;
 
  private:
@@ -1693,13 +1649,7 @@ class ArgumentParser : public ArgumentContainer {
     return holder_->AddArgumentGroup(header);
   }
 
-  // argp wants a char**, but most user don't expect argv being changed. So
-  // cheat them.
-  void parse_args(int argc, const char** argv) {
-    auto* parser = holder_->GetParser();
-    parser->Init(user_options_.options);
-    return parser->ParseArgs(ArgArray(argc, argv));
-  }
+  void parse_args(int argc, const char** argv);
 
   // Helper for demo and testing.
   void parse_args(std::initializer_list<const char*> args) {
