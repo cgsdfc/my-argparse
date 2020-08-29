@@ -13,7 +13,6 @@ struct AppendTraits<Appendable> {
 
 
 int main(int argc, char const* argv[]) {
-
   ArgumentParser parser(Options()
                             .description("a test program")
                             .email("xxx@xxx.com")

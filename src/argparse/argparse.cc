@@ -582,4 +582,37 @@ std::ios_base::openmode StreamTraitsGetMode(Mode m) {
   return out;
 }
 
+const char* OpsToString(OpsKind ops) {
+  static const std::map<OpsKind, std::string> kOpsToStrings{
+      {OpsKind::kStore, "store"},
+  };
+  auto iter = kOpsToStrings.find(ops);
+  DCHECK(iter != kOpsToStrings.end());
+  return iter->second.c_str();
+}
+
+const char* TypeName(const std::type_info& type) {
+  static std::map<std::type_index, std::string> kTypeToStrings;
+  auto iter = kTypeToStrings.find(type);
+  if (iter == kTypeToStrings.end()) {
+    kTypeToStrings.emplace(type, type.name());
+    // TODO: demangle.
+  }
+  return kTypeToStrings[type].c_str();
+}
+
+void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...) {
+  if (cond)
+    return;
+  std::fprintf(stderr, "Error at %s:%d: ", loc.filename, loc.line);
+
+  va_list ap;
+  va_start(ap, fmt);
+  std::vfprintf(stderr, fmt, ap);
+  va_end(ap);
+
+  std::fprintf(stderr, "\n\nPlease check your code and read the documents of argparse.\n\n");
+  std::abort();
+}
+
 }  // namespace argparse

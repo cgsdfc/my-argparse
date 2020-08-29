@@ -21,6 +21,10 @@
 #define DCHECK(expr) assert(expr)
 #define DCHECK2(expr, msg) assert(expr&& msg)
 
+// Perform a runtime check for user's error.
+#define CHECK_USER(expr, format, ...) \
+  CheckUserError((expr), {__LINE__, __FILE__}, (format), ##__VA_ARGS__)
+
 namespace argparse {
 
 class Argument;
@@ -52,6 +56,13 @@ using ::error_t;
 using ::program_invocation_name;
 using ::program_invocation_short_name;
 using std::FILE;
+
+struct SourceLocation {
+  int line;
+  const char* filename;
+};
+
+void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...);
 
 // Try to use move, fall back to copy.
 template <typename T>
@@ -563,11 +574,17 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
 template <OpsKind Ops, typename T, bool Supported = IsOpsSupported<Ops, T>{}>
 struct OpsImpl;
 
+const char* OpsToString(OpsKind ops);
+const char* TypeName(const std::type_info& type);
+
 template <OpsKind Ops, typename T>
 struct OpsImpl<Ops, T, false> {
   template <typename... Args>
   static void Run(Args&&...) {
-    DCHECK2(false, "Operation not supported by this type");
+    CHECK_USER(false,
+               "Operation %s is not supported by type %s. Please specialize "
+               "relative traits if possible.",
+               OpsToString(Ops), TypeName(typeid(T)));
   }
 };
 
@@ -843,7 +860,7 @@ struct Dest {
   Dest() = default;
   template <typename T>
   /* implicit */ Dest(T* ptr) {
-    DCHECK2(ptr, "nullptr passed to Dest()");
+    CHECK_USER(ptr, "Pointer passed to dest() must not be null.");
     dest_info.reset(new DestInfoImpl<T>(ptr));
   }
 };
