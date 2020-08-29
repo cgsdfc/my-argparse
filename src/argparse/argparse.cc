@@ -343,23 +343,13 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
   }
 }
 
-// void CallbackRunnerImpl::Run(Context* ctx, Delegate* delegate) {
-//   OpsResult results;
-//   // TypeCallback::ConversionResult results;
-//   if (ctx->has_value)
-//     type_->Run(ctx->value, &results);
-//   if (results.has_error)
-//     delegate->HandleCallbackError(ctx, results.errmsg);
-//   else
-//     action_->Run(std::move(results.value));
-// }
-
 Argument* ArgumentHolderImpl::AddArgumentToGroup(Names names, int group) {
   // First check if this arg will conflict with existing ones.
   DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
   DCHECK2(group <= groups_.size(), "No such group");
   GroupFromID(group)->IncRef();
   Argument& arg = arguments_.emplace_back(this, names, group);
+  SetDirty(true);
   return &arg;
 }
 

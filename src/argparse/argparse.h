@@ -1415,6 +1415,9 @@ class ArgumentHolder {
   virtual Argument* AddArgument(Names names) = 0;
   virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
   virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
+  // Get a reusable Parser. As long as the state of holder isn't changed, the
+  // instance returned is the same.
+  virtual ArgpParser* GetParser() { return nullptr; }
   virtual ~ArgumentHolder() {}
 };
 
@@ -1452,6 +1455,15 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
   std::unique_ptr<ArgpParser> CreateParser() override {
     return ArgpParser::Create(this);
+  }
+
+  ArgpParser* GetParser() override {
+    if (dirty()) {
+      parser_ = CreateParser();
+      SetDirty(false);
+    }
+    DCHECK(parser_);
+    return parser_.get();
   }
 
   const std::map<int, Argument*>& optional_arguments() const {
@@ -1498,6 +1510,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   int AddGroup(const char* header) {
     int group = groups_.size() + 1;
     groups_.emplace_back(group, header);
+    SetDirty(true);
     return group;
   }
 
@@ -1522,6 +1535,8 @@ class ArgumentHolderImpl : public ArgumentHolder,
     return true;
   }
 
+  void SetDirty(bool dirty) { dirty_ = dirty; }
+  bool dirty() const { return dirty_; }
   static constexpr unsigned kFirstArgumentKey = 128;
 
   // // Gid for two builtin groups.
@@ -1535,7 +1550,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   // in any order. Automatical inheriting gid will mess up.
   // unsigned next_group_id_ = kFirstUserGroup;
   unsigned next_key_ = kFirstArgumentKey;
-
+  bool dirty_ = true;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
   // indexed by their define-order.
@@ -1546,6 +1561,8 @@ class ArgumentHolderImpl : public ArgumentHolder,
   std::vector<Group> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;
+  // Reusable cached parser instance.
+  std::unique_ptr<ArgpParser> parser_;
 };
 
 // This handles the argp_parser_t function and provide a bunch of context during
@@ -1679,7 +1696,7 @@ class ArgumentParser : public ArgumentContainer {
   // argp wants a char**, but most user don't expect argv being changed. So
   // cheat them.
   void parse_args(int argc, const char** argv) {
-    auto parser = holder_->CreateParser();
+    auto* parser = holder_->GetParser();
     parser->Init(user_options_.options);
     return parser->ParseArgs(ArgArray(argc, argv));
   }
