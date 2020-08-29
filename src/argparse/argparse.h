@@ -574,8 +574,6 @@ class Operations {
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
 
-  // If this type has a concept of value_type, create a handle.
-  virtual std::unique_ptr<Operations> CreateValueTypeOps() = 0;
   virtual ~Operations() {}
 };
 
@@ -583,6 +581,9 @@ class Operations {
 class OpsFactory {
  public:
   virtual std::unique_ptr<Operations> Create() = 0;
+  // If this type has a concept of value_type, create a handle.
+  virtual std::unique_ptr<Operations> CreateValueTypeOps() = 0;
+  virtual bool IsSupported(OpsKind ops) = 0;
   virtual ~OpsFactory() {}
 };
 
@@ -691,15 +692,30 @@ class OperationsImpl : public Operations {
     OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
   }
 
-  std::unique_ptr<Operations> CreateValueTypeOps() override {
-    auto* ops = OpsImpl<OpsKind::kValueType, T>::Run();
-    return std::unique_ptr<Operations>(ops);
-  }
-
   class FactoryImpl : public OpsFactory {
    public:
     std::unique_ptr<Operations> Create() override {
       return std::make_unique<OperationsImpl<T>>();
+    }
+    std::unique_ptr<Operations> CreateValueTypeOps() override {
+      auto* ops = OpsImpl<OpsKind::kValueType, T>::Run();
+      return std::unique_ptr<Operations>(ops);
+    }
+    bool IsSupported(OpsKind ops) override {
+      switch (ops) {
+        case OpsKind::kStore:
+          return IsOpsSupported<OpsKind::kStore, T>{};
+        case OpsKind::kStoreConst:
+          return IsOpsSupported<OpsKind::kStoreConst, T>{};
+        case OpsKind::kAppend:
+          return IsOpsSupported<OpsKind::kAppend, T>{};
+        case OpsKind::kAppendConst:
+          return IsOpsSupported<OpsKind::kAppendConst, T>{};
+        case OpsKind::kParse:
+          return IsOpsSupported<OpsKind::kParse, T>{};
+        case OpsKind::kOpen:
+          return IsOpsSupported<OpsKind::kOpen, T>{};
+      }
     }
   };
 };
