@@ -273,11 +273,7 @@ struct Context {
 // This traits shouldn't be overriden by users.
 template <typename T, typename SFINAE = void>
 struct DefaultParseTraits {
-  // This is selected when user use a custom type without specializing
-  // TypeCallbackTraits.
-  static void Run(const std::string&, Result<T>* out) {
-    DCHECK2(false, "Please specialize ParserTraits<T> for your type");
-  }
+  static constexpr bool Run = false;
 };
 
 // By default, use the traits defined by the library for builtin types.
@@ -342,7 +338,6 @@ enum class OpsKind {
   kAppendConst,
   kParse,
   kOpen,
-  // kValueType,
 };
 
 // File open mode.
@@ -405,25 +400,12 @@ struct CFileOpenTraits {
   static void Run(const std::string& in, Mode mode, Result<FILE*>* out);
 };
 
+std::ios_base::openmode StreamTraitsGetMode(Mode m);
+
 template <typename T>
 struct StreamOpenTraits {
-  static std::ios_base::openmode GetMode(Mode m) {
-    std::ios_base::openmode out;
-    if (m & kModeRead)
-      out |= std::ios_base::in;
-    if (m & kModeWrite)
-      out |= std::ios_base::out;
-    if (m & kModeAppend)
-      out |= std::ios_base::app;
-    if (m & kModeTruncate)
-      out |= std::ios_base::trunc;
-    if (m & kModeBinary)
-      out |= std::ios_base::binary;
-    return out;
-  }
-
   static void Run(const std::string& in, Mode mode, Result<T>* out) {
-    auto ios_mode = GetMode(mode);
+    auto ios_mode = StreamTraitsGetMode(mode);
     T stream(in, ios_mode);
     if (stream.is_open())
       return out->set_value(std::move(stream));
@@ -465,6 +447,10 @@ struct IsAppendConstSupported<T, true>
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kAppendConst, T> : IsAppendConstSupported<T> {};
+
+template <typename T>
+struct IsOpsSupported<OpsKind::kParse, T>
+    : std::bool_constant<bool(ParseTraits<T>::Run)> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>

@@ -567,4 +567,19 @@ void CFileOpenTraits::Run(const std::string& in,
   out->set_error(kDefaultOpenFailureMsg);
 }
 
+std::ios_base::openmode StreamTraitsGetMode(Mode m) {
+  std::ios_base::openmode out;
+  if (m & kModeRead)
+    out |= std::ios_base::in;
+  if (m & kModeWrite)
+    out |= std::ios_base::out;
+  if (m & kModeAppend)
+    out |= std::ios_base::app;
+  if (m & kModeTruncate)
+    out |= std::ios_base::trunc;
+  if (m & kModeBinary)
+    out |= std::ios_base::binary;
+  return out;
+}
+
 }  // namespace argparse
