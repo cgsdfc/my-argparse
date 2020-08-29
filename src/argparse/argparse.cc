@@ -2,6 +2,7 @@
 
 #include <cstdlib>  // malloc()
 #include <cstring>  // strlen()
+#include <cxxabi.h> // demangle().
 
 namespace argparse {
 
@@ -584,19 +585,38 @@ std::ios_base::openmode StreamTraitsGetMode(Mode m) {
 
 const char* OpsToString(OpsKind ops) {
   static const std::map<OpsKind, std::string> kOpsToStrings{
-      {OpsKind::kStore, "store"},
+      {OpsKind::kStore, "Store"},   {OpsKind::kStoreConst, "StoreConst"},
+      {OpsKind::kAppend, "Append"}, {OpsKind::kAppendConst, "AppendConst"},
+      {OpsKind::kParse, "Parse"},   {OpsKind::kOpen, "Open"},
   };
   auto iter = kOpsToStrings.find(ops);
   DCHECK(iter != kOpsToStrings.end());
   return iter->second.c_str();
 }
 
+static std::string Demangle(const char* mangled_name) {
+  std::size_t length;
+  int status;
+  const char* realname =
+      abi::__cxa_demangle(mangled_name, nullptr, &length, &status);
+
+  if (status) {
+    static constexpr const char kDemangleFailedSub[] =
+        "<error-type(demangle failed)>";
+    return kDemangleFailedSub;
+  }
+
+  DCHECK(realname);
+  std::string result(realname, length);
+  std::free((void*)realname);
+  return result;
+}
+
 const char* TypeName(const std::type_info& type) {
   static std::map<std::type_index, std::string> kTypeToStrings;
   auto iter = kTypeToStrings.find(type);
   if (iter == kTypeToStrings.end()) {
-    kTypeToStrings.emplace(type, type.name());
-    // TODO: demangle.
+    kTypeToStrings.emplace(type, Demangle(type.name()));
   }
   return kTypeToStrings[type].c_str();
 }

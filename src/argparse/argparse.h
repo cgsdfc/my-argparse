@@ -581,10 +581,11 @@ template <OpsKind Ops, typename T>
 struct OpsImpl<Ops, T, false> {
   template <typename... Args>
   static void Run(Args&&...) {
-    CHECK_USER(false,
-               "Operation %s is not supported by type %s. Please specialize "
-               "relative traits if possible.",
-               OpsToString(Ops), TypeName(typeid(T)));
+    CHECK_USER(
+        false,
+        "Operation %s is not supported by type %s. Please specialize one of "
+        "AppendTraits, ParseTraits and OpenTraits, or pass in a callback.",
+        OpsToString(Ops), TypeName(typeid(T)));
   }
 };
 
