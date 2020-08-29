@@ -893,6 +893,8 @@ class CallbackRunner {
    public:
     virtual ~Delegate() {}
     virtual void HandleCallbackError(Context* ctx, const std::string& msg) = 0;
+    virtual void HandlePrintUsage(Context* ctx) = 0;
+    virtual void HandlePrintHelp(Context* ctx) = 0;
   };
   virtual void Run(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
@@ -913,14 +915,15 @@ class CallbackResolver {
 class OpsCallbackRunner : public CallbackRunner {
  public:
   void Run(Context* ctx, Delegate* delegate) override {
+    delegate_ = delegate;
     OpsResult result;
     if (ctx->has_value)
       RunTypeCallback(ctx->value, &result);
     if (result.has_error) {
-      delegate->HandleCallbackError(ctx, result.errmsg);
+      delegate_->HandleCallbackError(ctx, result.errmsg);
       return;
     }
-    RunActionCallback(std::move(result.value));
+    RunActionCallback(std::move(result.value), ctx);
   }
 
   static CallbackResolver* CreateResolver();
@@ -940,7 +943,7 @@ class OpsCallbackRunner : public CallbackRunner {
   }
 
   // Operations* ops
-  void RunActionCallback(std::unique_ptr<Any> data) {
+  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
     auto* ops = action_ops_.get();
     DCHECK(ops);
 
@@ -966,8 +969,10 @@ class OpsCallbackRunner : public CallbackRunner {
         ops->AppendConst(dest(), const_value());
         break;
       case Actions::kPrintHelp:
+        delegate_->HandlePrintHelp(ctx);
         break;
       case Actions::kPrintUsage:
+        delegate_->HandlePrintUsage(ctx);
         break;
       case Actions::kCustom:
         DCHECK(custom_action_);
@@ -1004,6 +1009,7 @@ class OpsCallbackRunner : public CallbackRunner {
   Types type_code_ = Types::kParse;
   Mode mode_;
   DestPtr dest_ptr_;
+  Delegate* delegate_ = nullptr;
 };
 
 // Directly store user's info into Runner.
@@ -1555,6 +1561,9 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   void HandleCallbackError(Context* ctx, const std::string& msg) override {
     // ctx->state.ErrorF("error parsing argument %s: %s", )
   }
+
+  void HandlePrintUsage(Context* ctx) override { ctx->state.Usage(); }
+  void HandlePrintHelp(Context* ctx) override { ctx->state.Help(stderr, 0); }
 
   error_t DoParse(int key, char* arg, ArgpState state);
 
