@@ -348,7 +348,7 @@ enum class OpsKind {
   kAppendConst,
   kParse,
   kOpen,
-  kValueType,
+  // kValueType,
 };
 
 // File open mode.
@@ -497,8 +497,8 @@ template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>
     : std::bool_constant<bool(OpenTraits<T>::Run)> {};
 
-template <typename T>
-struct IsOpsSupported<OpsKind::kValueType, T> : IsAppendSupported<T> {};
+// template <typename T>
+// struct IsOpsSupported<OpsKind::kValueType, T> : IsAppendSupported<T> {};
 
 class DestPtr {
  public:
@@ -670,6 +670,9 @@ struct OpsImpl<OpsKind::kOpen, T, true> {
   }
 };
 
+template <typename T, bool = IsAppendSupported<T>{}>
+struct CreateValueTypeOpsImpl;
+
 template <typename T>
 class OperationsImpl : public Operations {
  public:
@@ -698,7 +701,7 @@ class OperationsImpl : public Operations {
       return std::make_unique<OperationsImpl<T>>();
     }
     std::unique_ptr<Operations> CreateValueTypeOps() override {
-      auto* ops = OpsImpl<OpsKind::kValueType, T>::Run();
+      auto* ops = CreateValueTypeOpsImpl<T>::Run();
       return std::unique_ptr<Operations>(ops);
     }
     bool IsSupported(OpsKind ops) override {
@@ -721,11 +724,11 @@ class OperationsImpl : public Operations {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kValueType, T, false> {
+struct  CreateValueTypeOpsImpl<T, false> {
   static Operations* Run() { return nullptr; }
 };
 template <typename T>
-struct OpsImpl<OpsKind::kValueType, T, true> {
+struct CreateValueTypeOpsImpl<T, true> {
   static Operations* Run() { return new OperationsImpl<ValueTypeOf<T>>(); }
 };
 
