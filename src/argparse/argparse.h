@@ -577,6 +577,11 @@ struct OpsImpl;
 const char* OpsToString(OpsKind ops);
 const char* TypeName(const std::type_info& type);
 
+template <typename T>
+const char* TypeName() {
+  return TypeName(typeid(T));
+}
+
 template <OpsKind Ops, typename T>
 struct OpsImpl<Ops, T, false> {
   template <typename... Args>

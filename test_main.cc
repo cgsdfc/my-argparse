@@ -13,6 +13,10 @@ struct AppendTraits<Appendable> {
 
 
 int main(int argc, char const* argv[]) {
+  puts(TypeName(typeid(double)));
+  puts(TypeName<ArgumentParser>());
+  puts(TypeName<std::iostream>());
+
   ArgumentParser parser(Options()
                             .description("a test program")
                             .email("xxx@xxx.com")
