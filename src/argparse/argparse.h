@@ -3,8 +3,6 @@
 #include <argp.h>
 #include <algorithm>
 #include <cassert>
-#include <cstdlib>  // malloc()
-#include <cstring>  // strlen()
 #include <deque>
 #include <fstream>
 #include <functional>
@@ -263,11 +261,7 @@ void UnwrapAny(std::unique_ptr<Any> any, T* out) {
 
 // This is an internal class to communicate data/state between user's callback.
 struct Context {
-  Context(const Argument* argument, const char* value, ArgpState state)
-      : has_value(bool(value)), argument(argument), state(state) {
-    if (has_value)
-      this->value.assign(value);
-  }
+  Context(const Argument* argument, const char* value, ArgpState state);
 
   const bool has_value;
   const Argument* argument;
@@ -406,32 +400,9 @@ struct OpenTraits {
   static constexpr void* Run = nullptr;
 };
 
-template <>
-struct OpenTraits<FILE*> {
-  static std::string GetMode(Mode mode) {
-    std::string m;
-    if (mode & kModeRead)
-      m.append("r");
-    if (mode & kModeWrite)
-      m.append("w");
-    if (mode & kModeAppend)
-      m.append("a");
-    if (mode & kModeBinary)
-      m.append("b");
-    return m;
-  }
-
-  static void Run(const std::string& in, Mode mode, Result<FILE*>* out) {
-    auto mode_str = GetMode(mode);
-    auto* file = std::fopen(in.c_str(), mode_str.c_str());
-    if (file)
-      return out->set_value(file);
-    if (int e = errno) {
-      errno = 0;
-      return out->set_error(std::strerror(e));
-    }
-    out->set_error(kDefaultOpenFailureMsg);
-  }
+struct CFileOpenTraits {
+  static std::string GetMode(Mode mode);
+  static void Run(const std::string& in, Mode mode, Result<FILE*>* out);
 };
 
 template <typename T>
@@ -460,6 +431,8 @@ struct StreamOpenTraits {
   }
 };
 
+template <>
+struct OpenTraits<FILE*> : CFileOpenTraits {};
 template <>
 struct OpenTraits<std::fstream> : StreamOpenTraits<std::fstream> {};
 template <>
@@ -496,9 +469,6 @@ struct IsOpsSupported<OpsKind::kAppendConst, T> : IsAppendConstSupported<T> {};
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>
     : std::bool_constant<bool(OpenTraits<T>::Run)> {};
-
-// template <typename T>
-// struct IsOpsSupported<OpsKind::kValueType, T> : IsAppendSupported<T> {};
 
 class DestPtr {
  public:
@@ -859,21 +829,7 @@ struct Type {
   }
 };
 
-inline Actions StringToActions(const std::string& str) {
-  static const std::map<std::string, Actions> kStringToActions{
-      {"store", Actions::kStore},
-      {"store_const", Actions::kStoreConst},
-      {"store_true", Actions::kStoreTrue},
-      {"store_false", Actions::kStoreFalse},
-      {"append", Actions::kAppend},
-      {"append_const", Actions::kAppendConst},
-      {"print_help", Actions::kPrintHelp},
-      {"print_usage", Actions::kPrintUsage},
-  };
-  auto iter = kStringToActions.find(str);
-  DCHECK2(iter != kStringToActions.end(), "Unknown action string passed in");
-  return iter->second;
-}
+ Actions StringToActions(const std::string& str);
 
 // Type-erasured
 struct Action {
@@ -933,18 +889,7 @@ class CallbackResolver {
 
 class OpsCallbackRunner : public CallbackRunner {
  public:
-  void Run(Context* ctx, Delegate* delegate) override {
-    delegate_ = delegate;
-    OpsResult result;
-    if (ctx->has_value)
-      RunTypeCallback(ctx->value, &result);
-    if (result.has_error) {
-      delegate_->HandleCallbackError(ctx, result.errmsg);
-      return;
-    }
-    RunActionCallback(std::move(result.value), ctx);
-  }
-
+  void Run(Context* ctx, Delegate* delegate) override;
   static CallbackResolver* CreateResolver();
 
  private:
@@ -961,63 +906,8 @@ class OpsCallbackRunner : public CallbackRunner {
     return dest_ptr_;
   }
 
-  // Operations* ops
-  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
-    auto* ops = action_ops_.get();
-    DCHECK(ops);
-
-    switch (action_code_) {
-      case Actions::kNoAction:
-        break;
-      case Actions::kStore:
-        ops->Store(dest(), std::move(data));
-        break;
-      case Actions::kStoreConst:
-        ops->StoreConst(dest(), const_value());
-        break;
-      case Actions::kStoreTrue:
-        ops->StoreConst(dest(), AnyImpl<bool>(true));
-        break;
-      case Actions::kStoreFalse:
-        ops->StoreConst(dest(), AnyImpl<bool>(false));
-        break;
-      case Actions::kAppend:
-        ops->Append(dest(), std::move(data));
-        break;
-      case Actions::kAppendConst:
-        ops->AppendConst(dest(), const_value());
-        break;
-      case Actions::kPrintHelp:
-        delegate_->HandlePrintHelp(ctx);
-        break;
-      case Actions::kPrintUsage:
-        delegate_->HandlePrintUsage(ctx);
-        break;
-      case Actions::kCustom:
-        DCHECK(custom_action_);
-        custom_action_->Run(dest(), std::move(data));
-        break;
-    }
-  }
-
-  void RunTypeCallback(const std::string& in, OpsResult* out) {
-    auto* ops = type_ops_.get();
-    DCHECK(ops);
-    switch (type_code_) {
-      case Types::kParse:
-        ops->Parse(in, out);
-        break;
-      case Types::kOpen:
-        ops->Open(in, mode_, out);
-        break;
-      case Types::kNothing:
-        break;
-      case Types::kCustom:
-        DCHECK(custom_type_);
-        custom_type_->Run(in, out);
-        break;
-    }
-  }
+  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
+  void RunTypeCallback(const std::string& in, OpsResult* out) ;
 
   std::unique_ptr<Operations> action_ops_;
   std::unique_ptr<Operations> type_ops_;
@@ -1069,36 +959,11 @@ inline CallbackResolver* OpsCallbackRunner::CreateResolver() {
   return new ResolverImpl();
 }
 
-inline bool IsValidPositionalName(const char* name, std::size_t len) {
-  if (!name || !len || !std::isalpha(name[0]))
-    return false;
-  for (++name, --len; len > 0; ++name, --len) {
-    if (std::isalnum(*name) || *name == '-' || *name == '_')
-      continue;  // allowed.
-    return false;
-  }
-  return true;
-}
+bool IsValidPositionalName(const char* name, std::size_t len);
 
 // A valid option name is long or short option name and not '--', '-'.
 // This is only checked once and true for good.
-inline bool IsValidOptionName(const char* name, std::size_t len) {
-  if (!name || len < 2 || name[0] != '-')
-    return false;
-  if (len == 2)  // This rules out -?, -* -@ -= --
-    return std::isalnum(name[1]);
-  // check for long-ness.
-  DCHECK2(name[1] == '-',
-          "Single-dash long option (i.e., -jar) is not supported, please use "
-          "GNU-style long option (double-dash)");
-
-  for (name += 2; *name; ++name) {
-    if (*name == '-' || *name == '_' || std::isalnum(*name))
-      continue;
-    return false;
-  }
-  return true;
-}
+bool IsValidOptionName(const char* name, std::size_t len);
 
 // These two predicates must be called only when IsValidOptionName() holds.
 inline bool IsLongOptionName(const char* name, std::size_t len) {
@@ -1465,12 +1330,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   // Argument class from managing groups as well as option and positional.
   class Group {
    public:
-    Group(int group, const char* header) : group_(group), header_(header) {
-      DCHECK(group_ > 0);
-      DCHECK(header_.size());
-      if (header_.back() != ':')
-        header_.push_back(':');
-    }
+    Group(int group, const char* header);
     void IncRef() { ++members_; }
     void CompileToArgpOption(std::vector<argp_option>* options) const;
 
@@ -1581,10 +1441,6 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   std::vector<argp_option> argp_options_;
   HelpFilterCallback help_filter_;
 };
-
-inline std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
-  return std::make_unique<ArgpParserImpl>(delegate);
-}
 
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
 // passed to argp_parse().

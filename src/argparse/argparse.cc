@@ -1,6 +1,15 @@
 #include "argparse/argparse.h"
 
+#include <cstdlib>  // malloc()
+#include <cstring>  // strlen()
+
 namespace argparse {
+
+Context::Context(const Argument* argument, const char* value, ArgpState state)
+    : has_value(bool(value)), argument(argument), state(state) {
+  if (has_value)
+    this->value.assign(value);
+}
 
 Names::Names(const char* name) {
   if (name[0] == '-') {
@@ -193,6 +202,10 @@ void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
   }
 }
 
+std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
+  return std::make_unique<ArgpParserImpl>(delegate);
+}
+
 ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
     : delegate_(delegate) {
   argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
@@ -345,6 +358,14 @@ void ArgumentHolderImpl::OnArgumentCreated(Argument* arg) {
   }
 }
 
+ArgumentHolderImpl::Group::Group(int group, const char* header)
+    : group_(group), header_(header) {
+  DCHECK(group_ > 0);
+  DCHECK(header_.size());
+  if (header_.back() != ':')
+    header_.push_back(':');
+}
+
 void ArgumentHolderImpl::Group::CompileToArgpOption(
     std::vector<argp_option>* options) const {
   if (!members_)
@@ -403,4 +424,147 @@ void ArgumentParser::parse_args(int argc, const char** argv) {
   parser->Init(user_options_.options);
   return parser->ParseArgs(ArgArray(argc, argv));
 }
+
+bool IsValidPositionalName(const char* name, std::size_t len) {
+  if (!name || !len || !std::isalpha(name[0]))
+    return false;
+  for (++name, --len; len > 0; ++name, --len) {
+    if (std::isalnum(*name) || *name == '-' || *name == '_')
+      continue;  // allowed.
+    return false;
+  }
+  return true;
+}
+
+bool IsValidOptionName(const char* name, std::size_t len) {
+  if (!name || len < 2 || name[0] != '-')
+    return false;
+  if (len == 2)  // This rules out -?, -* -@ -= --
+    return std::isalnum(name[1]);
+  // check for long-ness.
+  DCHECK2(name[1] == '-',
+          "Single-dash long option (i.e., -jar) is not supported, please use "
+          "GNU-style long option (double-dash)");
+
+  for (name += 2; *name; ++name) {
+    if (*name == '-' || *name == '_' || std::isalnum(*name))
+      continue;
+    return false;
+  }
+  return true;
+}
+
+Actions StringToActions(const std::string& str) {
+  static const std::map<std::string, Actions> kStringToActions{
+      {"store", Actions::kStore},
+      {"store_const", Actions::kStoreConst},
+      {"store_true", Actions::kStoreTrue},
+      {"store_false", Actions::kStoreFalse},
+      {"append", Actions::kAppend},
+      {"append_const", Actions::kAppendConst},
+      {"print_help", Actions::kPrintHelp},
+      {"print_usage", Actions::kPrintUsage},
+  };
+  auto iter = kStringToActions.find(str);
+  DCHECK2(iter != kStringToActions.end(), "Unknown action string passed in");
+  return iter->second;
+}
+
+void OpsCallbackRunner::RunActionCallback(std::unique_ptr<Any> data,
+                                          Context* ctx) {
+  auto* ops = action_ops_.get();
+  DCHECK(ops);
+
+  switch (action_code_) {
+    case Actions::kNoAction:
+      break;
+    case Actions::kStore:
+      ops->Store(dest(), std::move(data));
+      break;
+    case Actions::kStoreConst:
+      ops->StoreConst(dest(), const_value());
+      break;
+    case Actions::kStoreTrue:
+      ops->StoreConst(dest(), AnyImpl<bool>(true));
+      break;
+    case Actions::kStoreFalse:
+      ops->StoreConst(dest(), AnyImpl<bool>(false));
+      break;
+    case Actions::kAppend:
+      ops->Append(dest(), std::move(data));
+      break;
+    case Actions::kAppendConst:
+      ops->AppendConst(dest(), const_value());
+      break;
+    case Actions::kPrintHelp:
+      delegate_->HandlePrintHelp(ctx);
+      break;
+    case Actions::kPrintUsage:
+      delegate_->HandlePrintUsage(ctx);
+      break;
+    case Actions::kCustom:
+      DCHECK(custom_action_);
+      custom_action_->Run(dest(), std::move(data));
+      break;
+  }
+}
+
+void OpsCallbackRunner::RunTypeCallback(const std::string& in, OpsResult* out) {
+  auto* ops = type_ops_.get();
+  DCHECK(ops);
+  switch (type_code_) {
+    case Types::kParse:
+      ops->Parse(in, out);
+      break;
+    case Types::kOpen:
+      ops->Open(in, mode_, out);
+      break;
+    case Types::kNothing:
+      break;
+    case Types::kCustom:
+      DCHECK(custom_type_);
+      custom_type_->Run(in, out);
+      break;
+  }
+}
+
+void OpsCallbackRunner::Run(Context* ctx, Delegate* delegate) {
+  delegate_ = delegate;
+  OpsResult result;
+  if (ctx->has_value)
+    RunTypeCallback(ctx->value, &result);
+  if (result.has_error) {
+    delegate_->HandleCallbackError(ctx, result.errmsg);
+    return;
+  }
+  RunActionCallback(std::move(result.value), ctx);
+}
+
+std::string CFileOpenTraits::GetMode(Mode mode) {
+  std::string m;
+  if (mode & kModeRead)
+    m.append("r");
+  if (mode & kModeWrite)
+    m.append("w");
+  if (mode & kModeAppend)
+    m.append("a");
+  if (mode & kModeBinary)
+    m.append("b");
+  return m;
+}
+
+void CFileOpenTraits::Run(const std::string& in,
+                          Mode mode,
+                          Result<FILE*>* out) {
+  auto mode_str = GetMode(mode);
+  auto* file = std::fopen(in.c_str(), mode_str.c_str());
+  if (file)
+    return out->set_value(file);
+  if (int e = errno) {
+    errno = 0;
+    return out->set_error(std::strerror(e));
+  }
+  out->set_error(kDefaultOpenFailureMsg);
+}
+
 }  // namespace argparse
