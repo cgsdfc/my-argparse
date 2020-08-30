@@ -199,8 +199,8 @@ void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
     args[i]->FormatArgsDoc(os);
     if (i != size - 1)
       os << ' ';
-    args_doc->assign(os.str());
   }
+  args_doc->assign(os.str());
 }
 
 std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
