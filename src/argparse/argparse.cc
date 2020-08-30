@@ -18,7 +18,8 @@ Names::Names(const char* name) {
     return;
   }
   auto len = std::strlen(name);
-  DCHECK2(IsValidPositionalName(name, len), "Not a valid positional name!");
+  CHECK_USER(IsValidPositionalName(name, len),
+             "Not a valid positional name: %s", name);
   is_option = false;
   std::string positional(name, len);
   meta_var = ToUpper(positional);
@@ -26,12 +27,13 @@ Names::Names(const char* name) {
 }
 
 void Names::InitOptions(std::initializer_list<const char*> names) {
-  DCHECK2(names.size(), "At least one name must be provided");
+  CHECK_USER(names.size(), "At least one name must be provided");
   is_option = true;
 
   for (auto name : names) {
     std::size_t len = std::strlen(name);
-    DCHECK2(IsValidOptionName(name, len), "Not a valid option name!");
+    CHECK_USER(IsValidOptionName(name, len), "Not a valid option name: %s",
+               name);
     if (IsLongOptionName(name, len)) {
       // Strip leading '-' at most twice.
       for (int i = 0; *name == '-' && i < 2; ++i) {
@@ -332,7 +334,7 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
 
 Argument* ArgumentHolderImpl::AddArgumentToGroup(Names names, int group) {
   // First check if this arg will conflict with existing ones.
-  DCHECK2(CheckNamesConflict(names), "Names conflict with existing names!");
+  CHECK_USER(CheckNamesConflict(names), "Names conflict with existing names!");
   DCHECK2(group <= groups_.size(), "No such group");
   GroupFromID(group)->IncRef();
   Argument& arg = arguments_.emplace_back(this, names, group);
@@ -443,9 +445,10 @@ bool IsValidOptionName(const char* name, std::size_t len) {
   if (len == 2)  // This rules out -?, -* -@ -= --
     return std::isalnum(name[1]);
   // check for long-ness.
-  DCHECK2(name[1] == '-',
-          "Single-dash long option (i.e., -jar) is not supported, please use "
-          "GNU-style long option (double-dash)");
+  CHECK_USER(
+      name[1] == '-',
+      "Single-dash long option (i.e., -jar) is not supported. Please use "
+      "GNU-style long option (double-dash)");
 
   for (name += 2; *name; ++name) {
     if (*name == '-' || *name == '_' || std::isalnum(*name))
@@ -467,7 +470,8 @@ Actions StringToActions(const std::string& str) {
       {"print_usage", Actions::kPrintUsage},
   };
   auto iter = kStringToActions.find(str);
-  DCHECK2(iter != kStringToActions.end(), "Unknown action string passed in");
+  CHECK_USER(iter != kStringToActions.end(),
+             "Unknown action string '%s' passed in", str.c_str());
   return iter->second;
 }
 
