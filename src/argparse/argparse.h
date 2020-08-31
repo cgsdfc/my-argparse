@@ -351,6 +351,12 @@ enum Mode {
   kModeBinary = 16,
 };
 
+Mode CharsToMode(const char* str);
+std::string ModeToChars(Mode mode);
+
+Mode StreamModeToMode(std::ios_base::openmode stream_mode);
+std::ios_base::openmode ModeToStreamMode(Mode m);
+
 // For STL-compatible T, default is:
 template <typename T>
 struct DefaultAppendTraits {
@@ -398,16 +404,13 @@ struct OpenTraits {
 };
 
 struct CFileOpenTraits {
-  static std::string GetMode(Mode mode);
   static void Run(const std::string& in, Mode mode, Result<FILE*>* out);
 };
-
-std::ios_base::openmode StreamTraitsGetMode(Mode m);
 
 template <typename T>
 struct StreamOpenTraits {
   static void Run(const std::string& in, Mode mode, Result<T>* out) {
-    auto ios_mode = StreamTraitsGetMode(mode);
+    auto ios_mode = ModeToStreamMode(mode);
     T stream(in, ios_mode);
     if (stream.is_open())
       return out->set_value(std::move(stream));
@@ -672,7 +675,7 @@ template <typename T, bool = IsAppendSupported<T>{}>
 struct CreateValueTypeOpsImpl;
 
 template <typename T>
-struct  CreateValueTypeOpsImpl<T, false> {
+struct CreateValueTypeOpsImpl<T, false> {
   static std::unique_ptr<Operations> Run() { return nullptr; }
 };
 template <typename T>
@@ -834,8 +837,9 @@ class DestInfoImpl : public DestInfo {
 
 class FileType {
  public:
-  explicit FileType(const char* mode);
-  explicit FileType(std::ios_base::openmode mode);
+  explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
+  explicit FileType(std::ios_base::openmode mode)
+      : mode_(StreamModeToMode(mode)) {}
   Mode mode() const;
 
  private:
@@ -853,7 +857,9 @@ struct Type {
   // To explicitly request a type, use Type<double>().
   template <typename T>
   Type() : ops(CreateOperations<T>()) {}
+  // Use it to provide your own TypeCallback impl.
   Type(TypeCallback* cb) : callback(cb) {}
+  // Use FileType("rw") to request opening a file to read/write.
   Type(FileType file_type) : mode(file_type.mode()) {}
 
   template <typename Callback>
@@ -862,7 +868,7 @@ struct Type {
   }
 };
 
- Actions StringToActions(const std::string& str);
+Actions StringToActions(const std::string& str);
 
 // Type-erasured
 struct Action {
@@ -937,13 +943,13 @@ class OpsCallbackRunner : public CallbackRunner {
     return *const_value_;
   }
 
-  const DestPtr& dest() const { 
+  const DestPtr& dest() const {
     DCHECK(dest_ptr_);
     return dest_ptr_;
   }
 
   void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
-  void RunTypeCallback(const std::string& in, OpsResult* out) ;
+  void RunTypeCallback(const std::string& in, OpsResult* out);
 
   std::unique_ptr<Operations> action_ops_;
   std::unique_ptr<Operations> type_ops_;
@@ -980,11 +986,11 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
     return runner_.release();
   }
 
-   void SetCustomType(std::unique_ptr<TypeCallback> cb) override {
-     DCHECK(cb);
-     runner_->type_code_ = Types::kCustom;
-     runner_->custom_type_ = std::move(cb);
-   }
+  void SetCustomType(std::unique_ptr<TypeCallback> cb) override {
+    DCHECK(cb);
+    runner_->type_code_ = Types::kCustom;
+    runner_->custom_type_ = std::move(cb);
+  }
 
   void SetDefaultType(std::unique_ptr<Operations> ops) override {
     DCHECK(ops);

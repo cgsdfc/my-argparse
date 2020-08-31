@@ -545,7 +545,7 @@ void OpsCallbackRunner::Run(Context* ctx, Delegate* delegate) {
   RunActionCallback(std::move(result.value), ctx);
 }
 
-std::string CFileOpenTraits::GetMode(Mode mode) {
+std::string ModeToChars(Mode mode) {
   std::string m;
   if (mode & kModeRead)
     m.append("r");
@@ -561,7 +561,7 @@ std::string CFileOpenTraits::GetMode(Mode mode) {
 void CFileOpenTraits::Run(const std::string& in,
                           Mode mode,
                           Result<FILE*>* out) {
-  auto mode_str = GetMode(mode);
+  auto mode_str = ModeToChars(mode);
   auto* file = std::fopen(in.c_str(), mode_str.c_str());
   if (file)
     return out->set_value(file);
@@ -572,7 +572,7 @@ void CFileOpenTraits::Run(const std::string& in,
   out->set_error(kDefaultOpenFailureMsg);
 }
 
-std::ios_base::openmode StreamTraitsGetMode(Mode m) {
+std::ios_base::openmode ModeToStreamMode(Mode m) {
   std::ios_base::openmode out;
   if (m & kModeRead)
     out |= std::ios_base::in;
@@ -585,6 +585,52 @@ std::ios_base::openmode StreamTraitsGetMode(Mode m) {
   if (m & kModeBinary)
     out |= std::ios_base::binary;
   return out;
+}
+
+Mode StreamModeToMode(std::ios_base::openmode stream_mode) {
+  int m = kModeNoMode;
+  if (stream_mode & std::ios_base::in)
+    m |= kModeRead;
+  if (stream_mode & std::ios_base::out)
+    m |= kModeWrite;
+  if (stream_mode & std::ios_base::app)
+    m |= kModeAppend;
+  if (stream_mode & std::ios_base::trunc)
+    m |= kModeTruncate;
+  if (stream_mode & std::ios_base::binary)
+    m |= kModeBinary;
+  return static_cast<Mode>(m);
+}
+
+Mode CharsToMode(const char* str) {
+  DCHECK(str);
+  int m;
+  for (; *str; ++str) {
+    switch (*str) {
+      case 'r':
+        m |= kModeRead;
+        break;
+      case 'w':
+        m |= kModeWrite;
+        break;
+      case 'a':
+        m |= kModeAppend;
+        break;
+      case 'b':
+        m |= kModeBinary;
+        break;
+      case '+':
+        // Valid combs are a+, w+, r+.
+        if (m & kModeAppend)
+          m |= kModeRead;
+        else if (m & kModeWrite)
+          m |= kModeRead;
+        else if (m & kModeRead)
+          m |= kModeWrite;
+        break;
+    }
+  }
+  return static_cast<Mode>(m);
 }
 
 const char* OpsToString(OpsKind ops) {
