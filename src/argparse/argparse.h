@@ -895,10 +895,12 @@ class CallbackRunner {
 class CallbackResolver {
  public:
   virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetType(Type type) = 0;
-  virtual void SetTypeOps(std::unique_ptr<Operations> ops) = 0;
+  virtual void SetDefaultType(std::unique_ptr<Operations> ops) = 0;
+  virtual void SetCustomType(std::unique_ptr<TypeCallback> cb) = 0;
+  virtual void SetDefaultAction(Actions code) = 0;
+  virtual void SetCustomAction(std::unique_ptr<ActionCallback> cb) = 0;
+
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
-  virtual void SetAction(Action action) = 0;
   virtual CallbackRunner* CreateCallbackRunner() = 0;
   virtual ~CallbackResolver() {}
 };
@@ -960,18 +962,27 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
     return runner_.release();
   }
 
-  void SetType(Type type) override {
-    runner_->custom_type_ = std::move(type.callback);
-  }
+   void SetCustomType(std::unique_ptr<TypeCallback> cb) override {
+     DCHECK(cb);
+     runner_->type_code_ = Types::kCustom;
+     runner_->custom_type_ = std::move(cb);
+   }
 
-  void SetTypeOps(std::unique_ptr<Operations> ops) override {
+  void SetDefaultType(std::unique_ptr<Operations> ops) override {
     DCHECK(ops);
     runner_->type_ops_ = std::move(ops);
+    // TODO: infer type_code.
   }
 
-  void SetAction(Action action) override {
-    runner_->action_code_ = action.action;
-    runner_->custom_action_ = std::move(action.callback);
+  void SetDefaultAction(Actions code) override {
+    DCHECK(code != Actions::kCustom);
+    runner_->action_code_ = code;
+    runner_->custom_action_.reset();
+  }
+
+  void SetCustomAction(std::unique_ptr<ActionCallback> cb) override {
+    runner_->action_code_ = Actions::kCustom;
+    runner_->custom_action_ = std::move(cb);
   }
 
  private:
@@ -1147,16 +1158,22 @@ class ArgumentBuilder {
     return *this;
   }
   ArgumentBuilder& action(Action a) {
-    resolver_->SetAction(std::move(a));
+    if (a.action != Actions::kCustom) {
+      resolver_->SetDefaultAction(a.action);
+    } else {
+      DCHECK(a.callback);
+      resolver_->SetCustomAction(std::move(a.callback));
+    }
     return *this;
   }
   ArgumentBuilder& type(Type t) {
-    resolver_->SetType(std::move(t));
+    if (t.callback)
+      resolver_->SetCustomType(std::move(t.callback));
     return *this;
   }
   template <typename T>
   ArgumentBuilder& type() {
-    resolver_->SetTypeOps(CreateOperations<T>());
+    resolver_->SetDefaultType(CreateOperations<T>());
     return *this;
   }
   template <typename T>
