@@ -28,17 +28,7 @@
 namespace argparse {
 
 class Argument;
-class ArgumentHolder;
 class ArgumentGroup;
-class ArgumentBuilder;
-class ArgumentParser;
-class Options;
-
-class ActionCallback;
-class TypeCallback;
-
-class DestPtr;
-class Operations;
 
 using ::argp;
 using ::argp_error;
@@ -556,7 +546,7 @@ class OpsFactory {
 
 class DestInfo {
  public:
-  virtual OpsFactory* CreateOpsFactory() = 0;
+  virtual std::unique_ptr<OpsFactory> CreateOpsFactory() = 0;
   virtual DestPtr GetDestPtr() = 0;
   virtual ~DestInfo() {}
 };
@@ -649,9 +639,6 @@ struct OpsImpl<OpsKind::kOpen, T, true> {
   }
 };
 
-template <typename T, bool = IsAppendSupported<T>{}>
-struct CreateValueTypeOpsImpl;
-
 template <typename T>
 class OperationsImpl : public Operations {
  public:
@@ -673,43 +660,58 @@ class OperationsImpl : public Operations {
   void Open(const std::string& in, Mode mode, OpsResult* out) override {
     OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
   }
-
-  class FactoryImpl : public OpsFactory {
-   public:
-    std::unique_ptr<Operations> Create() override {
-      return std::make_unique<OperationsImpl<T>>();
-    }
-    std::unique_ptr<Operations> CreateValueTypeOps() override {
-      auto* ops = CreateValueTypeOpsImpl<T>::Run();
-      return std::unique_ptr<Operations>(ops);
-    }
-    bool IsSupported(OpsKind ops) override {
-      switch (ops) {
-        case OpsKind::kStore:
-          return IsOpsSupported<OpsKind::kStore, T>{};
-        case OpsKind::kStoreConst:
-          return IsOpsSupported<OpsKind::kStoreConst, T>{};
-        case OpsKind::kAppend:
-          return IsOpsSupported<OpsKind::kAppend, T>{};
-        case OpsKind::kAppendConst:
-          return IsOpsSupported<OpsKind::kAppendConst, T>{};
-        case OpsKind::kParse:
-          return IsOpsSupported<OpsKind::kParse, T>{};
-        case OpsKind::kOpen:
-          return IsOpsSupported<OpsKind::kOpen, T>{};
-      }
-    }
-  };
 };
+
+template <typename T>
+std::unique_ptr<Operations> CreateOperations() {
+  return std::make_unique<OperationsImpl<T>>();
+}
+
+template <typename T, bool = IsAppendSupported<T>{}>
+struct CreateValueTypeOpsImpl;
 
 template <typename T>
 struct  CreateValueTypeOpsImpl<T, false> {
-  static Operations* Run() { return nullptr; }
+  static std::unique_ptr<Operations> Run() { return nullptr; }
 };
 template <typename T>
 struct CreateValueTypeOpsImpl<T, true> {
-  static Operations* Run() { return new OperationsImpl<ValueTypeOf<T>>(); }
+  static std::unique_ptr<Operations> Run() {
+    return CreateOperations<ValueTypeOf<T>>();
+  }
 };
+
+template <typename T>
+class OpsFactoryImpl : public OpsFactory {
+ public:
+  std::unique_ptr<Operations> Create() override {
+    return CreateOperations<T>();
+  }
+  std::unique_ptr<Operations> CreateValueTypeOps() override {
+    return CreateValueTypeOpsImpl<T>::Run();
+  }
+  bool IsSupported(OpsKind ops) override {
+    switch (ops) {
+      case OpsKind::kStore:
+        return IsOpsSupported<OpsKind::kStore, T>{};
+      case OpsKind::kStoreConst:
+        return IsOpsSupported<OpsKind::kStoreConst, T>{};
+      case OpsKind::kAppend:
+        return IsOpsSupported<OpsKind::kAppend, T>{};
+      case OpsKind::kAppendConst:
+        return IsOpsSupported<OpsKind::kAppendConst, T>{};
+      case OpsKind::kParse:
+        return IsOpsSupported<OpsKind::kParse, T>{};
+      case OpsKind::kOpen:
+        return IsOpsSupported<OpsKind::kOpen, T>{};
+    }
+  }
+};
+
+template <typename T>
+std::unique_ptr<OpsFactory> CreateOperationsFactory() {
+  return std::make_unique<OpsFactoryImpl<T>>();
+}
 
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
@@ -820,8 +822,8 @@ class DestInfoImpl : public DestInfo {
  public:
   explicit DestInfoImpl(T* ptr) : dest_(ptr) {}
 
-  OpsFactory* CreateOpsFactory() override {
-    return new typename OperationsImpl<T>::FactoryImpl();
+  std::unique_ptr<OpsFactory> CreateOpsFactory() override {
+    return CreateOperationsFactory<T>();
   }
   DestPtr GetDestPtr() override { return dest_; }
 
@@ -894,6 +896,7 @@ class CallbackResolver {
  public:
   virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
   virtual void SetType(Type type) = 0;
+  virtual void SetTypeOps(std::unique_ptr<Operations> ops) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetAction(Action action) = 0;
   virtual CallbackRunner* CreateCallbackRunner() = 0;
@@ -942,7 +945,8 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
   void SetDest(std::unique_ptr<DestInfo> dest) override {
     DCHECK(dest);
     runner_->dest_ptr_ = dest->GetDestPtr();
-    ops_factory_.reset(dest->CreateOpsFactory());
+    // This factory is used to create more than one operations.
+    ops_factory_ = dest->CreateOpsFactory();
   }
 
   void SetConstValue(std::unique_ptr<Any> value) override {
@@ -958,6 +962,11 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
 
   void SetType(Type type) override {
     runner_->custom_type_ = std::move(type.callback);
+  }
+
+  void SetTypeOps(std::unique_ptr<Operations> ops) override {
+    DCHECK(ops);
+    runner_->type_ops_ = std::move(ops);
   }
 
   void SetAction(Action action) override {
@@ -1147,11 +1156,10 @@ class ArgumentBuilder {
     resolver_->SetType(std::move(t));
     return *this;
   }
-  // template <typename T>
-  // ArgumentBuilder& type() {
-  //   resolver_->SetType(new DefaultTypeCallback<T>());
-  //   return *this;
-  // }
+  template <typename T>
+  ArgumentBuilder& type() {
+    return *this;
+  }
   template <typename T>
   ArgumentBuilder& value(T&& val) {
     resolver_->SetConstValue(MakeAny(std::forward<T>(val)));
