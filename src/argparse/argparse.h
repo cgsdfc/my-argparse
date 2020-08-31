@@ -342,17 +342,18 @@ enum class OpsKind {
 };
 
 // File open mode.
-enum Mode : unsigned {
-  kModeRead = 0x0,
-  kModeWrite = 0x1,
-  kModeAppend = 0x2,
-  kModeTruncate = 0x4,
-  kModeBinary = 0x8,
+enum Mode {
+  kModeNoMode = 0x0,
+  kModeRead = 1,
+  kModeWrite = 2,
+  kModeAppend = 4,
+  kModeTruncate = 8,
+  kModeBinary = 16,
 };
 
 // For STL-compatible T, default is:
 template <typename T>
-struct DefaultAppendTraits : std::true_type {
+struct DefaultAppendTraits {
   using ValueType = typename T::value_type;
 
   static void Run(T* obj, ValueType item) {
@@ -831,12 +832,29 @@ class DestInfoImpl : public DestInfo {
   DestPtr dest_;
 };
 
+class FileType {
+ public:
+  explicit FileType(const char* mode);
+  explicit FileType(std::ios_base::openmode mode);
+  Mode mode() const;
+
+ private:
+  Mode mode_;
+};
+
 struct Type {
   std::unique_ptr<TypeCallback> callback;
+  std::unique_ptr<Operations> ops;
+  Mode mode = kModeNoMode;
+
   Type() = default;
   Type(Type&&) = default;
 
+  // To explicitly request a type, use Type<double>().
+  template <typename T>
+  Type() : ops(CreateOperations<T>()) {}
   Type(TypeCallback* cb) : callback(cb) {}
+  Type(FileType file_type) : mode(file_type.mode()) {}
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
@@ -899,7 +917,7 @@ class CallbackResolver {
   virtual void SetCustomType(std::unique_ptr<TypeCallback> cb) = 0;
   virtual void SetDefaultAction(Actions code) = 0;
   virtual void SetCustomAction(std::unique_ptr<ActionCallback> cb) = 0;
-
+  virtual void SetOpenMode(Mode mode) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual CallbackRunner* CreateCallbackRunner() = 0;
   virtual ~CallbackResolver() {}
@@ -985,7 +1003,13 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
     runner_->custom_action_ = std::move(cb);
   }
 
+  void SetOpenMode(Mode mode) override {
+    runner_->mode_ = mode;
+    set_open_mode_ = true;
+  }
+
  private:
+  bool set_open_mode_ = false;
   std::unique_ptr<OpsCallbackRunner> runner_;
   std::unique_ptr<OpsFactory> ops_factory_;
 };
@@ -1169,15 +1193,14 @@ class ArgumentBuilder {
   ArgumentBuilder& type(Type t) {
     if (t.callback)
       resolver_->SetCustomType(std::move(t.callback));
+    else if (t.mode != kModeNoMode)
+      resolver_->SetOpenMode(t.mode);
+    else if (t.ops)
+      resolver_->SetDefaultType(std::move(t.ops));
     return *this;
   }
   template <typename T>
-  ArgumentBuilder& type() {
-    resolver_->SetDefaultType(CreateOperations<T>());
-    return *this;
-  }
-  template <typename T>
-  ArgumentBuilder& value(T&& val) {
+  ArgumentBuilder& const_value(T&& val) {
     resolver_->SetConstValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
