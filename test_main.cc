@@ -17,12 +17,15 @@ int main(int argc, char const* argv[]) {
   puts(TypeName<std::string>());
   puts(TypeName<std::ofstream>());
 
-  ArgumentParser parser;
+  auto ops = CreateOperations<int>();
+  std::cout << ops->IsSupported(OpsKind::kParse);
 
-  std::ofstream output;
-  parser.add_argument("output", &output, "output to this file")
-      .type(FileType(std::ios_base::app));
+  // ArgumentParser parser;
 
-  parser.parse_args(argc, argv);
+  // std::ofstream output;
+  // parser.add_argument("output", &output, "output to this file")
+  //     .type(FileType(std::ios_base::app));
+
+  // parser.parse_args(argc, argv);
 
 }

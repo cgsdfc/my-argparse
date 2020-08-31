@@ -368,6 +368,8 @@ enum class OpsKind {
   kOpen,
 };
 
+inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
+
 // File open mode.
 enum Mode {
   kModeNoMode = 0x0,
@@ -561,7 +563,7 @@ class Operations {
 
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
-
+  virtual bool IsSupported(OpsKind ops) = 0;
   virtual ~Operations() {}
 };
 
@@ -571,7 +573,6 @@ class OpsFactory {
   virtual std::unique_ptr<Operations> Create() = 0;
   // If this type has a concept of value_type, create a handle.
   virtual std::unique_ptr<Operations> CreateValueTypeOps() = 0;
-  virtual bool IsSupported(OpsKind ops) = 0;
   virtual ~OpsFactory() {}
 };
 
@@ -671,6 +672,16 @@ struct OpsImpl<OpsKind::kOpen, T, true> {
   }
 };
 
+template <typename T, std::size_t... OpsIndices>
+bool OpsIsSupportedImpl(OpsKind ops, std::index_sequence<OpsIndices...>) {
+  static constexpr std::size_t kMaxOps = sizeof...(OpsIndices);
+  static constexpr bool kArray[kMaxOps] = {
+      (IsOpsSupported<static_cast<OpsKind>(OpsIndices), T>{})...};
+  auto index = std::size_t(ops);
+  DCHECK(index < kMaxOps);
+  return kArray[index];
+}
+
 template <typename T>
 class OperationsImpl : public Operations {
  public:
@@ -691,6 +702,9 @@ class OperationsImpl : public Operations {
   }
   void Open(const std::string& in, Mode mode, OpsResult* out) override {
     OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
+  }
+  bool IsSupported(OpsKind ops) override {
+    return OpsIsSupportedImpl<T>(ops, std::make_index_sequence<kMaxOpsKind>{});
   }
 };
 
@@ -721,22 +735,6 @@ class OpsFactoryImpl : public OpsFactory {
   }
   std::unique_ptr<Operations> CreateValueTypeOps() override {
     return CreateValueTypeOpsImpl<T>::Run();
-  }
-  bool IsSupported(OpsKind ops) override {
-    switch (ops) {
-      case OpsKind::kStore:
-        return IsOpsSupported<OpsKind::kStore, T>{};
-      case OpsKind::kStoreConst:
-        return IsOpsSupported<OpsKind::kStoreConst, T>{};
-      case OpsKind::kAppend:
-        return IsOpsSupported<OpsKind::kAppend, T>{};
-      case OpsKind::kAppendConst:
-        return IsOpsSupported<OpsKind::kAppendConst, T>{};
-      case OpsKind::kParse:
-        return IsOpsSupported<OpsKind::kParse, T>{};
-      case OpsKind::kOpen:
-        return IsOpsSupported<OpsKind::kOpen, T>{};
-    }
   }
 };
 
