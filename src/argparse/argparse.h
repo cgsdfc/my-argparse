@@ -1030,9 +1030,9 @@ class Argument {
     virtual ~Delegate() {}
   };
 
-  virtual void SetHelpDoc(const char* help_doc) = 0;
+  virtual void SetHelpDoc(std::string help_doc) = 0;
   virtual void SetRequired(bool required) = 0;
-  virtual void SetMetaVar(const char* meta_var) = 0;
+  virtual void SetMetaVar(std::string meta_var) = 0;
   virtual CallbackResolver* GetCallbackResolver() = 0;
   virtual void InitCallback() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
@@ -1052,15 +1052,13 @@ class ArgumentImpl : public Argument {
  public:
   ArgumentImpl(Delegate* delegate, const Names& names, int group);
 
-  void SetHelpDoc(const char* help_doc) override {
-    DCHECK(help_doc);
-    help_doc_ = help_doc;
+  void SetHelpDoc(std::string help_doc) override {
+    help_doc_ = std::move(help_doc);
   }
 
   void SetRequired(bool required) override { is_required_ = required; }
-  void SetMetaVar(const char* meta_var) override {
-    DCHECK(meta_var);
-    meta_var_ = meta_var;
+  void SetMetaVar(std::string meta_var) override {
+    meta_var_ = std::move(meta_var);
   }
   bool IsOption() const override { return is_option(); }
   int GetKey() const override { return key(); }
@@ -1158,6 +1156,7 @@ class ArgumentBuilder {
   }
   template <typename T>
   ArgumentBuilder& type() {
+    resolver_->SetTypeOps(CreateOperations<T>());
     return *this;
   }
   template <typename T>
