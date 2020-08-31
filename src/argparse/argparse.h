@@ -723,6 +723,10 @@ using TypeCallbackPrototypeThrows = T(const std::string&);
 template <typename T, typename V>
 using ActionCallbackPrototype = void(T*, Result<V>);
 
+// Can only take a Result without dest.
+// template <typename T, typename V>
+// using ActionCallbackPrototypeNoDest = void(Result<V>);
+
 // Perform data conversion..
 class TypeCallback {
  public:
@@ -800,7 +804,7 @@ TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
 
 template <typename Callback, typename T, typename V>
 ActionCallback* CreateCustomActionCallbackImpl(Callback&& cb,
-                                               void (*)(T*, Result<V>)) {
+                                               ActionCallbackPrototype<T, V>*) {
   return new CustomActionCallback<T, V>(std::forward<Callback>(cb));
 }
 
@@ -888,9 +892,9 @@ class CallbackRunner {
 // users) from user's configuration.
 class CallbackResolver {
  public:
-  virtual void SetDest(Dest dest) = 0;
+  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
   virtual void SetType(Type type) = 0;
-  virtual void SetValue(std::unique_ptr<Any> value) = 0;
+  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetAction(Action action) = 0;
   virtual CallbackRunner* CreateCallbackRunner() = 0;
   virtual ~CallbackResolver() {}
@@ -935,12 +939,14 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
  public:
   ResolverImpl() : runner_(new OpsCallbackRunner()) {}
 
-  void SetDest(Dest dest) override {
-    runner_->dest_ptr_ = dest.dest_info->GetDestPtr();
-    ops_factory_.reset(dest.dest_info->CreateOpsFactory());
+  void SetDest(std::unique_ptr<DestInfo> dest) override {
+    DCHECK(dest);
+    runner_->dest_ptr_ = dest->GetDestPtr();
+    ops_factory_.reset(dest->CreateOpsFactory());
   }
 
-  void SetValue(std::unique_ptr<Any> value) override {
+  void SetConstValue(std::unique_ptr<Any> value) override {
+    DCHECK(value);
     runner_->const_value_ = std::move(value);
   }
 
@@ -1129,7 +1135,8 @@ class ArgumentBuilder {
       : arg_(arg), resolver_(arg->GetCallbackResolver()) {}
 
   ArgumentBuilder& dest(Dest d) {
-    resolver_->SetDest(std::move(d));
+    if (d.dest_info)
+      resolver_->SetDest(std::move(d.dest_info));
     return *this;
   }
   ArgumentBuilder& action(Action a) {
@@ -1147,7 +1154,7 @@ class ArgumentBuilder {
   // }
   template <typename T>
   ArgumentBuilder& value(T&& val) {
-    resolver_->SetValue(MakeAny(std::forward<T>(val)));
+    resolver_->SetConstValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
