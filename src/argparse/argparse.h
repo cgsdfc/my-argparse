@@ -283,6 +283,33 @@ struct DefaultParseTraits {
 template <typename T>
 struct ParseTraits : DefaultParseTraits<T> {};
 
+std::string Demangle(const char* mangled_name);
+
+template <typename T>
+struct DefaultTypeNameTraits {
+  static std::string Run() {
+    return Demangle(typeid(T).name());
+  }
+};
+
+// User can change their typenames by specifying this traits.
+// The default is gcc's demangle result. The TypeName() will respect this.
+template <typename T>
+struct TypeNameTraits : DefaultTypeNameTraits<T> {};
+
+template <>
+struct TypeNameTraits<std::string> {
+  static std::string Run() { return "std::string"; }
+};
+template <>
+struct TypeNameTraits<std::ofstream> {
+  static std::string Run() { return "std::ofstream"; }
+};
+template <>
+struct TypeNameTraits<std::ifstream> {
+  static std::string Run() { return "std::ifstream"; }
+};
+
 namespace detail {
 // clang-format off
 
@@ -569,11 +596,12 @@ template <OpsKind Ops, typename T, bool Supported = IsOpsSupported<Ops, T>{}>
 struct OpsImpl;
 
 const char* OpsToString(OpsKind ops);
-const char* TypeName(const std::type_info& type);
+
+const char* TypeNameImpl(const std::type_info& type, std::string (*callback)());
 
 template <typename T>
 const char* TypeName() {
-  return TypeName(typeid(T));
+  return TypeNameImpl(typeid(T), &TypeNameTraits<T>::Run);
 }
 
 template <OpsKind Ops, typename T>
@@ -584,7 +612,7 @@ struct OpsImpl<Ops, T, false> {
         false,
         "Operation %s is not supported by type %s. Please specialize one of "
         "AppendTraits, ParseTraits and OpenTraits, or pass in a callback.",
-        OpsToString(Ops), TypeName(typeid(T)));
+        OpsToString(Ops), TypeName<T>());
   }
 };
 
@@ -840,7 +868,7 @@ class FileType {
   explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
   explicit FileType(std::ios_base::openmode mode)
       : mode_(StreamModeToMode(mode)) {}
-  Mode mode() const;
+  Mode mode() const { return mode_; }
 
  private:
   Mode mode_;
@@ -958,7 +986,7 @@ class OpsCallbackRunner : public CallbackRunner {
   std::unique_ptr<TypeCallback> custom_type_;
   Actions action_code_ = Actions::kStore;
   Types type_code_ = Types::kParse;
-  Mode mode_;
+  Mode mode_ = kModeNoMode;
   DestPtr dest_ptr_;
   Delegate* delegate_ = nullptr;
 };
@@ -1005,17 +1033,17 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
   }
 
   void SetCustomAction(std::unique_ptr<ActionCallback> cb) override {
+    DCHECK(cb);
     runner_->action_code_ = Actions::kCustom;
     runner_->custom_action_ = std::move(cb);
   }
 
   void SetOpenMode(Mode mode) override {
+    DCHECK(mode != kModeNoMode);
     runner_->mode_ = mode;
-    set_open_mode_ = true;
   }
 
  private:
-  bool set_open_mode_ = false;
   std::unique_ptr<OpsCallbackRunner> runner_;
   std::unique_ptr<OpsFactory> ops_factory_;
 };

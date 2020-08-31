@@ -295,7 +295,7 @@ error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
   if (key == ARGP_KEY_END) {
     // No enough args.
     if (state->arg_num < positional_count())
-      state.ErrorF("No enough positional arguments. Expected %d, got %d",
+      state.ErrorF("Not enough positional arguments. Expected %d, got %d",
                    (int)positional_count(), (int)state->arg_num);
   }
 
@@ -644,7 +644,7 @@ const char* OpsToString(OpsKind ops) {
   return iter->second.c_str();
 }
 
-static std::string Demangle(const char* mangled_name) {
+std::string Demangle(const char* mangled_name) {
   std::size_t length;
   int status;
   const char* realname =
@@ -662,13 +662,17 @@ static std::string Demangle(const char* mangled_name) {
   return result;
 }
 
-const char* TypeName(const std::type_info& type) {
-  static std::map<std::type_index, std::string> kTypeToStrings;
-  auto iter = kTypeToStrings.find(type);
-  if (iter == kTypeToStrings.end()) {
-    kTypeToStrings.emplace(type, Demangle(type.name()));
+const char* TypeNameImpl(const std::type_info& type,
+                         std::string (*callback)()) {
+  // Some typenames like std::string, is very ugly since it is a typedef...
+  // Provide a chance to let user change their typenames..
+  static std::map<std::type_index, std::string> g_typenames;
+
+  auto iter = g_typenames.find(type);
+  if (iter == g_typenames.end()) {
+    g_typenames.emplace(type, callback());
   }
-  return kTypeToStrings[type].c_str();
+  return g_typenames[type].c_str();
 }
 
 void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...) {

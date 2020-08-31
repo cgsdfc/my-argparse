@@ -13,19 +13,15 @@ struct AppendTraits<Appendable> {
 
 
 int main(int argc, char const* argv[]) {
-  puts(TypeName(typeid(double)));
-  puts(TypeName<ArgumentParser>());
   puts(TypeName<std::iostream>());
+  puts(TypeName<std::string>());
+  puts(TypeName<std::ofstream>());
 
-  ArgumentParser parser(Options()
-                            .description("a test program")
-                            .email("xxx@xxx.com")
-                            .version([](FILE* f, argp_state*) {
-                              std::fprintf(f, "%d.%d.%d\n", 1, 2, 3);
-                            }));
+  ArgumentParser parser;
 
   std::ofstream output;
-  parser.add_argument("output", &output, "output to this file");
+  parser.add_argument("output", &output, "output to this file")
+      .type(FileType(std::ios_base::app));
 
   parser.parse_args(argc, argv);
 
