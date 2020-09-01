@@ -800,6 +800,24 @@ class CallbackResolver {
   virtual ~CallbackResolver() {}
 };
 
+// This initializes an Argument.
+class ArgumentInitializer {
+ public:
+  virtual ~ArgumentInitializer() {}
+
+  virtual void SetRequired(bool required) = 0;
+  virtual void SetHelpDoc(std::string help_doc) = 0;
+  virtual void SetMetaVar(std::string meta_var) = 0;
+
+  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
+  virtual void SetType(std::unique_ptr<Operations> ops,
+                       std::unique_ptr<TypeCallback> cb,
+                       Mode mode) = 0;
+  virtual void SetAction(Actions code, std::unique_ptr<ActionCallback> cb) = 0;
+  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
+  virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
+};
+
 class Argument {
  public:
   class Delegate {
