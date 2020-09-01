@@ -1223,58 +1223,64 @@ class ArgumentImpl : public Argument {
 
 class ArgumentBuilder {
  public:
+  explicit ArgumentBuilder(std::unique_ptr<ArgumentInitializer> init)
+      : init_(std::move(init)) {}
+
   explicit ArgumentBuilder(Argument* arg)
       : arg_(arg), resolver_(arg->GetCallbackResolver()) {}
 
   ArgumentBuilder& dest(Dest d) {
-    if (d.dest_info)
-      resolver_->SetDest(std::move(d.dest_info));
+    // if (d.dest_info)
+    init_->SetDest(std::move(d.dest_info));
     return *this;
   }
   ArgumentBuilder& action(Action a) {
-    if (a.action != Actions::kCustom) {
-      resolver_->SetDefaultAction(a.action);
-    } else {
-      DCHECK(a.callback);
-      resolver_->SetCustomAction(std::move(a.callback));
-    }
+    init_->SetAction(a.action, std::move(a.callback));
+    // if (a.action != Actions::kCustom) {
+    //   resolver_->SetDefaultAction(a.action);
+    // } else {
+    //   DCHECK(a.callback);
+    //   resolver_->SetCustomAction();
+    // }
     return *this;
   }
   ArgumentBuilder& type(Type t) {
-    if (t.callback)
-      resolver_->SetCustomType(std::move(t.callback));
-    else if (t.mode != kModeNoMode)
-      resolver_->SetOpenMode(t.mode);
-    else if (t.ops)
-      resolver_->SetDefaultType(std::move(t.ops));
+    init_->SetType(std::move(t.ops), std::move(t.callback), t.mode);
+    // if (t.callback)
+    //   resolver_->SetCustomType(std::move(t.callback));
+    // else if (t.mode != kModeNoMode)
+    //   resolver_->SetOpenMode(t.mode);
+    // else if (t.ops)
+    //   resolver_->SetDefaultType(std::move(t.ops));
     return *this;
   }
   template <typename T>
   ArgumentBuilder& const_value(T&& val) {
-    resolver_->SetConstValue(MakeAny(std::forward<T>(val)));
+    init_->SetConstValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
     if (h)
-      arg_->SetHelpDoc(h);
+      init_->SetHelpDoc(h);
     return *this;
   }
   ArgumentBuilder& required(bool b) {
-    arg_->SetRequired(b);
+    init_->SetRequired(b);
     return *this;
   }
   ArgumentBuilder& meta_var(const char* v) {
     if (v)
-      arg_->SetMetaVar(v);
+      init_->SetMetaVar(v);
     return *this;
   }
 
   // for test:
-  Argument* arg() const { return arg_; }
+  // Argument* arg() const { return arg_; }
 
  private:
   Argument* arg_;
   CallbackResolver* resolver_;
+  std::unique_ptr<ArgumentInitializer> init_;
 };
 
 // Return value of help filter function.
@@ -1354,7 +1360,8 @@ class ArgumentContainer {
                                const char* help = {},
                                Action action = {}) {
     auto builder = ArgumentBuilder(AddArgument(std::move(names)));
-    return builder.dest(std::move(dest)).help(help).action(std::move(action));
+    builder.dest(std::move(dest)).help(help).action(std::move(action));
+    return builder;
   }
 
   virtual ~ArgumentContainer() {}
