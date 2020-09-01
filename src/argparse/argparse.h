@@ -1386,10 +1386,14 @@ class ArgumentContainer {
   ArgumentBuilder add_argument(Names names,
                                Dest dest = {},
                                const char* help = {},
+                               Type type = {},
                                Action action = {}) {
     auto* arg = AddArgument(std::move(names));
     ArgumentBuilder builder(arg->CreateInitializer());
-    builder.dest(std::move(dest)).help(help).action(std::move(action));
+    builder.dest(std::move(dest))
+        .help(help)
+        .type(std::move(type))
+        .action(std::move(action));
     return builder;
   }
 
