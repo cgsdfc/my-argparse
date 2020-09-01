@@ -766,6 +766,70 @@ class TypeCallback {
   virtual void Run(const std::string& in, OpsResult* out) {}
 };
 
+class ActionCallback {
+ public:
+  virtual ~ActionCallback() {}
+  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
+};
+
+class CallbackRunner {
+ public:
+  class Delegate {
+   public:
+    virtual ~Delegate() {}
+    virtual void HandleCallbackError(Context* ctx, const std::string& msg) = 0;
+    virtual void HandlePrintUsage(Context* ctx) = 0;
+    virtual void HandlePrintHelp(Context* ctx) = 0;
+  };
+  virtual void Run(Context* ctx, Delegate* delegate) = 0;
+  virtual ~CallbackRunner() {}
+};
+
+// This creates correct types of two callbacks (and catch potential bugs of
+// users) from user's configuration.
+class CallbackResolver {
+ public:
+  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
+  virtual void SetDefaultType(std::unique_ptr<Operations> ops) = 0;
+  virtual void SetCustomType(std::unique_ptr<TypeCallback> cb) = 0;
+  virtual void SetDefaultAction(Actions code) = 0;
+  virtual void SetCustomAction(std::unique_ptr<ActionCallback> cb) = 0;
+  virtual void SetOpenMode(Mode mode) = 0;
+  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
+  virtual CallbackRunner* CreateCallbackRunner() = 0;
+  virtual ~CallbackResolver() {}
+};
+
+class Argument {
+ public:
+  class Delegate {
+   public:
+    // Generate a key for an option.
+    virtual int NextOptionKey() = 0;
+    // Call when an Arg is fully constructed.
+    virtual void OnArgumentCreated(Argument*) = 0;
+    virtual ~Delegate() {}
+  };
+
+  virtual void SetHelpDoc(std::string help_doc) = 0;
+  virtual void SetRequired(bool required) = 0;
+  virtual void SetMetaVar(std::string meta_var) = 0;
+  virtual CallbackResolver* GetCallbackResolver() = 0;
+  virtual void InitCallback() = 0;
+  virtual CallbackRunner* GetCallbackRunner() = 0;
+
+  virtual bool IsOption() const = 0;
+  virtual int GetKey() const = 0;
+  virtual void FormatArgsDoc(std::ostream& os) const = 0;
+  virtual void CompileToArgpOptions(
+      std::vector<argp_option>* options) const = 0;
+  virtual bool AppearsBefore(const Argument* that) const = 0;
+
+  virtual ~Argument() {}
+};
+
+// End of interfaces. Begin of Impls.
+
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
  public:
@@ -782,13 +846,6 @@ class CustomTypeCallback : public TypeCallback {
   CallbackType callback_;
 };
 
-class ActionCallback {
- public:
-  virtual ~ActionCallback() {}
-  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
-};
-
-// Deprecated.
 // Provided by user's callable obj.
 template <typename T, typename V>
 class CustomActionCallback : public ActionCallback {
@@ -911,7 +968,6 @@ struct Action {
 
   Action(ActionCallback* cb) : action(Actions::kCustom), callback(cb) {}
 
-  // TODO:: restrict signature.
   template <typename Callback>
   /* implicit */ Action(Callback&& cb)
       : Action(CreateCustomActionCallback(std::forward<Callback>(cb))) {}
@@ -925,34 +981,6 @@ struct Dest {
     CHECK_USER(ptr, "Pointer passed to dest() must not be null.");
     dest_info.reset(new DestInfoImpl<T>(ptr));
   }
-};
-
-class CallbackRunner {
- public:
-  class Delegate {
-   public:
-    virtual ~Delegate() {}
-    virtual void HandleCallbackError(Context* ctx, const std::string& msg) = 0;
-    virtual void HandlePrintUsage(Context* ctx) = 0;
-    virtual void HandlePrintHelp(Context* ctx) = 0;
-  };
-  virtual void Run(Context* ctx, Delegate* delegate) = 0;
-  virtual ~CallbackRunner() {}
-};
-
-// This creates correct types of two callbacks (and catch potential bugs of
-// users) from user's configuration.
-class CallbackResolver {
- public:
-  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetDefaultType(std::unique_ptr<Operations> ops) = 0;
-  virtual void SetCustomType(std::unique_ptr<TypeCallback> cb) = 0;
-  virtual void SetDefaultAction(Actions code) = 0;
-  virtual void SetCustomAction(std::unique_ptr<ActionCallback> cb) = 0;
-  virtual void SetOpenMode(Mode mode) = 0;
-  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
-  virtual CallbackRunner* CreateCallbackRunner() = 0;
-  virtual ~CallbackResolver() {}
 };
 
 class OpsCallbackRunner : public CallbackRunner {
@@ -1084,34 +1112,6 @@ struct Names {
   Names(const char* name);
   Names(std::initializer_list<const char*> names) { InitOptions(names); }
   void InitOptions(std::initializer_list<const char*> names);
-};
-
-class Argument {
- public:
-  class Delegate {
-   public:
-    // Generate a key for an option.
-    virtual int NextOptionKey() = 0;
-    // Call when an Arg is fully constructed.
-    virtual void OnArgumentCreated(Argument*) = 0;
-    virtual ~Delegate() {}
-  };
-
-  virtual void SetHelpDoc(std::string help_doc) = 0;
-  virtual void SetRequired(bool required) = 0;
-  virtual void SetMetaVar(std::string meta_var) = 0;
-  virtual CallbackResolver* GetCallbackResolver() = 0;
-  virtual void InitCallback() = 0;
-  virtual CallbackRunner* GetCallbackRunner() = 0;
-
-  virtual bool IsOption() const = 0;
-  virtual int GetKey() const = 0;
-  virtual void FormatArgsDoc(std::ostream& os) const = 0;
-  virtual void CompileToArgpOptions(
-      std::vector<argp_option>* options) const = 0;
-  virtual bool AppearsBefore(const Argument* that) const = 0;
-
-  virtual ~Argument() {}
 };
 
 // Holds all meta-info about an argument.
