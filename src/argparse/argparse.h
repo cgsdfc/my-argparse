@@ -829,10 +829,8 @@ class Argument {
     virtual ~Delegate() {}
   };
 
-  virtual void SetHelpDoc(std::string help_doc) = 0;
-  virtual void SetRequired(bool required) = 0;
-  virtual void SetMetaVar(std::string meta_var) = 0;
-  virtual CallbackResolver* GetCallbackResolver() = 0;
+  // Finalize...
+  virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
   virtual void InitCallback() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
 
@@ -1137,14 +1135,14 @@ class ArgumentImpl : public Argument {
  public:
   ArgumentImpl(Delegate* delegate, const Names& names, int group);
 
-  void SetHelpDoc(std::string help_doc) override {
-    help_doc_ = std::move(help_doc);
-  }
+  // void SetHelpDoc(std::string help_doc) override {
+  //   help_doc_ = std::move(help_doc);
+  // }
 
-  void SetRequired(bool required) override { is_required_ = required; }
-  void SetMetaVar(std::string meta_var) override {
-    meta_var_ = std::move(meta_var);
-  }
+  // void SetRequired(bool required) override { is_required_ = required; }
+  // void SetMetaVar(std::string meta_var) override {
+  //   meta_var_ = std::move(meta_var);
+  // }
   bool IsOption() const override { return is_option(); }
   int GetKey() const override { return key(); }
 
@@ -1174,10 +1172,10 @@ class ArgumentImpl : public Argument {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
-  CallbackResolver* GetCallbackResolver() override {
-    DCHECK(callback_resolver_);
-    return callback_resolver_.get();
-  }
+  // CallbackResolver* GetCallbackResolver() override {
+  //   DCHECK(callback_resolver_);
+  //   return callback_resolver_.get();
+  // }
   CallbackRunner* GetCallbackRunner() override {
     DCHECK(callback_runner_);
     return callback_runner_.get();
@@ -1223,11 +1221,7 @@ class ArgumentImpl : public Argument {
 
 class ArgumentBuilder {
  public:
-  explicit ArgumentBuilder(std::unique_ptr<ArgumentInitializer> init)
-      : init_(std::move(init)) {}
-
-  explicit ArgumentBuilder(Argument* arg)
-      : arg_(arg), resolver_(arg->GetCallbackResolver()) {}
+  explicit ArgumentBuilder(Argument* arg) : init_(arg->CreateInitializer()) {}
 
   ArgumentBuilder& dest(Dest d) {
     // if (d.dest_info)
@@ -1274,12 +1268,7 @@ class ArgumentBuilder {
     return *this;
   }
 
-  // for test:
-  // Argument* arg() const { return arg_; }
-
  private:
-  Argument* arg_;
-  CallbackResolver* resolver_;
   std::unique_ptr<ArgumentInitializer> init_;
 };
 
