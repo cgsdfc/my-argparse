@@ -157,7 +157,7 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
   os << ']';
 }
 
-void ArgumentImpl::InitCallback() {
+void ArgumentImpl::Finalize() {
   DCHECK(!callback_runner_ && callback_resolver_);
   callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
   callback_resolver_.reset();
@@ -179,7 +179,7 @@ void ArgumentHolderImpl::CompileToArgpOptions(
   // TODO: if there is not pos/opt at all but there are two groups, will argp
   // still print these empty groups?
   for (Argument& arg : arguments_) {
-    arg.InitCallback();
+    arg.Finalize();
     arg.CompileToArgpOptions(options);
   }
   // Only when at least one opt/pos presents should we generate their groups.
@@ -193,7 +193,7 @@ void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
   std::transform(arguments_.begin(), arguments_.end(), args.begin(),
                  [](ArgumentImpl& arg) { return &arg; });
   std::sort(args.begin(), args.end(),
-            [](Argument* a, Argument* b) { return a->AppearsBefore(b); });
+            [](Argument* a, Argument* b) { return a->Before(b); });
 
   // join the dump of each arg with a space.
   std::ostringstream os;

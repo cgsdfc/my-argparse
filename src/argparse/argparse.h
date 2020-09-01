@@ -831,7 +831,7 @@ class Argument {
 
   // Finalize...
   virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
-  virtual void InitCallback() = 0;
+  virtual void Finalize() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
 
   virtual bool IsOption() const = 0;
@@ -839,7 +839,7 @@ class Argument {
   virtual void FormatArgsDoc(std::ostream& os) const = 0;
   virtual void CompileToArgpOptions(
       std::vector<argp_option>* options) const = 0;
-  virtual bool AppearsBefore(const Argument* that) const = 0;
+  virtual bool Before(const Argument* that) const = 0;
 
   virtual ~Argument() {}
 };
@@ -1021,6 +1021,7 @@ class OpsCallbackRunner : public CallbackRunner {
   void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
   void RunTypeCallback(const std::string& in, OpsResult* out);
 
+  // This might be extracted to be CallbackData.
   std::unique_ptr<Operations> action_ops_;
   std::unique_ptr<Operations> type_ops_;
   std::unique_ptr<Any> const_value_;
@@ -1135,18 +1136,10 @@ class ArgumentImpl : public Argument {
  public:
   ArgumentImpl(Delegate* delegate, const Names& names, int group);
 
-  // void SetHelpDoc(std::string help_doc) override {
-  //   help_doc_ = std::move(help_doc);
-  // }
-
-  // void SetRequired(bool required) override { is_required_ = required; }
-  // void SetMetaVar(std::string meta_var) override {
-  //   meta_var_ = std::move(meta_var);
-  // }
+  std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
   bool IsOption() const override { return is_option(); }
   int GetKey() const override { return key(); }
 
-  bool initialized() const { return key_ != 0; }
   int key() const { return key_; }
   int group() const { return group_; }
   bool is_option() const { return key_ != kKeyForPositional; }
@@ -1172,10 +1165,6 @@ class ArgumentImpl : public Argument {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
-  // CallbackResolver* GetCallbackResolver() override {
-  //   DCHECK(callback_resolver_);
-  //   return callback_resolver_.get();
-  // }
   CallbackRunner* GetCallbackRunner() override {
     DCHECK(callback_runner_);
     return callback_runner_.get();
@@ -1183,11 +1172,11 @@ class ArgumentImpl : public Argument {
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostream& os) const override;
 
-  void InitCallback() override;
+  void Finalize() override;
 
   void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 
-  bool AppearsBefore(const Argument* that) const override {
+  bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
@@ -1196,6 +1185,8 @@ class ArgumentImpl : public Argument {
     kKeyForNothing = 0,
     kKeyForPositional = -1,
   };
+
+  class InitializerImpl;
 
   // Fill in members to do with names.
   void InitNames(Names names);
@@ -1219,38 +1210,81 @@ class ArgumentImpl : public Argument {
   bool is_required_ = false;
 };
 
+class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
+ public:
+  explicit InitializerImpl(ArgumentImpl* impl) : impl_(impl) {}
+
+  void SetRequired(bool required) override { impl_->is_required_ = required; }
+  void SetHelpDoc(std::string help_doc) override {
+    impl_->help_doc_ = std::move(help_doc);
+  }
+  void SetMetaVar(std::string meta_var) override {
+    impl_->meta_var_ = std::move(meta_var);
+  }
+  void SetDest(std::unique_ptr<DestInfo> dest) override {
+    impl_->callback_resolver_->SetDest(std::move(dest));
+  }
+  void SetType(std::unique_ptr<Operations> ops,
+               std::unique_ptr<TypeCallback> cb,
+               Mode mode) override {
+    if (ops)
+      impl_->callback_resolver_->SetDefaultType(std::move(ops));
+    else if (cb)
+      impl_->callback_resolver_->SetCustomType(std::move(cb));
+    else if (mode != kModeNoMode)
+      impl_->callback_resolver_->SetOpenMode(mode);
+  }
+
+  void SetAction(Actions code, std::unique_ptr<ActionCallback> cb) override {
+    // TODO: may change this.
+    if (code != Actions::kCustom) {
+      impl_->callback_resolver_->SetDefaultAction(code);
+      return;
+    }
+    DCHECK(cb);
+    impl_->callback_resolver_->SetCustomAction(std::move(cb));
+  }
+
+  void SetConstValue(std::unique_ptr<Any> value) override {
+    impl_->callback_resolver_->SetConstValue(std::move(value));
+  }
+
+  void SetDefaultValue(std::unique_ptr<Any> value) override {}
+
+ private:
+  ArgumentImpl* impl_;
+};
+
+inline std::unique_ptr<ArgumentInitializer> ArgumentImpl::CreateInitializer() {
+  return std::make_unique<InitializerImpl>(this);
+}
+
 class ArgumentBuilder {
  public:
-  explicit ArgumentBuilder(Argument* arg) : init_(arg->CreateInitializer()) {}
+  explicit ArgumentBuilder(std::unique_ptr<ArgumentInitializer> init)
+      : init_(std::move(init)) {}
 
   ArgumentBuilder& dest(Dest d) {
-    // if (d.dest_info)
-    init_->SetDest(std::move(d.dest_info));
+    if (d.dest_info)
+      init_->SetDest(std::move(d.dest_info));
     return *this;
   }
   ArgumentBuilder& action(Action a) {
     init_->SetAction(a.action, std::move(a.callback));
-    // if (a.action != Actions::kCustom) {
-    //   resolver_->SetDefaultAction(a.action);
-    // } else {
-    //   DCHECK(a.callback);
-    //   resolver_->SetCustomAction();
-    // }
     return *this;
   }
   ArgumentBuilder& type(Type t) {
     init_->SetType(std::move(t.ops), std::move(t.callback), t.mode);
-    // if (t.callback)
-    //   resolver_->SetCustomType(std::move(t.callback));
-    // else if (t.mode != kModeNoMode)
-    //   resolver_->SetOpenMode(t.mode);
-    // else if (t.ops)
-    //   resolver_->SetDefaultType(std::move(t.ops));
     return *this;
   }
   template <typename T>
   ArgumentBuilder& const_value(T&& val) {
     init_->SetConstValue(MakeAny(std::forward<T>(val)));
+    return *this;
+  }
+  template <typename T>
+  ArgumentBuilder& default_value(T&& val) {
+    init_->SetDefaultValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
@@ -1348,7 +1382,8 @@ class ArgumentContainer {
                                Dest dest = {},
                                const char* help = {},
                                Action action = {}) {
-    auto builder = ArgumentBuilder(AddArgument(std::move(names)));
+    auto* arg = AddArgument(std::move(names));
+    ArgumentBuilder builder(arg->CreateInitializer());
     builder.dest(std::move(dest)).help(help).action(std::move(action));
     return builder;
   }
