@@ -796,7 +796,7 @@ class CallbackResolver {
   virtual void SetCustomAction(std::unique_ptr<ActionCallback> cb) = 0;
   virtual void SetOpenMode(Mode mode) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
-  virtual CallbackRunner* CreateCallbackRunner() = 0;
+  virtual std::unique_ptr<CallbackRunner> CreateCallbackRunner() = 0;
   virtual ~CallbackResolver() {}
 };
 
@@ -883,38 +883,43 @@ class CustomActionCallback : public ActionCallback {
 };
 
 template <typename Callback, typename T>
-TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
-                                           TypeCallbackPrototype<T>*) {
-  return new CustomTypeCallback<T>(std::forward<Callback>(cb));
+std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
+    Callback&& cb,
+    TypeCallbackPrototype<T>*) {
+  return std::make_unique<CustomTypeCallback<T>>(std::forward<Callback>(cb));
 }
 
 template <typename Callback, typename T>
-TypeCallback* CreateCustomTypeCallbackImpl(Callback&& cb,
-                                           TypeCallbackPrototypeThrows<T>*) {
-  return new CustomTypeCallback<T>([cb](const std::string& in, Result<T>* out) {
-    try {
-      *out = std::invoke(cb, in);
-    } catch (const ArgumentError& e) {
-      out->set_error(e.what());
-    }
-  });
+std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
+    Callback&& cb,
+    TypeCallbackPrototypeThrows<T>*) {
+  return std::make_unique<CustomTypeCallback<T>>(
+      [cb](const std::string& in, Result<T>* out) {
+        try {
+          *out = std::invoke(cb, in);
+        } catch (const ArgumentError& e) {
+          out->set_error(e.what());
+        }
+      });
 }
 
 template <typename Callback>
-TypeCallback* CreateCustomTypeCallback(Callback&& cb) {
-  return CreateCustomTypeCallbackImpl(
+std::unique_ptr<TypeCallback> CreateTypeCallback(Callback&& cb) {
+  return CreateTypeCallbackImpl(
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
 }
 
 template <typename Callback, typename T, typename V>
-ActionCallback* CreateCustomActionCallbackImpl(Callback&& cb,
-                                               ActionCallbackPrototype<T, V>*) {
-  return new CustomActionCallback<T, V>(std::forward<Callback>(cb));
+std::unique_ptr<ActionCallback> CreateActionCallbackImpl(
+    Callback&& cb,
+    ActionCallbackPrototype<T, V>*) {
+  return std::make_unique<CustomActionCallback<T, V>>(
+      std::forward<Callback>(cb));
 }
 
 template <typename Callback>
-ActionCallback* CreateCustomActionCallback(Callback&& cb) {
+std::unique_ptr<ActionCallback> CreateActionCallback(Callback&& cb) {
   return CreateCustomActionCallbackImpl(
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
@@ -963,7 +968,7 @@ struct Type {
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
-    callback.reset(CreateCustomTypeCallback(std::forward<Callback>(cb)));
+    callback = CreateTypeCallback(std::forward<Callback>(cb));
   }
 };
 
@@ -986,7 +991,7 @@ struct Action {
 
   template <typename Callback>
   /* implicit */ Action(Callback&& cb)
-      : Action(CreateCustomActionCallback(std::forward<Callback>(cb))) {}
+      : Action(CreateActionCallback(std::forward<Callback>(cb))) {}
 };
 
 struct Dest {
@@ -1051,10 +1056,10 @@ class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
     runner_->const_value_ = std::move(value);
   }
 
-  CallbackRunner* CreateCallbackRunner() override {
+   std::unique_ptr<CallbackRunner> CreateCallbackRunner() override {
     // runner_->Finalize(ops_factory_.get());
     // TODO: Compile...
-    return runner_.release();
+    return std::move(runner_);
   }
 
   void SetCustomType(std::unique_ptr<TypeCallback> cb) override {

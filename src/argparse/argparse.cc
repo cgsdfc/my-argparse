@@ -159,7 +159,7 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
 
 void ArgumentImpl::Finalize() {
   DCHECK(!callback_runner_ && callback_resolver_);
-  callback_runner_.reset(callback_resolver_->CreateCallbackRunner());
+  callback_runner_ = callback_resolver_->CreateCallbackRunner();
   callback_resolver_.reset();
 }
 
