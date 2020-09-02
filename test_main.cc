@@ -15,8 +15,11 @@ struct AppendTraits<Appendable> {
 int main(int argc, char const* argv[]) {
   ArgumentParser parser;
 
-  std::ofstream output;
-  parser.add_argument("output", &output, "output to this file");
+  // std::ofstream output;
+  int output;
+  parser.add_argument("output", &output, "output to this file")
+      .default_value(0)
+      .const_value(1);
 
   parser.parse_args(argc, argv);
 

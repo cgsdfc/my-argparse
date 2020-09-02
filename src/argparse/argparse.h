@@ -1004,6 +1004,14 @@ struct Dest {
   }
 };
 
+struct AnyValue {
+  std::unique_ptr<Any> data;
+  AnyValue(AnyValue&&) = delete;
+
+  template <typename T>
+  AnyValue(T&& val) : data(MakeAny(std::forward<T>(val))) {}
+};
+
 class OpsCallbackRunner : public CallbackRunner {
  public:
   void Run(Context* ctx, Delegate* delegate) override;
@@ -1282,14 +1290,12 @@ class ArgumentBuilder {
     init_->SetType(std::move(t.ops), std::move(t.callback), t.mode);
     return *this;
   }
-  template <typename T>
-  ArgumentBuilder& const_value(T&& val) {
-    init_->SetConstValue(MakeAny(std::forward<T>(val)));
+  ArgumentBuilder& const_value(AnyValue val) {
+    init_->SetConstValue(std::move(val.data));
     return *this;
   }
-  template <typename T>
-  ArgumentBuilder& default_value(T&& val) {
-    init_->SetDefaultValue(MakeAny(std::forward<T>(val)));
+  ArgumentBuilder& default_value(AnyValue val) {
+    init_->SetDefaultValue(std::move(val.data));
     return *this;
   }
   ArgumentBuilder& help(const char* h) {
