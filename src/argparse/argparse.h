@@ -344,7 +344,6 @@ using function_signature_t = std::conditional_t<
 
 }  // namespace detail
 
-// A more complete module to handle user's callbacks.
 enum class Actions {
   kNoAction,
   kStore,
@@ -806,6 +805,17 @@ class CallbackResolver {
   virtual ~CallbackResolver() {}
 };
 
+struct ActionInfo {
+  Actions action_code;
+  std::unique_ptr<ActionCallback> callback;
+};
+
+struct TypeInfo {
+  std::unique_ptr<Operations> ops;
+  std::unique_ptr<TypeCallback> callback;
+  Mode mode;
+};
+
 // This initializes an Argument.
 class ArgumentInitializer {
  public:
@@ -816,10 +826,8 @@ class ArgumentInitializer {
   virtual void SetMetaVar(std::string meta_var) = 0;
 
   virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetType(std::unique_ptr<Operations> ops,
-                       std::unique_ptr<TypeCallback> cb,
-                       Mode mode) = 0;
-  virtual void SetAction(Actions code, std::unique_ptr<ActionCallback> cb) = 0;
+  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
+  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
 };
@@ -957,24 +965,26 @@ class FileType {
 };
 
 struct Type {
-  std::unique_ptr<TypeCallback> callback;
-  std::unique_ptr<Operations> ops;
-  Mode mode = kModeNoMode;
+  std::unique_ptr<TypeInfo> info = std::make_unique<TypeInfo>();
 
-  Type() = default;
+  Type() : info(nullptr) {}
   Type(Type&&) = default;
 
   // To explicitly request a type, use Type<double>().
   template <typename T>
-  Type() : ops(CreateOperations<T>()) {}
+  Type() {
+    info->ops = CreateOperations<T>();
+  }
+
   // Use it to provide your own TypeCallback impl.
-  Type(TypeCallback* cb) : callback(cb) {}
+  Type(TypeCallback* cb) { info->callback.reset(cb); }
+
   // Use FileType("rw") to request opening a file to read/write.
-  Type(FileType file_type) : mode(file_type.mode()) {}
+  Type(FileType file_type) { info->mode = file_type.mode(); }
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
-    callback = CreateTypeCallback(std::forward<Callback>(cb));
+    info->callback = CreateTypeCallback(std::forward<Callback>(cb));
   }
 };
 
@@ -982,22 +992,23 @@ Actions StringToActions(const std::string& str);
 
 // Type-erasured
 struct Action {
-  Actions action = Actions::kNoAction;
-  std::unique_ptr<ActionCallback> callback;
+  std::unique_ptr<ActionInfo> info;
+  // Actions action = Actions::kNoAction;
+  // std::unique_ptr<ActionCallback> callback;
 
   Action() = default;
   Action(Action&&) = default;
 
-  Action(const char* action_string) {
-    DCHECK(action_string);
-    action = StringToActions(action_string);
-  }
+  // Action(const char* action_string) {
+  //   DCHECK(action_string);
+  //   action = StringToActions(action_string);
+  // }
 
-  Action(ActionCallback* cb) : action(Actions::kCustom), callback(cb) {}
+  // Action(ActionCallback* cb) : action(Actions::kCustom), callback(cb) {}
 
-  template <typename Callback>
-  /* implicit */ Action(Callback&& cb)
-      : Action(CreateActionCallback(std::forward<Callback>(cb))) {}
+  // template <typename Callback>
+  // /* implicit */ Action(Callback&& cb)
+  //     : Action(CreateActionCallback(std::forward<Callback>(cb))) {}
 };
 
 struct Dest {
@@ -1255,26 +1266,28 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
   void SetDest(std::unique_ptr<DestInfo> dest) override {
     impl_->callback_resolver_->SetDest(std::move(dest));
   }
-  void SetType(std::unique_ptr<Operations> ops,
-               std::unique_ptr<TypeCallback> cb,
-               Mode mode) override {
-    if (ops)
-      impl_->callback_resolver_->SetDefaultType(std::move(ops));
-    else if (cb)
-      impl_->callback_resolver_->SetCustomType(std::move(cb));
-    else if (mode != kModeNoMode)
-      impl_->callback_resolver_->SetOpenMode(mode);
-  }
+  void SetType(std::unique_ptr<TypeInfo> info) override {}
+  void SetAction(std::unique_ptr<ActionInfo> info) override {}
+  // void SetType(std::unique_ptr<Operations> ops,
+  //              std::unique_ptr<TypeCallback> cb,
+  //              Mode mode) override {
+  //   if (ops)
+  //     impl_->callback_resolver_->SetDefaultType(std::move(ops));
+  //   else if (cb)
+  //     impl_->callback_resolver_->SetCustomType(std::move(cb));
+  //   else if (mode != kModeNoMode)
+  //     impl_->callback_resolver_->SetOpenMode(mode);
+  // }
 
-  void SetAction(Actions code, std::unique_ptr<ActionCallback> cb) override {
-    // TODO: may change this.
-    if (code != Actions::kCustom) {
-      impl_->callback_resolver_->SetDefaultAction(code);
-      return;
-    }
-    DCHECK(cb);
-    impl_->callback_resolver_->SetCustomAction(std::move(cb));
-  }
+  // void SetAction(Actions code, std::unique_ptr<ActionCallback> cb) override {
+  //   // TODO: may change this.
+  //   if (code != Actions::kCustom) {
+  //     impl_->callback_resolver_->SetDefaultAction(code);
+  //     return;
+  //   }
+  //   DCHECK(cb);
+  //   impl_->callback_resolver_->SetCustomAction(std::move(cb));
+  // }
 
   void SetConstValue(std::unique_ptr<Any> value) override {
     impl_->callback_resolver_->SetConstValue(std::move(value));
@@ -1303,11 +1316,13 @@ class ArgumentBuilder {
     return *this;
   }
   ArgumentBuilder& action(Action a) {
-    init_->SetAction(a.action, std::move(a.callback));
+    if (a.info)
+      init_->SetAction(std::move(a.info));
     return *this;
   }
   ArgumentBuilder& type(Type t) {
-    init_->SetType(std::move(t.ops), std::move(t.callback), t.mode);
+    if (t.info)
+      init_->SetType(std::move(t.info));
     return *this;
   }
   ArgumentBuilder& const_value(AnyValue val) {

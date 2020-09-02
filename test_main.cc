@@ -21,6 +21,9 @@ int main(int argc, char const* argv[]) {
       .default_value(0)
       .const_value(1);
 
+  Type t;
+  DCHECK(!t.info);
+  Type t2(FileType("r"));
   parser.parse_args(argc, argv);
 
 }
