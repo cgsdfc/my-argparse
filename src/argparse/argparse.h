@@ -265,19 +265,6 @@ struct DefaultTypeNameTraits {
 template <typename T>
 struct TypeNameTraits : DefaultTypeNameTraits<T> {};
 
-template <>
-struct TypeNameTraits<std::string> {
-  static std::string Run() { return "std::string"; }
-};
-template <>
-struct TypeNameTraits<std::ofstream> {
-  static std::string Run() { return "std::ofstream"; }
-};
-template <>
-struct TypeNameTraits<std::ifstream> {
-  static std::string Run() { return "std::ifstream"; }
-};
-
 namespace detail {
 // clang-format off
 
@@ -353,17 +340,6 @@ std::string ModeToChars(Mode mode);
 Mode StreamModeToMode(std::ios_base::openmode stream_mode);
 std::ios_base::openmode ModeToStreamMode(Mode m);
 
-// For STL-compatible T, default is:
-template <typename T>
-struct DefaultAppendTraits {
-  using ValueType = typename T::value_type;
-
-  static void Run(T* obj, ValueType item) {
-    // By default use the push_back() method of T.
-    obj->push_back(item);
-  }
-};
-
 // This traits indicates whether T supports append operation and if it does,
 // tells us how to do the append.
 template <typename T>
@@ -379,16 +355,6 @@ using IsAppendSupported = std::bool_constant<bool(AppendTraits<T>::Run)>;
 template <typename T>
 using ValueTypeOf = typename AppendTraits<T>::ValueType;
 
-// Specialized for STL containers.
-template <typename T>
-struct AppendTraits<std::vector<T>> : DefaultAppendTraits<std::vector<T>> {};
-template <typename T>
-struct AppendTraits<std::list<T>> : DefaultAppendTraits<std::list<T>> {};
-template <typename T>
-struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
-// std::string is not considered appendable, if you need that, use
-// std::vector<char>
-
 // For user's types, specialize AppendTraits<>, and if your type is
 // standard-compatible, inherits from DefaultAppendTraits<>.
 
@@ -398,30 +364,6 @@ template <typename T>
 struct OpenTraits {
   static constexpr void* Run = nullptr;
 };
-
-struct CFileOpenTraits {
-  static void Run(const std::string& in, Mode mode, Result<FILE*>* out);
-};
-
-template <typename T>
-struct StreamOpenTraits {
-  static void Run(const std::string& in, Mode mode, Result<T>* out) {
-    auto ios_mode = ModeToStreamMode(mode);
-    T stream(in, ios_mode);
-    if (stream.is_open())
-      return out->set_value(std::move(stream));
-    out->set_error(kDefaultOpenFailureMsg);
-  }
-};
-
-template <>
-struct OpenTraits<FILE*> : CFileOpenTraits {};
-template <>
-struct OpenTraits<std::fstream> : StreamOpenTraits<std::fstream> {};
-template <>
-struct OpenTraits<std::ifstream> : StreamOpenTraits<std::ifstream> {};
-template <>
-struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
 
 template <OpsKind Ops, typename T>
 struct IsOpsSupported : std::false_type {};
@@ -549,6 +491,194 @@ class DestInfo {
   virtual DestPtr GetDestPtr() = 0;
   virtual ~DestInfo() {}
 };
+
+template <typename T>
+using TypeCallbackPrototype = void(const std::string&, Result<T>*);
+
+// There is an alternative for those using exception.
+// You convert string into T and throw ArgumentError if something bad happened.
+template <typename T>
+using TypeCallbackPrototypeThrows = T(const std::string&);
+
+// The prototype for action. An action normally does not report errors.
+template <typename T, typename V>
+using ActionCallbackPrototype = void(T*, Result<V>);
+
+// Can only take a Result without dest.
+// template <typename T, typename V>
+// using ActionCallbackPrototypeNoDest = void(Result<V>);
+
+// Perform data conversion..
+class TypeCallback {
+ public:
+  virtual ~TypeCallback() {}
+  virtual void Run(const std::string& in, OpsResult* out) {}
+};
+
+class ActionCallback {
+ public:
+  virtual ~ActionCallback() {}
+  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
+};
+
+// This is an internal class to communicate data/state between user's callback.
+struct Context {
+  Context(const Argument* argument, const char* value, ArgpState state);
+  const bool has_value;
+  const Argument* argument;
+  ArgpState state;
+  std::string value;
+  std::string errmsg;
+};
+
+class CallbackRunner {
+ public:
+  class Delegate {
+   public:
+    virtual ~Delegate() {}
+    virtual void HandleCallbackError(Context* ctx) = 0;
+    virtual void HandlePrintUsage(Context* ctx) = 0;
+    virtual void HandlePrintHelp(Context* ctx) = 0;
+  };
+  virtual void RunCallback(Context* ctx, Delegate* delegate) = 0;
+  virtual ~CallbackRunner() {}
+};
+
+struct ActionInfo {
+  Actions action_code;
+  std::unique_ptr<ActionCallback> callback;
+};
+
+struct TypeInfo {
+  std::unique_ptr<Operations> ops;
+  std::unique_ptr<TypeCallback> callback;
+  Mode mode;
+};
+
+// This initializes an Argument.
+class ArgumentInitializer {
+ public:
+  virtual ~ArgumentInitializer() {}
+
+  virtual void SetRequired(bool required) = 0;
+  virtual void SetHelpDoc(std::string help_doc) = 0;
+  virtual void SetMetaVar(std::string meta_var) = 0;
+
+  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
+  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
+  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
+  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
+  virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
+};
+
+class Argument {
+ public:
+  class Delegate {
+   public:
+    // Generate a key for an option.
+    virtual int NextOptionKey() = 0;
+    // Call when an Arg is fully constructed.
+    virtual void OnArgumentCreated(Argument*) = 0;
+    virtual ~Delegate() {}
+  };
+
+  // Finalize...
+  virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
+  virtual void Finalize() = 0;
+  virtual CallbackRunner* GetCallbackRunner() = 0;
+
+  virtual bool IsOption() const = 0;
+  virtual int GetKey() const = 0;
+  virtual void FormatArgsDoc(std::ostream& os) const = 0;
+  virtual void CompileToArgpOptions(
+      std::vector<argp_option>* options) const = 0;
+  virtual bool Before(const Argument* that) const = 0;
+
+  virtual ~Argument() {}
+};
+
+// Return value of help filter function.
+enum class HelpFilterResult {
+  kKeep,
+  kDrop,
+  kReplace,
+};
+
+using HelpFilterCallback =
+    std::function<HelpFilterResult(const Argument&, std::string* text)>;
+
+using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
+
+class ArgArray {
+ public:
+  ArgArray(int argc, const char** argv)
+      : argc_(argc), argv_(const_cast<char**>(argv)) {}
+  ArgArray(std::vector<const char*>* v) : ArgArray(v->size(), v->data()) {}
+
+  int argc() const { return argc_; }
+  std::size_t size() const { return argc(); }
+
+  char** argv() const { return argv_; }
+  char* operator[](std::size_t i) {
+    DCHECK(i < argc());
+    return argv()[i];
+  }
+
+ private:
+  int argc_;
+  char** argv_;
+};
+
+class ArgpParser {
+ public:
+  class Delegate {
+   public:
+    virtual Argument* FindOptionalArgument(int key) = 0;
+    virtual Argument* FindPositionalArgument(int index) = 0;
+    virtual std::size_t PositionalArgumentCount() = 0;
+    virtual void CompileToArgpOptions(std::vector<argp_option>* options) = 0;
+    virtual void GenerateArgsDoc(std::string* args_doc) = 0;
+    virtual ~Delegate() {}
+  };
+
+  struct Options {
+    int flags = 0;
+    const char* program_version = {};
+    const char* description = {};
+    const char* after_doc = {};
+    const char* domain = {};
+    const char* email = {};
+    ProgramVersionCallback program_version_callback;
+    HelpFilterCallback help_filter;
+  };
+
+  // Initialize from a few options (user's options).
+  virtual void Init(const Options& options) = 0;
+  // Parse args, exit on errors.
+  virtual void ParseArgs(ArgArray args) = 0;
+  // Parse args, collect unknown args into rest, don't exit, report error via
+  // Status.
+  virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
+    ParseArgs(args);
+    return true;
+  }
+  virtual ~ArgpParser() {}
+  static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
+};
+
+class ArgumentHolder {
+ public:
+  virtual Argument* AddArgumentToGroup(Names names, int group) = 0;
+  virtual Argument* AddArgument(Names names) = 0;
+  virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
+  virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
+  // Get a reusable Parser. As long as the state of holder isn't changed, the
+  // instance returned is the same.
+  virtual ArgpParser* GetParser() { return nullptr; }
+  virtual ~ArgumentHolder() {}
+};
+
+// End of interfaces. Begin of Impls.
 
 template <typename T>
 void ConvertResults(Result<T>* in, OpsResult* out) {
@@ -709,113 +839,6 @@ template <typename T>
 std::unique_ptr<OpsFactory> CreateOperationsFactory() {
   return std::make_unique<OpsFactoryImpl<T>>();
 }
-
-template <typename T>
-using TypeCallbackPrototype = void(const std::string&, Result<T>*);
-
-// There is an alternative for those using exception.
-// You convert string into T and throw ArgumentError if something bad happened.
-template <typename T>
-using TypeCallbackPrototypeThrows = T(const std::string&);
-
-// The prototype for action. An action normally does not report errors.
-template <typename T, typename V>
-using ActionCallbackPrototype = void(T*, Result<V>);
-
-// Can only take a Result without dest.
-// template <typename T, typename V>
-// using ActionCallbackPrototypeNoDest = void(Result<V>);
-
-// Perform data conversion..
-class TypeCallback {
- public:
-  virtual ~TypeCallback() {}
-  virtual void Run(const std::string& in, OpsResult* out) {}
-};
-
-class ActionCallback {
- public:
-  virtual ~ActionCallback() {}
-  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
-};
-
-// This is an internal class to communicate data/state between user's callback.
-struct Context {
-  Context(const Argument* argument, const char* value, ArgpState state);
-  const bool has_value;
-  const Argument* argument;
-  ArgpState state;
-  std::string value;
-  std::string errmsg;
-};
-
-class CallbackRunner {
- public:
-  class Delegate {
-   public:
-    virtual ~Delegate() {}
-    virtual void HandleCallbackError(Context* ctx) = 0;
-    virtual void HandlePrintUsage(Context* ctx) = 0;
-    virtual void HandlePrintHelp(Context* ctx) = 0;
-  };
-  virtual void RunCallback(Context* ctx, Delegate* delegate) = 0;
-  virtual ~CallbackRunner() {}
-};
-
-struct ActionInfo {
-  Actions action_code;
-  std::unique_ptr<ActionCallback> callback;
-};
-
-struct TypeInfo {
-  std::unique_ptr<Operations> ops;
-  std::unique_ptr<TypeCallback> callback;
-  Mode mode;
-};
-
-// This initializes an Argument.
-class ArgumentInitializer {
- public:
-  virtual ~ArgumentInitializer() {}
-
-  virtual void SetRequired(bool required) = 0;
-  virtual void SetHelpDoc(std::string help_doc) = 0;
-  virtual void SetMetaVar(std::string meta_var) = 0;
-
-  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
-  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
-  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
-  virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
-};
-
-class Argument {
- public:
-  class Delegate {
-   public:
-    // Generate a key for an option.
-    virtual int NextOptionKey() = 0;
-    // Call when an Arg is fully constructed.
-    virtual void OnArgumentCreated(Argument*) = 0;
-    virtual ~Delegate() {}
-  };
-
-  // Finalize...
-  virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
-  virtual void Finalize() = 0;
-  virtual CallbackRunner* GetCallbackRunner() = 0;
-
-  virtual bool IsOption() const = 0;
-  virtual int GetKey() const = 0;
-  virtual void FormatArgsDoc(std::ostream& os) const = 0;
-  virtual void CompileToArgpOptions(
-      std::vector<argp_option>* options) const = 0;
-  virtual bool Before(const Argument* that) const = 0;
-
-  virtual ~Argument() {}
-};
-
-// End of interfaces. Begin of Impls.
 
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
@@ -1221,75 +1244,6 @@ class ArgumentBuilder {
   std::unique_ptr<ArgumentInitializer> init_;
 };
 
-// Return value of help filter function.
-enum class HelpFilterResult {
-  kKeep,
-  kDrop,
-  kReplace,
-};
-
-using HelpFilterCallback =
-    std::function<HelpFilterResult(const Argument&, std::string* text)>;
-
-using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
-
-class ArgArray {
- public:
-  ArgArray(int argc, const char** argv)
-      : argc_(argc), argv_(const_cast<char**>(argv)) {}
-  ArgArray(std::vector<const char*>* v) : ArgArray(v->size(), v->data()) {}
-
-  int argc() const { return argc_; }
-  std::size_t size() const { return argc(); }
-
-  char** argv() const { return argv_; }
-  char* operator[](std::size_t i) {
-    DCHECK(i < argc());
-    return argv()[i];
-  }
-
- private:
-  int argc_;
-  char** argv_;
-};
-
-class ArgpParser {
- public:
-  class Delegate {
-   public:
-    virtual Argument* FindOptionalArgument(int key) = 0;
-    virtual Argument* FindPositionalArgument(int index) = 0;
-    virtual std::size_t PositionalArgumentCount() = 0;
-    virtual void CompileToArgpOptions(std::vector<argp_option>* options) = 0;
-    virtual void GenerateArgsDoc(std::string* args_doc) = 0;
-    virtual ~Delegate() {}
-  };
-
-  struct Options {
-    int flags = 0;
-    const char* program_version = {};
-    const char* description = {};
-    const char* after_doc = {};
-    const char* domain = {};
-    const char* email = {};
-    ProgramVersionCallback program_version_callback;
-    HelpFilterCallback help_filter;
-  };
-
-  // Initialize from a few options (user's options).
-  virtual void Init(const Options& options) = 0;
-  // Parse args, exit on errors.
-  virtual void ParseArgs(ArgArray args) = 0;
-  // Parse args, collect unknown args into rest, don't exit, report error via
-  // Status.
-  virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
-    ParseArgs(args);
-    return true;
-  }
-  virtual ~ArgpParser() {}
-  static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
-};
-
 // This is an interface that provides add_argument() and other common things.
 class ArgumentContainer {
  public:
@@ -1319,18 +1273,6 @@ inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
            opt.arg, opt.doc, opt.group);
   }
 }
-
-class ArgumentHolder {
- public:
-  virtual Argument* AddArgumentToGroup(Names names, int group) = 0;
-  virtual Argument* AddArgument(Names names) = 0;
-  virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
-  virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
-  // Get a reusable Parser. As long as the state of holder isn't changed, the
-  // instance returned is the same.
-  virtual ArgpParser* GetParser() { return nullptr; }
-  virtual ~ArgumentHolder() {}
-};
 
 // Impl add_group() call.
 class ArgumentGroup : public ArgumentContainer {
@@ -1477,7 +1419,9 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   }
 
   void HandlePrintUsage(Context* ctx) override { ctx->state.PrintUsage(); }
-  void HandlePrintHelp(Context* ctx) override { ctx->state.PrintHelp(stderr, 0); }
+  void HandlePrintHelp(Context* ctx) override {
+    ctx->state.PrintHelp(stderr, 0);
+  }
 
   error_t DoParse(int key, char* arg, ArgpState state);
 
@@ -1691,5 +1635,63 @@ struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
     }
   }
 };
+
+struct CFileOpenTraits {
+  static void Run(const std::string& in, Mode mode, Result<FILE*>* out);
+};
+
+template <typename T>
+struct StreamOpenTraits {
+  static void Run(const std::string& in, Mode mode, Result<T>* out) {
+    auto ios_mode = ModeToStreamMode(mode);
+    T stream(in, ios_mode);
+    if (stream.is_open())
+      return out->set_value(std::move(stream));
+    out->set_error(kDefaultOpenFailureMsg);
+  }
+};
+
+template <>
+struct OpenTraits<FILE*> : CFileOpenTraits {};
+template <>
+struct OpenTraits<std::fstream> : StreamOpenTraits<std::fstream> {};
+template <>
+struct OpenTraits<std::ifstream> : StreamOpenTraits<std::ifstream> {};
+template <>
+struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
+
+template <>
+struct TypeNameTraits<std::string> {
+  static std::string Run() { return "std::string"; }
+};
+template <>
+struct TypeNameTraits<std::ofstream> {
+  static std::string Run() { return "std::ofstream"; }
+};
+template <>
+struct TypeNameTraits<std::ifstream> {
+  static std::string Run() { return "std::ifstream"; }
+};
+
+// For STL-compatible T, default is:
+template <typename T>
+struct DefaultAppendTraits {
+  using ValueType = typename T::value_type;
+
+  static void Run(T* obj, ValueType item) {
+    // By default use the push_back() method of T.
+    obj->push_back(item);
+  }
+};
+
+// Specialized for STL containers.
+template <typename T>
+struct AppendTraits<std::vector<T>> : DefaultAppendTraits<std::vector<T>> {};
+template <typename T>
+struct AppendTraits<std::list<T>> : DefaultAppendTraits<std::list<T>> {};
+template <typename T>
+struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
+// std::string is not considered appendable, if you need that, use
+// std::vector<char>
 
 }  // namespace argparse
