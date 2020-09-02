@@ -490,10 +490,10 @@ void OpsCallbackRunner::RunActionCallback(std::unique_ptr<Any> data,
       ops->StoreConst(dest(), const_value());
       break;
     case Actions::kStoreTrue:
-      ops->StoreConst(dest(), AnyImpl<bool>(true));
+      ops->StoreConst(dest(), MakeAnyOnStack(true));
       break;
     case Actions::kStoreFalse:
-      ops->StoreConst(dest(), AnyImpl<bool>(false));
+      ops->StoreConst(dest(), MakeAnyOnStack(false));
       break;
     case Actions::kAppend:
       ops->Append(dest(), std::move(data));

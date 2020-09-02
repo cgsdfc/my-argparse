@@ -221,6 +221,12 @@ std::unique_ptr<Any> MakeAny(T&& val) {
   return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
 }
 
+// Use it like const Any& val = MakeAnyOnStack(0);
+template <typename T>
+AnyImpl<T> MakeAnyOnStack(T&& val) {
+  return AnyImpl<T>(std::forward<T>(val));
+}
+
 template <typename T>
 void WrapAny(T&& in, std::unique_ptr<Any>* out) {
   using Type = std::remove_cv_t<std::remove_reference_t<T>>;
@@ -1221,6 +1227,18 @@ class ArgumentImpl : public Argument {
   std::vector<char> short_names_;
   std::string meta_var_;
   bool is_required_ = false;
+
+  // Callback members.
+  std::unique_ptr<Operations> action_ops_;
+  std::unique_ptr<Operations> type_ops_;
+  std::unique_ptr<Any> const_value_;
+  std::unique_ptr<Any> default_value_;
+  std::unique_ptr<ActionCallback> custom_action_;
+  std::unique_ptr<TypeCallback> custom_type_;
+  Actions action_code_ = Actions::kStore;
+  Types type_code_ = Types::kParse;
+  Mode mode_ = kModeNoMode;
+  DestPtr dest_ptr_;
 };
 
 class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
@@ -1262,7 +1280,9 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
     impl_->callback_resolver_->SetConstValue(std::move(value));
   }
 
-  void SetDefaultValue(std::unique_ptr<Any> value) override {}
+  void SetDefaultValue(std::unique_ptr<Any> value) override {
+    impl_->default_value_ = std::move(value);
+  }
 
  private:
   ArgumentImpl* impl_;
