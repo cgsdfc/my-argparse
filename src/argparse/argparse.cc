@@ -501,10 +501,10 @@ void ArgumentImpl::RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
       ops->AppendConst(dest(), const_value());
       break;
     case Actions::kPrintHelp:
-      // delegate_->HandlePrintHelp(ctx);
+      runner_delegate_->HandlePrintHelp(ctx);
       break;
     case Actions::kPrintUsage:
-      // delegate_->HandlePrintUsage(ctx);
+      runner_delegate_->HandlePrintUsage(ctx);
       break;
     case Actions::kCustom:
       DCHECK(custom_action_);
@@ -534,12 +534,12 @@ void ArgumentImpl::RunTypeCallback(const std::string& in, OpsResult* out) {
 
 void ArgumentImpl::RunCallback(Context* ctx,
                                CallbackRunner::Delegate* delegate) {
-  // delegate_ = delegate;
+  runner_delegate_ = delegate;
   OpsResult result;
   if (ctx->has_value)
     RunTypeCallback(ctx->value, &result);
   if (result.has_error) {
-    // delegate_->HandleCallbackError(ctx, result.errmsg);
+    runner_delegate_->HandleCallbackError(ctx, result.errmsg);
     return;
   }
   RunActionCallback(std::move(result.value), ctx);
