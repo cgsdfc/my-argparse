@@ -155,10 +155,10 @@ class Result {
 class ArgpState {
  public:
   ArgpState(argp_state* state) : state_(state) {}
-  void Help(FILE* file, unsigned flags) {
+  void PrintHelp(FILE* file, unsigned flags) {
     argp_state_help(state_, file, flags);
   }
-  void Usage() { argp_usage(state_); }
+  void PrintUsage() { argp_usage(state_); }
 
   template <typename... Args>
   void ErrorF(const char* fmt, Args... args) {
@@ -228,53 +228,15 @@ AnyImpl<T> MakeAnyOnStack(T&& val) {
 }
 
 template <typename T>
-void WrapAny(T&& in, std::unique_ptr<Any>* out) {
-  using Type = std::remove_cv_t<std::remove_reference_t<T>>;
-  out->reset(new AnyImpl<Type>(std::forward<T>(in)));
-}
-
-// Wrap T into Any.
-template <typename T>
-void WrapAny(Result<T>* result, std::unique_ptr<Any>* out) {
-  if (result->has_value())
-    out->reset(new AnyImpl<T>(result->release_value()));
-}
-
-// Steal the T from Any and store into Result<T>.
-template <typename T>
-void UnwrapAny(std::unique_ptr<Any> any, Result<T>* out) {
-  if (any) {
-    out->set_value(UnwrapAny<T>(std::move(any)));
-  }
-}
-
-template <typename T>
-T UnwrapAny(std::unique_ptr<Any> any) {
+T AnyCast(std::unique_ptr<Any> any) {
   DCHECK(any);
   return AnyImpl<T>::FromAny(any.get())->ReleaseValue();
 }
 
 template <typename T>
-T UnwrapAny(const Any& any) {
+T AnyCast(const Any& any) {
   return AnyImpl<T>::FromAny(any).value();
 }
-
-template <typename T>
-void UnwrapAny(std::unique_ptr<Any> any, T* out) {
-  if (any) {
-    *out = UnwrapAny<T>(std::move(any));
-  }
-}
-
-// This is an internal class to communicate data/state between user's callback.
-struct Context {
-  Context(const Argument* argument, const char* value, ArgpState state);
-
-  const bool has_value;
-  const Argument* argument;
-  ArgpState state;
-  std::string value;
-};
 
 // The default impl for the types we know (bulitin-types like int).
 // This traits shouldn't be overriden by users.
@@ -594,7 +556,7 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
   if (out->has_error) {
     out->errmsg = in->release_error();
   } else if (in->has_value()) {
-    WrapAny(in->release_value(), &out->value);
+    out->value = MakeAny(in->release_value());
   }
 }
 
@@ -626,7 +588,7 @@ template <typename T>
 struct OpsImpl<OpsKind::kStore, T, true> {
   static void Run(DestPtr dest, std::unique_ptr<Any> data) {
     if (data) {
-      auto value = UnwrapAny<T>(std::move(data));
+      auto value = AnyCast<T>(std::move(data));
       dest.store(MoveOrCopy(&value));
     }
   }
@@ -635,7 +597,7 @@ struct OpsImpl<OpsKind::kStore, T, true> {
 template <typename T>
 struct OpsImpl<OpsKind::kStoreConst, T, true> {
   static void Run(DestPtr dest, const Any& data) {
-    dest.store(UnwrapAny<T>(data));
+    dest.store(AnyCast<T>(data));
   }
 };
 
@@ -644,7 +606,7 @@ struct OpsImpl<OpsKind::kAppend, T, true> {
   static void Run(DestPtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto* ptr = dest.load_ptr<T>();
-      auto value = UnwrapAny<ValueTypeOf<T>>(std::move(data));
+      auto value = AnyCast<ValueTypeOf<T>>(std::move(data));
       AppendTraits<T>::Run(ptr, MoveOrCopy(&value));
     }
   }
@@ -654,7 +616,7 @@ template <typename T>
 struct OpsImpl<OpsKind::kAppendConst, T, true> {
   static void Run(DestPtr dest, const Any& data) {
     auto* ptr = dest.load_ptr<T>();
-    auto value = UnwrapAny<ValueTypeOf<T>>(data);
+    auto value = AnyCast<ValueTypeOf<T>>(data);
     AppendTraits<T>::Run(ptr, value);
   }
 };
@@ -777,12 +739,22 @@ class ActionCallback {
   virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
 };
 
+// This is an internal class to communicate data/state between user's callback.
+struct Context {
+  Context(const Argument* argument, const char* value, ArgpState state);
+  const bool has_value;
+  const Argument* argument;
+  ArgpState state;
+  std::string value;
+  std::string errmsg;
+};
+
 class CallbackRunner {
  public:
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void HandleCallbackError(Context* ctx, const std::string& msg) = 0;
+    virtual void HandleCallbackError(Context* ctx) = 0;
     virtual void HandlePrintUsage(Context* ctx) = 0;
     virtual void HandlePrintHelp(Context* ctx) = 0;
   };
@@ -872,8 +844,8 @@ class CustomActionCallback : public ActionCallback {
 
  private:
   void Run(DestPtr dest, std::unique_ptr<Any> data) override {
-    Result<V> result;
-    UnwrapAny(std::move(data), &result);
+    Result<V> result(AnyCast<V>(std::move(data)));
+    // UnwrapAny(std::move(data), &result);
     auto* obj = dest.template load_ptr<T>();
     std::invoke(callback_, obj, std::move(result));
   }
@@ -1494,19 +1466,18 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   void set_args_doc(const char* args_doc) { argp_.args_doc = args_doc; }
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
-  // TODO: Change this scheme.
   void RunCallback(Argument* arg, char* value, ArgpState state) {
     Context ctx(arg, value, state);
     arg->GetCallbackRunner()->RunCallback(&ctx, this);
   }
 
   // CallbackRunner::Delegate:
-  void HandleCallbackError(Context* ctx, const std::string& msg) override {
-    // ctx->state.ErrorF("error parsing argument %s: %s", )
+  void HandleCallbackError(Context* ctx) override {
+    ctx->state.ErrorF("error parsing argument: %s", ctx->errmsg.c_str());
   }
 
-  void HandlePrintUsage(Context* ctx) override { ctx->state.Usage(); }
-  void HandlePrintHelp(Context* ctx) override { ctx->state.Help(stderr, 0); }
+  void HandlePrintUsage(Context* ctx) override { ctx->state.PrintUsage(); }
+  void HandlePrintHelp(Context* ctx) override { ctx->state.PrintHelp(stderr, 0); }
 
   error_t DoParse(int key, char* arg, ArgpState state);
 

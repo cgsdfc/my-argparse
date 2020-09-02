@@ -539,7 +539,8 @@ void ArgumentImpl::RunCallback(Context* ctx,
   if (ctx->has_value)
     RunTypeCallback(ctx->value, &result);
   if (result.has_error) {
-    runner_delegate_->HandleCallbackError(ctx, result.errmsg);
+    ctx->errmsg = std::move(result.errmsg);
+    runner_delegate_->HandleCallbackError(ctx);
     return;
   }
   RunActionCallback(std::move(result.value), ctx);
