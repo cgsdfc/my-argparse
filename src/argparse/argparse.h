@@ -485,13 +485,6 @@ class OpsFactory {
   virtual ~OpsFactory() {}
 };
 
-class DestInfo {
- public:
-  virtual std::unique_ptr<OpsFactory> CreateOpsFactory() = 0;
-  virtual DestPtr GetDestPtr() = 0;
-  virtual ~DestInfo() {}
-};
-
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
 
@@ -542,6 +535,11 @@ class CallbackRunner {
   };
   virtual void RunCallback(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
+};
+
+struct DestInfo {
+  DestPtr dest_ptr;
+  std::unique_ptr<OpsFactory> ops_factory;
 };
 
 struct ActionInfo {
@@ -666,6 +664,7 @@ class ArgpParser {
   static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
 };
 
+class Names;
 class ArgumentHolder {
  public:
   virtual Argument* AddArgumentToGroup(Names names, int group) = 0;
@@ -919,20 +918,6 @@ std::unique_ptr<ActionCallback> CreateActionCallback(Callback&& cb) {
       (detail::function_signature_t<Callback>*)nullptr);
 }
 
-template <typename T>
-class DestInfoImpl : public DestInfo {
- public:
-  explicit DestInfoImpl(T* ptr) : dest_(ptr) {}
-
-  std::unique_ptr<OpsFactory> CreateOpsFactory() override {
-    return CreateOperationsFactory<T>();
-  }
-  DestPtr GetDestPtr() override { return dest_; }
-
- private:
-  DestPtr dest_;
-};
-
 class FileType {
  public:
   explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
@@ -996,12 +981,14 @@ struct Action {
 };
 
 struct Dest {
-  std::unique_ptr<DestInfo> dest_info;
-  Dest() = default;
+  std::unique_ptr<DestInfo> dest_info = std::make_unique<DestInfo>();
+
+  Dest() : dest_info(nullptr) {}
   template <typename T>
   /* implicit */ Dest(T* ptr) {
     CHECK_USER(ptr, "Pointer passed to dest() must not be null.");
-    dest_info.reset(new DestInfoImpl<T>(ptr));
+    dest_info->dest_ptr = DestPtr(ptr);
+    dest_info->ops_factory = CreateOperationsFactory<T>();
   }
 };
 
@@ -1166,8 +1153,8 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
   }
   void SetDest(std::unique_ptr<DestInfo> dest) override {
     DCHECK(dest);
-    impl_->dest_ptr_ = dest->GetDestPtr();
-    impl_->ops_factory_ = dest->CreateOpsFactory();
+    impl_->dest_ptr_ = dest->dest_ptr;
+    impl_->ops_factory_ = std::move(dest->ops_factory);
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
     DCHECK(info);
