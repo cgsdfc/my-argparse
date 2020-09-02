@@ -52,10 +52,10 @@ void Names::InitOptions(std::initializer_list<const char*> names) {
 }
 
 // ArgumentImpl:
-ArgumentImpl::ArgumentImpl(Delegate* delegate, const Names& names, int group)
-    : callback_resolver_(OpsCallbackRunner::CreateResolver()),
-      delegate_(delegate),
-      group_(group) {
+ArgumentImpl::ArgumentImpl(Argument::Delegate* delegate,
+                           const Names& names,
+                           int group)
+    : delegate_(delegate), group_(group) {
   InitNames(names);
   InitKey(names.is_option);
   delegate_->OnArgumentCreated(this);
@@ -158,9 +158,9 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
 }
 
 void ArgumentImpl::Finalize() {
-  DCHECK(!callback_runner_ && callback_resolver_);
-  callback_runner_ = callback_resolver_->CreateCallbackRunner();
-  callback_resolver_.reset();
+  // DCHECK(!callback_runner_ && callback_resolver_);
+  // callback_runner_ = callback_resolver_->CreateCallbackRunner();
+  // callback_resolver_.reset();
 }
 
 void ArgumentHolderImpl::CompileToArgpOptions(
@@ -475,8 +475,7 @@ Actions StringToActions(const std::string& str) {
   return iter->second;
 }
 
-void OpsCallbackRunner::RunActionCallback(std::unique_ptr<Any> data,
-                                          Context* ctx) {
+void ArgumentImpl::RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
   auto* ops = action_ops_.get();
   DCHECK(ops);
 
@@ -502,10 +501,10 @@ void OpsCallbackRunner::RunActionCallback(std::unique_ptr<Any> data,
       ops->AppendConst(dest(), const_value());
       break;
     case Actions::kPrintHelp:
-      delegate_->HandlePrintHelp(ctx);
+      // delegate_->HandlePrintHelp(ctx);
       break;
     case Actions::kPrintUsage:
-      delegate_->HandlePrintUsage(ctx);
+      // delegate_->HandlePrintUsage(ctx);
       break;
     case Actions::kCustom:
       DCHECK(custom_action_);
@@ -514,7 +513,7 @@ void OpsCallbackRunner::RunActionCallback(std::unique_ptr<Any> data,
   }
 }
 
-void OpsCallbackRunner::RunTypeCallback(const std::string& in, OpsResult* out) {
+void ArgumentImpl::RunTypeCallback(const std::string& in, OpsResult* out) {
   auto* ops = type_ops_.get();
   DCHECK(ops);
   switch (type_code_) {
@@ -533,13 +532,14 @@ void OpsCallbackRunner::RunTypeCallback(const std::string& in, OpsResult* out) {
   }
 }
 
-void OpsCallbackRunner::Run(Context* ctx, Delegate* delegate) {
-  delegate_ = delegate;
+void ArgumentImpl::RunCallback(Context* ctx,
+                               CallbackRunner::Delegate* delegate) {
+  // delegate_ = delegate;
   OpsResult result;
   if (ctx->has_value)
     RunTypeCallback(ctx->value, &result);
   if (result.has_error) {
-    delegate_->HandleCallbackError(ctx, result.errmsg);
+    // delegate_->HandleCallbackError(ctx, result.errmsg);
     return;
   }
   RunActionCallback(std::move(result.value), ctx);

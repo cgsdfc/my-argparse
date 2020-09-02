@@ -786,7 +786,7 @@ class CallbackRunner {
     virtual void HandlePrintUsage(Context* ctx) = 0;
     virtual void HandlePrintHelp(Context* ctx) = 0;
   };
-  virtual void Run(Context* ctx, Delegate* delegate) = 0;
+  virtual void RunCallback(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
 };
 
@@ -992,23 +992,27 @@ Actions StringToActions(const std::string& str);
 
 // Type-erasured
 struct Action {
-  std::unique_ptr<ActionInfo> info;
-  // Actions action = Actions::kNoAction;
-  // std::unique_ptr<ActionCallback> callback;
+  std::unique_ptr<ActionInfo> info = std::make_unique<ActionInfo>();
 
-  Action() = default;
+  Action() : info(nullptr) {}
   Action(Action&&) = default;
 
-  // Action(const char* action_string) {
-  //   DCHECK(action_string);
-  //   action = StringToActions(action_string);
-  // }
+  Action(const char* action_string) {
+    DCHECK(action_string);
+    info->action_code = StringToActions(action_string);
+  }
 
-  // Action(ActionCallback* cb) : action(Actions::kCustom), callback(cb) {}
+  Action(ActionCallback* cb) {
+    DCHECK(cb);
+    info->callback.reset(cb);
+    info->action_code = Actions::kCustom;
+  }
 
-  // template <typename Callback>
-  // /* implicit */ Action(Callback&& cb)
-  //     : Action(CreateActionCallback(std::forward<Callback>(cb))) {}
+  template <typename Callback>
+  /* implicit */ Action(Callback&& cb) {
+    info->callback = CreateActionCallback(std::forward<Callback>(cb));
+    info->action_code = Actions::kCustom;
+  }
 };
 
 struct Dest {
@@ -1029,101 +1033,101 @@ struct AnyValue {
   AnyValue(T&& val) : data(MakeAny(std::forward<T>(val))) {}
 };
 
-class OpsCallbackRunner : public CallbackRunner {
- public:
-  void Run(Context* ctx, Delegate* delegate) override;
-  static CallbackResolver* CreateResolver();
+// class OpsCallbackRunner : public CallbackRunner {
+//  public:
+//   void RunCallback(Context* ctx, Delegate* delegate) override;
+//   static CallbackResolver* CreateResolver();
 
- private:
-  class ResolverImpl;
-  OpsCallbackRunner() {}
+//  private:
+//   class ResolverImpl;
+//   OpsCallbackRunner() {}
 
-  const Any& const_value() const {
-    DCHECK(const_value_);
-    return *const_value_;
-  }
+//   const Any& const_value() const {
+//     DCHECK(const_value_);
+//     return *const_value_;
+//   }
 
-  const DestPtr& dest() const {
-    DCHECK(dest_ptr_);
-    return dest_ptr_;
-  }
+//   const DestPtr& dest() const {
+//     DCHECK(dest_ptr_);
+//     return dest_ptr_;
+//   }
 
-  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
-  void RunTypeCallback(const std::string& in, OpsResult* out);
+//   void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
+//   void RunTypeCallback(const std::string& in, OpsResult* out);
 
-  // This might be extracted to be CallbackData.
-  std::unique_ptr<Operations> action_ops_;
-  std::unique_ptr<Operations> type_ops_;
-  std::unique_ptr<Any> const_value_;
-  std::unique_ptr<ActionCallback> custom_action_;
-  std::unique_ptr<TypeCallback> custom_type_;
-  Actions action_code_ = Actions::kStore;
-  Types type_code_ = Types::kParse;
-  Mode mode_ = kModeNoMode;
-  DestPtr dest_ptr_;
-  Delegate* delegate_ = nullptr;
-};
+//   // This might be extracted to be CallbackData.
+//   std::unique_ptr<Operations> action_ops_;
+//   std::unique_ptr<Operations> type_ops_;
+//   std::unique_ptr<Any> const_value_;
+//   std::unique_ptr<ActionCallback> custom_action_;
+//   std::unique_ptr<TypeCallback> custom_type_;
+//   Actions action_code_ = Actions::kStore;
+//   Types type_code_ = Types::kParse;
+//   Mode mode_ = kModeNoMode;
+//   DestPtr dest_ptr_;
+//   Delegate* delegate_ = nullptr;
+// };
 
 // Directly store user's info into Runner.
-class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
- public:
-  ResolverImpl() : runner_(new OpsCallbackRunner()) {}
+// class OpsCallbackRunner::ResolverImpl : public CallbackResolver {
+//  public:
+//   ResolverImpl() : runner_(new OpsCallbackRunner()) {}
 
-  void SetDest(std::unique_ptr<DestInfo> dest) override {
-    DCHECK(dest);
-    runner_->dest_ptr_ = dest->GetDestPtr();
-    // This factory is used to create more than one operations.
-    ops_factory_ = dest->CreateOpsFactory();
-  }
+//   void SetDest(std::unique_ptr<DestInfo> dest) override {
+//     DCHECK(dest);
+//     runner_->dest_ptr_ = dest->GetDestPtr();
+//     // This factory is used to create more than one operations.
+//     ops_factory_ = dest->CreateOpsFactory();
+//   }
 
-  void SetConstValue(std::unique_ptr<Any> value) override {
-    DCHECK(value);
-    runner_->const_value_ = std::move(value);
-  }
+//   void SetConstValue(std::unique_ptr<Any> value) override {
+//     DCHECK(value);
+//     runner_->const_value_ = std::move(value);
+//   }
 
-   std::unique_ptr<CallbackRunner> CreateCallbackRunner() override {
-    // runner_->Finalize(ops_factory_.get());
-    // TODO: Compile...
-    return std::move(runner_);
-  }
+//    std::unique_ptr<CallbackRunner> CreateCallbackRunner() override {
+//     // runner_->Finalize(ops_factory_.get());
+//     // TODO: Compile...
+//     return std::move(runner_);
+//   }
 
-  void SetCustomType(std::unique_ptr<TypeCallback> cb) override {
-    DCHECK(cb);
-    runner_->type_code_ = Types::kCustom;
-    runner_->custom_type_ = std::move(cb);
-  }
+//   void SetCustomType(std::unique_ptr<TypeCallback> cb) override {
+//     DCHECK(cb);
+//     runner_->type_code_ = Types::kCustom;
+//     runner_->custom_type_ = std::move(cb);
+//   }
 
-  void SetDefaultType(std::unique_ptr<Operations> ops) override {
-    DCHECK(ops);
-    runner_->type_ops_ = std::move(ops);
-    // TODO: infer type_code.
-  }
+//   void SetDefaultType(std::unique_ptr<Operations> ops) override {
+//     DCHECK(ops);
+//     runner_->type_ops_ = std::move(ops);
+//     // TODO: infer type_code.
+//   }
 
-  void SetDefaultAction(Actions code) override {
-    DCHECK(code != Actions::kCustom);
-    runner_->action_code_ = code;
-    runner_->custom_action_.reset();
-  }
+//   void SetDefaultAction(Actions code) override {
+//     DCHECK(code != Actions::kCustom);
+//     runner_->action_code_ = code;
+//     runner_->custom_action_.reset();
+//   }
 
-  void SetCustomAction(std::unique_ptr<ActionCallback> cb) override {
-    DCHECK(cb);
-    runner_->action_code_ = Actions::kCustom;
-    runner_->custom_action_ = std::move(cb);
-  }
+//   void SetCustomAction(std::unique_ptr<ActionCallback> cb) override {
+//     DCHECK(cb);
+//     runner_->action_code_ = Actions::kCustom;
+//     runner_->custom_action_ = std::move(cb);
+//   }
 
-  void SetOpenMode(Mode mode) override {
-    DCHECK(mode != kModeNoMode);
-    runner_->mode_ = mode;
-  }
+//   void SetOpenMode(Mode mode) override {
+//     DCHECK(mode != kModeNoMode);
+//     runner_->mode_ = mode;
+//   }
 
- private:
-  std::unique_ptr<OpsCallbackRunner> runner_;
-  std::unique_ptr<OpsFactory> ops_factory_;
-};
+//  private:
+//   std::unique_ptr<OpsCallbackRunner> runner_;
+//   std::unique_ptr<OpsFactory> ops_factory_;
+// };
 
-inline CallbackResolver* OpsCallbackRunner::CreateResolver() {
-  return new ResolverImpl();
-}
+// inline CallbackResolver* OpsCallbackRunner::CreateResolver() {
+//   return new ResolverImpl();
+// }
 
 bool IsValidPositionalName(const char* name, std::size_t len);
 
@@ -1162,9 +1166,9 @@ struct Names {
 };
 
 // Holds all meta-info about an argument.
-class ArgumentImpl : public Argument {
+class ArgumentImpl : public Argument, private CallbackRunner {
  public:
-  ArgumentImpl(Delegate* delegate, const Names& names, int group);
+  ArgumentImpl(Argument::Delegate* delegate, const Names& names, int group);
 
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
   bool IsOption() const override { return is_option(); }
@@ -1195,10 +1199,8 @@ class ArgumentImpl : public Argument {
     return long_names_.empty() ? nullptr : long_names_[0].c_str();
   }
 
-  CallbackRunner* GetCallbackRunner() override {
-    DCHECK(callback_runner_);
-    return callback_runner_.get();
-  }
+  CallbackRunner* GetCallbackRunner() override { return this; }
+
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostream& os) const override;
 
@@ -1226,20 +1228,34 @@ class ArgumentImpl : public Argument {
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
+  // CallbackRunner:
+  const Any& const_value() const {
+    DCHECK(const_value_);
+    return *const_value_;
+  }
+
+  const DestPtr& dest() const {
+    DCHECK(dest_ptr_);
+    return dest_ptr_;
+  }
+
+  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate) override;
+  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
+  void RunTypeCallback(const std::string& in, OpsResult* out);
+
   // For extension.
-  Delegate* delegate_;
+  Argument::Delegate* delegate_;
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
-  std::unique_ptr<CallbackResolver> callback_resolver_;
-  std::unique_ptr<CallbackRunner> callback_runner_;  // Maybe null.
   std::string help_doc_;
   std::vector<std::string> long_names_;
   std::vector<char> short_names_;
   std::string meta_var_;
   bool is_required_ = false;
 
-  // Callback members.
+  // CallbackRunner members.
+  std::unique_ptr<OpsFactory> ops_factory_;
   std::unique_ptr<Operations> action_ops_;
   std::unique_ptr<Operations> type_ops_;
   std::unique_ptr<Any> const_value_;
@@ -1264,36 +1280,27 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
     impl_->meta_var_ = std::move(meta_var);
   }
   void SetDest(std::unique_ptr<DestInfo> dest) override {
-    impl_->callback_resolver_->SetDest(std::move(dest));
+    DCHECK(dest);
+    impl_->dest_ptr_ = dest->GetDestPtr();
+    impl_->ops_factory_ = dest->CreateOpsFactory();
   }
-  void SetType(std::unique_ptr<TypeInfo> info) override {}
-  void SetAction(std::unique_ptr<ActionInfo> info) override {}
-  // void SetType(std::unique_ptr<Operations> ops,
-  //              std::unique_ptr<TypeCallback> cb,
-  //              Mode mode) override {
-  //   if (ops)
-  //     impl_->callback_resolver_->SetDefaultType(std::move(ops));
-  //   else if (cb)
-  //     impl_->callback_resolver_->SetCustomType(std::move(cb));
-  //   else if (mode != kModeNoMode)
-  //     impl_->callback_resolver_->SetOpenMode(mode);
-  // }
-
-  // void SetAction(Actions code, std::unique_ptr<ActionCallback> cb) override {
-  //   // TODO: may change this.
-  //   if (code != Actions::kCustom) {
-  //     impl_->callback_resolver_->SetDefaultAction(code);
-  //     return;
-  //   }
-  //   DCHECK(cb);
-  //   impl_->callback_resolver_->SetCustomAction(std::move(cb));
-  // }
-
+  void SetType(std::unique_ptr<TypeInfo> info) override {
+    DCHECK(info);
+    impl_->type_ops_ = std::move(info->ops);
+    impl_->custom_type_ = std::move(info->callback);
+    impl_->mode_ = info->mode;
+  }
+  void SetAction(std::unique_ptr<ActionInfo> info) override {
+    DCHECK(info);
+    impl_->action_code_ = info->action_code;
+    impl_->custom_action_ = std::move(info->callback);
+  }
   void SetConstValue(std::unique_ptr<Any> value) override {
-    impl_->callback_resolver_->SetConstValue(std::move(value));
+    DCHECK(value);
+    impl_->const_value_ = std::move(value);
   }
-
   void SetDefaultValue(std::unique_ptr<Any> value) override {
+    DCHECK(value);
     impl_->default_value_ = std::move(value);
   }
 
@@ -1600,7 +1607,7 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   // TODO: Change this scheme.
   void RunCallback(Argument* arg, char* value, ArgpState state) {
     Context ctx(arg, value, state);
-    arg->GetCallbackRunner()->Run(&ctx, this);
+    arg->GetCallbackRunner()->RunCallback(&ctx, this);
   }
 
   // CallbackRunner::Delegate:
