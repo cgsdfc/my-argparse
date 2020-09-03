@@ -291,11 +291,20 @@ using function_signature_t = std::conditional_t<
 >;
 // clang-format on
 
-// template <typename T, typename SFINAE = void>
-// struct is_callback : std::false_type {};
+template <typename T>
+struct is_function_pointer : std::is_function<std::remove_pointer_t<T>> {};
 
-// template <typename T>
-// struct is_callback<T, std::void_t<function_signature_t<T>>> : std::true_type {};
+template <typename T, typename SFINAE = void>
+struct is_functor : std::false_type {};
+
+// Note: this will fail on auto lambda and overloaded operator().
+// But you should not use these as input to callback.
+template <typename T>
+struct is_functor<T, std::void_t<decltype(&T::operator())>> : std::true_type {};
+
+template <typename Func, typename F = std::decay_t<Func>>
+struct is_callback
+    : std::bool_constant<is_function_pointer<F>{} || is_functor<F>{}> {};
 
 }  // namespace detail
 
@@ -920,7 +929,7 @@ std::unique_ptr<ActionCallback> CreateActionCallbackImpl(
 
 template <typename Callback>
 std::unique_ptr<ActionCallback> CreateActionCallback(Callback&& cb) {
-  return CreateCustomActionCallbackImpl(
+  return CreateActionCallbackImpl(
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
 }
@@ -961,7 +970,8 @@ struct Type {
     info->mode = file_type.mode();
   }
 
-  template <typename Callback>
+  template <typename Callback,
+            typename = std::enable_if_t<detail::is_callback<Callback>{}>>
   /* implicit */ Type(Callback&& cb) {
     info->type_code = Types::kCustom;
     info->callback = CreateTypeCallback(std::forward<Callback>(cb));
@@ -988,7 +998,8 @@ struct Action {
     info->action_code = Actions::kCustom;
   }
 
-  template <typename Callback>
+  template <typename Callback,
+            typename = std::enable_if_t<detail::is_callback<Callback>{}>>
   /* implicit */ Action(Callback&& cb) {
     info->callback = CreateActionCallback(std::forward<Callback>(cb));
     info->action_code = Actions::kCustom;
@@ -1149,8 +1160,8 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   std::unique_ptr<Any> default_value_;
   std::unique_ptr<ActionCallback> custom_action_;
   std::unique_ptr<TypeCallback> custom_type_;
-  Actions action_code_ = Actions::kStore;
-  Types type_code_ = Types::kParse;
+  Actions action_code_ = Actions::kNoAction;
+  Types type_code_ = Types::kNothing;
   Mode mode_ = kModeNoMode;
   DestPtr dest_ptr_;
 };

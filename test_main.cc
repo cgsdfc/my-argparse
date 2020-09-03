@@ -12,16 +12,24 @@ struct AppendTraits<Appendable> {
 };
 
 
+struct FU {
+  void operator()(bool);
+  int operator()(int);
+};
+
 int main(int argc, char const* argv[]) {
   ArgumentParser parser;
 
-  // std::ofstream output;
-  int output;
-  parser.add_argument("output", &output, "output to this file")
-      .default_value(0)
-      .const_value(1);
+  std::cout << detail::is_functor<int>{};
+  std::cout << detail::is_functor<std::function<void()>>{};
+  auto lamb = []() {};
+  std::cout << detail::is_functor<decltype(lamb)>{};
+  std::cout << detail::is_functor<FU>{};
 
-  std::cout << sizeof(ArgumentImpl);
-  parser.parse_args(argc, argv);
+  auto lamb2 = [](auto x) {};
+  std::cout << detail::is_functor<decltype(lamb2)>{};
 
+  parser.add_argument("out")
+      .action([](int* a, Result<int> b) {})
+      .type([](const std::string& in) { return false; });
 }
