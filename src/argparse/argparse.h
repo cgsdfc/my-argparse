@@ -291,6 +291,12 @@ using function_signature_t = std::conditional_t<
 >;
 // clang-format on
 
+// template <typename T, typename SFINAE = void>
+// struct is_callback : std::false_type {};
+
+// template <typename T>
+// struct is_callback<T, std::void_t<function_signature_t<T>>> : std::true_type {};
+
 }  // namespace detail
 
 enum class Actions {
@@ -543,11 +549,12 @@ struct DestInfo {
 };
 
 struct ActionInfo {
-  Actions action_code;
+  Actions action_code = Actions::kNoAction;
   std::unique_ptr<ActionCallback> callback;
 };
 
 struct TypeInfo {
+  Types type_code = Types::kNothing;
   std::unique_ptr<Operations> ops;
   std::unique_ptr<TypeCallback> callback;
   Mode mode;
@@ -938,17 +945,25 @@ struct Type {
   // To explicitly request a type, use Type<double>().
   template <typename T>
   Type() {
+    info->type_code = Types::kParse;
     info->ops = CreateOperations<T>();
   }
 
   // Use it to provide your own TypeCallback impl.
-  Type(TypeCallback* cb) { info->callback.reset(cb); }
+  Type(TypeCallback* cb) {
+    info->type_code = Types::kCustom;
+    info->callback.reset(cb);
+  }
 
   // Use FileType("rw") to request opening a file to read/write.
-  Type(FileType file_type) { info->mode = file_type.mode(); }
+  Type(FileType file_type) {
+    info->type_code = Types::kOpen;
+    info->mode = file_type.mode();
+  }
 
   template <typename Callback>
   /* implicit */ Type(Callback&& cb) {
+    info->type_code = Types::kCustom;
     info->callback = CreateTypeCallback(std::forward<Callback>(cb));
   }
 };
@@ -1158,6 +1173,7 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
     DCHECK(info);
+    impl_->type_code_ = info->type_code;
     impl_->type_ops_ = std::move(info->ops);
     impl_->custom_type_ = std::move(info->callback);
     impl_->mode_ = info->mode;
