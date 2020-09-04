@@ -551,11 +551,18 @@ class CallbackRunner {
 struct DestInfo {
   DestPtr dest_ptr;
   std::unique_ptr<OpsFactory> ops_factory;
+
+  DestInfo(DestPtr d, std::unique_ptr<OpsFactory> f)
+      : dest_ptr(d), ops_factory(std::move(f)) {}
 };
 
 struct ActionInfo {
   Actions action_code = Actions::kNoAction;
   std::unique_ptr<ActionCallback> callback;
+
+  explicit ActionInfo(Actions a) : action_code(a) {}
+  explicit ActionInfo(std::unique_ptr<ActionCallback> cb)
+      : action_code(Actions::kCustom), callback(std::move(cb)) {}
 };
 
 struct TypeInfo {
@@ -564,7 +571,6 @@ struct TypeInfo {
   std::unique_ptr<TypeCallback> callback;
   Mode mode;
 
-  TypeInfo() = default;
   explicit TypeInfo(Mode m) : type_code(Types::kOpen), mode(m) {}
   explicit TypeInfo(std::unique_ptr<TypeCallback> cb)
       : type_code(Types::kCustom), callback(std::move(cb)) {}
@@ -963,9 +969,9 @@ class FileType {
 };
 
 struct Type {
-  std::unique_ptr<TypeInfo> info = std::make_unique<TypeInfo>();
+  std::unique_ptr<TypeInfo> info;
 
-  Type() : info(nullptr) {}
+  Type() = default;
   Type(Type&&) = default;
 
   // To explicitly request a type, use Type<double>().
@@ -989,39 +995,32 @@ Actions StringToActions(const std::string& str);
 
 // Type-erasured
 struct Action {
-  std::unique_ptr<ActionInfo> info = std::make_unique<ActionInfo>();
+  std::unique_ptr<ActionInfo> info;
 
-  Action() : info(nullptr) {}
+  Action() = default;
   Action(Action&&) = default;
 
-  Action(const char* action_string) {
-    DCHECK(action_string);
-    info->action_code = StringToActions(action_string);
-  }
+  Action(const char* action_string)
+      : info(new ActionInfo(StringToActions(action_string))) {}
 
-  Action(ActionCallback* cb) {
-    DCHECK(cb);
-    info->callback.reset(cb);
-    info->action_code = Actions::kCustom;
-  }
+  Action(ActionCallback* cb)
+      : info(new ActionInfo(std::unique_ptr<ActionCallback>(cb))) {}
 
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  /* implicit */ Action(Callback&& cb) {
-    info->callback = CreateActionCallback(std::forward<Callback>(cb));
-    info->action_code = Actions::kCustom;
+  /* implicit */ Action(Callback&& cb)
+      : info(new ActionInfo(CreateActionCallback(std::forward<Callback>(cb)))) {
   }
 };
 
 struct Dest {
-  std::unique_ptr<DestInfo> dest_info = std::make_unique<DestInfo>();
+  std::unique_ptr<DestInfo> info;
 
-  Dest() : dest_info(nullptr) {}
+  Dest() = default;
   template <typename T>
-  /* implicit */ Dest(T* ptr) {
+  /* implicit */ Dest(T* ptr)
+      : info(new DestInfo(DestPtr(ptr), CreateOperationsFactory<T>())) {
     CHECK_USER(ptr, "Pointer passed to dest() must not be null.");
-    dest_info->dest_ptr = DestPtr(ptr);
-    dest_info->ops_factory = CreateOperationsFactory<T>();
   }
 };
 
@@ -1227,8 +1226,8 @@ class ArgumentBuilder {
       : init_(std::move(init)) {}
 
   ArgumentBuilder& dest(Dest d) {
-    if (d.dest_info)
-      init_->SetDest(std::move(d.dest_info));
+    if (d.info)
+      init_->SetDest(std::move(d.info));
     return *this;
   }
   ArgumentBuilder& action(Action a) {
