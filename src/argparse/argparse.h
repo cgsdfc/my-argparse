@@ -633,12 +633,11 @@ class ArgumentInitializer {
 
 class Argument {
  public:
-  class Delegate {
+  class NextOptionKey {
    public:
     // Generate a key for an option.
-    virtual int NextOptionKey() = 0;
-    // Call when an Arg is fully constructed.
-    virtual ~Delegate() {}
+    virtual int GetNextKey() = 0;
+    virtual ~NextOptionKey() {}
   };
 
   // Finalize...
@@ -1100,7 +1099,7 @@ struct Names {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument, private CallbackRunner {
  public:
-  ArgumentImpl(Argument::Delegate* delegate,
+  ArgumentImpl(Argument::NextOptionKey* next_key,
                std::unique_ptr<NamesInfo> names,
                int group);
 
@@ -1161,8 +1160,6 @@ class ArgumentImpl : public Argument, private CallbackRunner {
 
   class InitializerImpl;
 
-  void InitKey();
-
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
   // CallbackRunner:
@@ -1180,16 +1177,11 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
   void RunTypeCallback(const std::string& in, OpsResult* out);
 
-  // For extension.
-  Argument::Delegate* delegate_;
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
   std::unique_ptr<NamesInfo> names_info_;
   std::string help_doc_;
-  // std::vector<std::string> long_names_;
-  // std::vector<char> short_names_;
-  // std::string meta_var_;
   bool is_required_ = false;
 
   // CallbackRunner members.
@@ -1347,7 +1339,7 @@ class ArgumentGroup : public ArgumentContainer {
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
 class ArgumentHolderImpl : public ArgumentHolder,
-                           public Argument::Delegate,
+                           public Argument::NextOptionKey,
                            public ArgpParser::Delegate {
  public:
   ArgumentHolderImpl();
@@ -1410,8 +1402,8 @@ class ArgumentHolderImpl : public ArgumentHolder,
     return &groups_[group - 1];
   }
 
-  // Argument::Delegate:
-  int NextOptionKey() override { return next_key_++; }
+  // Argument::NextOptionKey:
+  int GetNextKey() override { return next_key_++; }
 
   bool CheckNamesConflict(const NamesInfo& names);
 

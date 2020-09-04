@@ -58,21 +58,16 @@ Names::Names(std::initializer_list<const char*> names) {
 }
 
 // ArgumentImpl:
-ArgumentImpl::ArgumentImpl(Argument::Delegate* delegate,
+ArgumentImpl::ArgumentImpl(Argument::NextOptionKey* next_key,
                            std::unique_ptr<NamesInfo> names,
                            int group)
-    : delegate_(delegate), names_info_(std::move(names)), group_(group) {
+    : names_info_(std::move(names)), group_(group) {
   DCHECK(names_info_);
-  DCHECK(delegate);
-  InitKey();
-}
-
-void ArgumentImpl::InitKey() {
   if (!names_info_->is_option) {
     key_ = kKeyForPositional;
     return;
   }
-  key_ = short_names().empty() ? delegate_->NextOptionKey() : short_names()[0];
+  key_ = short_names().empty() ? next_key->GetNextKey() : short_names()[0];
 }
 
 void ArgumentImpl::CompileToArgpOptions(
