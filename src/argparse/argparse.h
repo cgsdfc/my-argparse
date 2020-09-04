@@ -595,6 +595,27 @@ struct TypeInfo {
       : type_code(Types::kParse), ops(std::move(ops)) {}
 };
 
+// Keep all info needed for running callback.
+struct CallbackInfo {
+  std::unique_ptr<DestInfo> dest;
+  std::unique_ptr<Operations> action_ops;
+  std::unique_ptr<ActionInfo> action;
+  std::unique_ptr<TypeInfo> type;
+  std::unique_ptr<NumArgsInfo> num_args;
+  std::unique_ptr<Any> const_value;
+  std::unique_ptr<Any> default_value;
+
+  void Initialize();
+  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate);
+
+  // Helpers:
+ private:
+  void InitActionCallback();
+  void InitTypeCallback();
+  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
+  void RunTypeCallback(const std::string& in, OpsResult* out);
+};
+
 // This initializes an Argument.
 class ArgumentInitializer {
  public:
@@ -1731,7 +1752,7 @@ struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
 // As user, you can:
 // 1. Be pleasant with the default setting for your type, such std::string and
 // bool.
-// 2. Want to use a metatype, tell us by MetaTypeFor<T>.
+// 2. Want to use a metatype, tell us by MetaTypeOf<T>.
 // 3. Want a completey new type hint, tell us by TypeHintTraits<T>.
 enum class MetaTypes {
   kString,
@@ -1747,38 +1768,38 @@ template <MetaTypes M>
 using MetaTypeContant = std::integral_constant<MetaTypes, M>;
 
 template <typename T, typename SFINAE = void>
-struct MetaTypeFor : MetaTypeContant<MetaTypes::kUnknown> {};
+struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
 
 // String.
 template <>
-struct MetaTypeFor<std::string, void> : MetaTypeContant<MetaTypes::kString> {};
+struct MetaTypeOf<std::string, void> : MetaTypeContant<MetaTypes::kString> {};
 
 // Bool.
 template <>
-struct MetaTypeFor<bool, void> : MetaTypeContant<MetaTypes::kBool> {};
+struct MetaTypeOf<bool, void> : MetaTypeContant<MetaTypes::kBool> {};
 
 // Char.
 template <>
-struct MetaTypeFor<char, void> : MetaTypeContant<MetaTypes::kChar> {};
+struct MetaTypeOf<char, void> : MetaTypeContant<MetaTypes::kChar> {};
 
 // File.
 template <typename T>
-struct MetaTypeFor<T, std::enable_if_t<IsOpsSupported<OpsKind::kOpen, T>{}>>
+struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kOpen, T>{}>>
     : MetaTypeContant<MetaTypes::kFile> {};
 
 // List.
 template <typename T>
-struct MetaTypeFor<T, std::enable_if_t<IsOpsSupported<OpsKind::kAppend, T>{}>>
+struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kAppend, T>{}>>
     : MetaTypeContant<MetaTypes::kList> {};
 
 // Number.
 template <typename T>
-struct MetaTypeFor<T, std::enable_if_t<has_stl_number_parser_t<T>{}>>
+struct MetaTypeOf<T, std::enable_if_t<has_stl_number_parser_t<T>{}>>
     : MetaTypeContant<MetaTypes::kNumber> {};
 
 // If you get unhappy with this default handling, for example,
 // you want number to be "number", you can specialize this.
-template <typename T, MetaTypes M = MetaTypeFor<T>{}>
+template <typename T, MetaTypes M = MetaTypeOf<T>{}>
 struct MetaTypeHint {
   static std::string Run() {
     switch (M) {
@@ -1809,7 +1830,7 @@ struct MetaTypeHint<T, MetaTypes::kList> {
 template <typename T>
 struct DefaultTypeHint<
     T,
-    std::enable_if_t<MetaTypes::kUnknown != MetaTypeFor<T>{}>>
+    std::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
     : MetaTypeHint<T> {};
 
 }  // namespace argparse
