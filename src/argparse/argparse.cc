@@ -65,7 +65,6 @@ ArgumentImpl::ArgumentImpl(Argument::Delegate* delegate,
   DCHECK(names_info_);
   DCHECK(delegate);
   InitKey();
-  delegate_->OnArgumentCreated(this);
 }
 
 void ArgumentImpl::InitKey() {
@@ -503,9 +502,16 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
   CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
   DCHECK2(group <= groups_.size(), "No such group");
   GroupFromID(group)->IncRef();
-  Argument& arg = arguments_.emplace_back(this, std::move(names), group);
   SetDirty(true);
-  return &arg;
+
+  ArgumentImpl* arg = &arguments_.emplace_back(this, std::move(names), group);
+  if (arg->is_option()) {
+    bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
+    DCHECK(inserted);
+  } else {
+    positional_arguments_.push_back(arg);
+  }
+  return arg;
 }
 
 Argument* ArgumentHolderImpl::AddArgument(std::unique_ptr<NamesInfo> names) {
@@ -516,15 +522,6 @@ Argument* ArgumentHolderImpl::AddArgument(std::unique_ptr<NamesInfo> names) {
 ArgumentGroup ArgumentHolderImpl::AddArgumentGroup(const char* header) {
   int group = AddGroup(header);
   return ArgumentGroup(this, group);
-}
-
-void ArgumentHolderImpl::OnArgumentCreated(Argument* arg) {
-  if (arg->IsOption()) {
-    bool inserted = optional_arguments_.emplace(arg->GetKey(), arg).second;
-    DCHECK(inserted);
-  } else {
-    positional_arguments_.push_back(arg);
-  }
 }
 
 ArgumentHolderImpl::Group::Group(int group, const char* header)

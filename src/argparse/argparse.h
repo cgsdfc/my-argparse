@@ -638,7 +638,6 @@ class Argument {
     // Generate a key for an option.
     virtual int NextOptionKey() = 0;
     // Call when an Arg is fully constructed.
-    virtual void OnArgumentCreated(Argument*) = 0;
     virtual ~Delegate() {}
   };
 
@@ -1413,7 +1412,6 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
   // Argument::Delegate:
   int NextOptionKey() override { return next_key_++; }
-  void OnArgumentCreated(Argument* arg) override;
 
   bool CheckNamesConflict(const NamesInfo& names);
 
