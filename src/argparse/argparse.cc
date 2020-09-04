@@ -20,51 +20,51 @@ Names::Names(const char* name) {
   auto len = std::strlen(name);
   CHECK_USER(IsValidPositionalName(name, len),
              "Not a valid positional name: %s", name);
-  is_option = false;
-  std::string positional(name, len);
-  meta_var = ToUpper(positional);
-  long_names.push_back(std::move(positional));
+  // is_option = false;
+  // std::string positional(name, len);
+  // meta_var = ToUpper(positional);
+  // long_names.push_back(std::move(positional));
 }
 
 void Names::InitOptions(std::initializer_list<const char*> names) {
   CHECK_USER(names.size(), "At least one name must be provided");
-  is_option = true;
+  // is_option = true;
 
-  for (auto name : names) {
-    std::size_t len = std::strlen(name);
-    CHECK_USER(IsValidOptionName(name, len), "Not a valid option name: %s",
-               name);
-    if (IsLongOptionName(name, len)) {
-      // Strip leading '-' at most twice.
-      for (int i = 0; *name == '-' && i < 2; ++i) {
-        ++name;
-        --len;
-      }
-      long_names.emplace_back(name, len);
-    } else {
-      short_names.push_back(name[1]);
-    }
-  }
-  if (long_names.size())
-    meta_var = ToUpper(long_names[0]);
-  else
-    meta_var = ToUpper({&short_names[0], 1});
+  // for (auto name : names) {
+  //   std::size_t len = std::strlen(name);
+  //   CHECK_USER(IsValidOptionName(name, len), "Not a valid option name: %s",
+  //              name);
+  //   if (IsLongOptionName(name, len)) {
+  //     // Strip leading '-' at most twice.
+  //     for (int i = 0; *name == '-' && i < 2; ++i) {
+  //       ++name;
+  //       --len;
+  //     }
+  //     long_names.emplace_back(name, len);
+  //   } else {
+  //     short_names.push_back(name[1]);
+  //   }
+  // }
+  // if (long_names.size())
+  //   meta_var = ToUpper(long_names[0]);
+  // else
+  //   meta_var = ToUpper({&short_names[0], 1});
 }
 
 // ArgumentImpl:
 ArgumentImpl::ArgumentImpl(Argument::Delegate* delegate,
-                           const Names& names,
+                           std::unique_ptr<NamesInfo> names,
                            int group)
     : delegate_(delegate), group_(group) {
-  InitNames(names);
-  InitKey(names.is_option);
+  // InitNames(names);
+  // InitKey(names.is_option);
   delegate_->OnArgumentCreated(this);
 }
 
-void ArgumentImpl::InitNames(Names names) {
-  long_names_ = std::move(names.long_names);
-  short_names_ = std::move(names.short_names);
-  meta_var_ = std::move(names.meta_var);
+void ArgumentImpl::InitNames(std::unique_ptr<NamesInfo> names) {
+  // long_names_ = std::move(names.long_names);
+  // short_names_ = std::move(names.short_names);
+  // meta_var_ = std::move(names.meta_var);
 }
 
 void ArgumentImpl::InitKey(bool is_option) {
@@ -495,18 +495,20 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
   }
 }
 
-Argument* ArgumentHolderImpl::AddArgumentToGroup(Names names, int group) {
+Argument* ArgumentHolderImpl::AddArgumentToGroup(
+    std::unique_ptr<NamesInfo> names,
+    int group) {
   // First check if this arg will conflict with existing ones.
-  CHECK_USER(CheckNamesConflict(names), "Names conflict with existing names!");
+  // CHECK_USER(CheckNamesConflict(names), "Names conflict with existing names!");
   DCHECK2(group <= groups_.size(), "No such group");
   GroupFromID(group)->IncRef();
-  Argument& arg = arguments_.emplace_back(this, names, group);
+  Argument& arg = arguments_.emplace_back(this, std::move(names), group);
   SetDirty(true);
   return &arg;
 }
 
-Argument* ArgumentHolderImpl::AddArgument(Names names) {
-  int group = names.is_option ? kOptionGroup : kPositionalGroup;
+Argument* ArgumentHolderImpl::AddArgument(std::unique_ptr<NamesInfo> names) {
+  int group = names->is_option ? kOptionGroup : kPositionalGroup;
   return AddArgumentToGroup(std::move(names), group);
 }
 
@@ -575,14 +577,14 @@ int ArgumentHolderImpl::AddGroup(const char* header) {
 }
 
 bool ArgumentHolderImpl::CheckNamesConflict(const Names& names) {
-  for (auto&& long_name : names.long_names)
-    if (!name_set_.insert(long_name).second)
-      return false;
-  // May not use multiple short names.
-  for (char short_name : names.short_names)
-    if (!name_set_.insert(std::string(&short_name, 1)).second)
-      return false;
-  return true;
+  // for (auto&& long_name : names.long_names)
+  //   if (!name_set_.insert(long_name).second)
+  //     return false;
+  // // May not use multiple short names.
+  // for (char short_name : names.short_names)
+  //   if (!name_set_.insert(std::string(&short_name, 1)).second)
+  //     return false;
+  // return true;
 }
 
 void ArgumentParser::parse_args(int argc, const char** argv) {

@@ -548,6 +548,19 @@ class CallbackRunner {
   virtual ~CallbackRunner() {}
 };
 
+struct NamesInfo {
+  bool is_option = false;
+  std::vector<std::string> long_names;
+  std::vector<std::string> short_names;
+
+  NamesInfo(bool i, std::vector<std::string> l, std::vector<std::string> s)
+      : is_option(i), long_names(std::move(l)), short_names(std::move(s)) {}
+};
+
+struct NumArgsInfo {
+
+};
+
 struct DestInfo {
   DestPtr dest_ptr;
   std::unique_ptr<OpsFactory> ops_factory;
@@ -689,11 +702,11 @@ class ArgpParser {
   static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
 };
 
-class Names;
 class ArgumentHolder {
  public:
-  virtual Argument* AddArgumentToGroup(Names names, int group) = 0;
-  virtual Argument* AddArgument(Names names) = 0;
+  virtual Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
+                                       int group) = 0;
+  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
   virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
   virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
   // Get a reusable Parser. As long as the state of holder isn't changed, the
@@ -1056,12 +1069,13 @@ inline std::string ToUpper(const std::string& in) {
 }
 
 struct Names {
-  std::vector<std::string> long_names;
+  std::unique_ptr<NamesInfo> info;
+  // std::vector<std::string> long_names;
 
-  // TODO: Ban short name alias.
-  std::vector<char> short_names;
-  bool is_option;
-  std::string meta_var;
+  // // TODO: Ban short name alias.
+  // std::vector<char> short_names;
+  // bool is_option;
+  // std::string meta_var;
 
   Names(const char* name);
   Names(std::initializer_list<const char*> names) { InitOptions(names); }
@@ -1071,7 +1085,9 @@ struct Names {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument, private CallbackRunner {
  public:
-  ArgumentImpl(Argument::Delegate* delegate, const Names& names, int group);
+  ArgumentImpl(Argument::Delegate* delegate,
+               std::unique_ptr<NamesInfo> names,
+               int group);
 
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
   bool IsOption() const override { return is_option(); }
@@ -1127,7 +1143,7 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   class InitializerImpl;
 
   // Fill in members to do with names.
-  void InitNames(Names names);
+  void InitNames(std::unique_ptr<NamesInfo> names);
 
   // Initialize the key member. Must be called after InitNames().
   void InitKey(bool is_option);
@@ -1305,7 +1321,7 @@ class ArgumentGroup : public ArgumentContainer {
 
  private:
   Argument* AddArgument(Names names) override {
-    return holder_->AddArgumentToGroup(std::move(names), group_);
+    // return holder_->AddArgumentToGroup(std::move(names), group_);
   }
 
   int group_;
@@ -1321,12 +1337,13 @@ class ArgumentHolderImpl : public ArgumentHolder,
 
   // ArgumentHolder:
   // Add an arg to a specific group.
-  Argument* AddArgumentToGroup(Names names, int group) override;
+  Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
+                               int group) override;
 
   // TODO: since in most cases, parse_args() is only called once, we may
   // compile all the options in one shot before parse_args() is called and
   // throw the options array away after using it.
-  Argument* AddArgument(Names names) override;
+  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override;
 
   ArgumentGroup AddArgumentGroup(const char* header) override;
 
@@ -1552,7 +1569,7 @@ class ArgumentParser : public ArgumentContainer {
 
  private:
   Argument* AddArgument(Names names) override {
-    return holder_->AddArgument(std::move(names));
+    // return holder_->AddArgument(std::move(names));
   }
   Options user_options_;
   std::unique_ptr<ArgumentHolder> holder_;
