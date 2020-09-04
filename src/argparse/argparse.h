@@ -251,19 +251,13 @@ struct DefaultParseTraits {
 template <typename T>
 struct ParseTraits : DefaultParseTraits<T> {};
 
-std::string Demangle(const char* mangled_name);
+template <typename T>
+struct TypeHintTraits;
 
 template <typename T>
-struct DefaultTypeNameTraits {
-  static std::string Run() {
-    return Demangle(typeid(T).name());
-  }
-};
-
-// User can change their typenames by specifying this traits.
-// The default is gcc's demangle result. The TypeName() will respect this.
-template <typename T>
-struct TypeHintTraits : DefaultTypeNameTraits<T> {};
+std::string TypeHint() {
+  return TypeHintTraits<T>::Run();
+}
 
 namespace detail {
 // clang-format off
@@ -488,7 +482,8 @@ class Operations {
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
-  virtual const char* TypeName() { return nullptr; }
+  virtual const char* GetTypeName() = 0;
+  virtual std::string GetTypeHint() = 0;
   virtual ~Operations() {}
 };
 
@@ -795,6 +790,18 @@ bool OpsIsSupportedImpl(OpsKind ops, std::index_sequence<OpsIndices...>) {
   return kArray[index];
 }
 
+// Default is the rules impl'ed by us:
+// 1. fall back to TypeName() -- demanged name of T.
+// 2. MetaTypeHint, for file, string and list[T], general types..
+template <typename T, typename SFINAE = void>
+struct DefaultTypeHint {
+  static std::string Run() { return TypeName<T>(); }
+};
+
+// TypeHint() is always supported..
+template <typename T>
+struct TypeHintTraits : DefaultTypeHint<T> {};
+
 template <typename T>
 class OperationsImpl : public Operations {
  public:
@@ -819,6 +826,8 @@ class OperationsImpl : public Operations {
   bool IsSupported(OpsKind ops) override {
     return OpsIsSupportedImpl<T>(ops, std::make_index_sequence<kMaxOpsKind>{});
   }
+  const char* GetTypeName() override { return TypeName<T>(); }
+  std::string GetTypeHint() override { return TypeHint<T>(); }
 };
 
 template <typename T>
@@ -1678,19 +1687,6 @@ struct OpenTraits<std::ifstream> : StreamOpenTraits<std::ifstream> {};
 template <>
 struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
 
-template <>
-struct TypeHintTraits<std::string> {
-  static std::string Run() { return "std::string"; }
-};
-template <>
-struct TypeHintTraits<std::ofstream> {
-  static std::string Run() { return "std::ofstream"; }
-};
-template <>
-struct TypeHintTraits<std::ifstream> {
-  static std::string Run() { return "std::ifstream"; }
-};
-
 // For STL-compatible T, default is:
 template <typename T>
 struct DefaultAppendTraits {
@@ -1711,5 +1707,99 @@ template <typename T>
 struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
 // std::string is not considered appendable, if you need that, use
 // std::vector<char>
+
+// The purpose of MetaTypes is to provide a mechanism to summerize types as
+// metatype so that they can have the same typehint. For example, different
+// types of file object, like C FILE* and C++ streams, can all have the same
+// metatype -- file. And different types of integers can all be summerized as
+// 'int'. Our policy is to:
+// 1. If T is specialized, use TypeHintTraits<T>.
+// 2. If T's metatype is not unknown, use MetaTypeHint.
+// 3. fall back to demangle.
+// Note: number such as float, double and int, long use their own typename as
+// metatype, since it will confuse user if not.
+// As user, you can:
+// 1. Be pleasant with the default setting for your type, such std::string and
+// bool.
+// 2. Want to use a metatype, tell us by MetaTypeFor<T>.
+// 3. Want a completey new type hint, tell us by TypeHintTraits<T>.
+enum class MetaTypes {
+  kString,
+  kFile,
+  kList,
+  kNumber,
+  kBool,
+  kChar,
+  kUnknown,
+};
+
+template <MetaTypes M>
+using MetaTypeContant = std::integral_constant<MetaTypes, M>;
+
+template <typename T, typename SFINAE = void>
+struct MetaTypeFor : MetaTypeContant<MetaTypes::kUnknown> {};
+
+// String.
+template <>
+struct MetaTypeFor<std::string, void> : MetaTypeContant<MetaTypes::kString> {};
+
+// Bool.
+template <>
+struct MetaTypeFor<bool, void> : MetaTypeContant<MetaTypes::kBool> {};
+
+// Char.
+template <>
+struct MetaTypeFor<char, void> : MetaTypeContant<MetaTypes::kChar> {};
+
+// File.
+template <typename T>
+struct MetaTypeFor<T, std::enable_if_t<IsOpsSupported<OpsKind::kOpen, T>{}>>
+    : MetaTypeContant<MetaTypes::kFile> {};
+
+// List.
+template <typename T>
+struct MetaTypeFor<T, std::enable_if_t<IsOpsSupported<OpsKind::kAppend, T>{}>>
+    : MetaTypeContant<MetaTypes::kList> {};
+
+// Number.
+template <typename T>
+struct MetaTypeFor<T, std::enable_if_t<has_stl_number_parser_t<T>{}>>
+    : MetaTypeContant<MetaTypes::kNumber> {};
+
+// If you get unhappy with this default handling, for example,
+// you want number to be "number", you can specialize this.
+template <typename T, MetaTypes M = MetaTypeFor<T>{}>
+struct MetaTypeHint {
+  static std::string Run() {
+    switch (M) {
+      case MetaTypes::kFile:
+        return "file";
+      case MetaTypes::kString:
+        return "string";
+      case MetaTypes::kBool:
+        return "bool";
+      case MetaTypes::kChar:
+        return "char";
+      case MetaTypes::kNumber:
+        return TypeName<T>();
+      default:
+        // List
+        DCHECK(false);
+    }
+  }
+};
+
+template <typename T>
+struct MetaTypeHint<T, MetaTypes::kList> {
+  static std::string Run() {
+    return "list[" + TypeHint<ValueTypeOf<T>>() + "]";
+  }
+};
+
+template <typename T>
+struct DefaultTypeHint<
+    T,
+    std::enable_if_t<MetaTypes::kUnknown != MetaTypeFor<T>{}>>
+    : MetaTypeHint<T> {};
 
 }  // namespace argparse

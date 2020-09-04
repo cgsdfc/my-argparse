@@ -242,7 +242,7 @@ void ArgumentImpl::InitActionCallback() {
   DCHECK(ok);
   CHECK_USER(action_ops_->IsSupported(ops_kind),
              "Action %s is not supported by type %s",
-             ActionsToString(action_code_), action_ops_->TypeName());
+             ActionsToString(action_code_), action_ops_->GetTypeName());
 
   // See if const value is provided as needed.
   if (ActionNeedsConstValue(action_code_)) {
@@ -284,7 +284,7 @@ void ArgumentImpl::InitTypeCallback() {
   bool ok = TypesToOpsKind(type_code_, &ops);
   DCHECK(ok);
   CHECK_USER(type_ops_->IsSupported(ops), "Type %s is not supported by type %s",
-             TypesToString(type_code_), type_ops_->TypeName());
+             TypesToString(type_code_), type_ops_->GetTypeName());
 
   if (type_code_ == Types::kOpen) {
     DCHECK(mode_ != kModeNoMode);
@@ -786,7 +786,7 @@ const char* OpsToString(OpsKind ops) {
   return iter->second.c_str();
 }
 
-std::string Demangle(const char* mangled_name) {
+static std::string Demangle(const char* mangled_name) {
   std::size_t length;
   int status;
   const char* realname =
