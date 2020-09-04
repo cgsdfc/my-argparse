@@ -633,13 +633,6 @@ class ArgumentInitializer {
 
 class Argument {
  public:
-  class NextOptionKey {
-   public:
-    // Generate a key for an option.
-    virtual int GetNextKey() = 0;
-    virtual ~NextOptionKey() {}
-  };
-
   // Finalize...
   virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
   virtual void Finalize() = 0;
@@ -726,6 +719,7 @@ class ArgpParser {
 
 class ArgumentHolder {
  public:
+    virtual int GetNextOptionKey() = 0;
   virtual Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
                                        int group) = 0;
   virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
@@ -913,6 +907,109 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
   return std::make_unique<OpsFactoryImpl<T>>();
 }
 
+// Holds all meta-info about an argument.
+class ArgumentImpl : public Argument, private CallbackRunner {
+ public:
+  ArgumentImpl(ArgumentHolder* holder,
+               std::unique_ptr<NamesInfo> names,
+               int group);
+
+  std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
+  bool IsOption() const override { return is_option(); }
+  int GetKey() const override { return key(); }
+
+  int key() const { return key_; }
+  int group() const { return group_; }
+  bool is_option() const { return names_info_->is_option; }
+  bool is_required() const { return is_required_; }
+
+  const std::string& help_doc() const { return help_doc_; }
+  const char* doc() const {
+    return help_doc_.empty() ? nullptr : help_doc_.c_str();
+  }
+
+  const std::string& meta_var() const { return names_info_->meta_var; }
+  const char* arg() const {
+    DCHECK(!meta_var().empty());
+    return meta_var().c_str();
+  }
+
+  // TODO: split the long_names, short_names from Names into name, key and
+  // alias.
+  const std::vector<std::string>& long_names() const {
+    return names_info_->long_names;
+  }
+  const std::vector<char>& short_names() const {
+    return names_info_->short_names;
+  }
+
+  const char* name() const {
+    return long_names().empty() ? nullptr : long_names()[0].c_str();
+  }
+
+  CallbackRunner* GetCallbackRunner() override { return this; }
+
+  // [--name|-n|-whatever=[value]] or output
+  void FormatArgsDoc(std::ostream& os) const override;
+
+  void Finalize() override;
+  void InitActionCallback();
+  void InitTypeCallback();
+  void PerformTypeCheck() const;
+
+  void CompileToArgpOptions(std::vector<argp_option>* options) const override;
+
+  bool Before(const Argument* that) const override {
+    return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
+  }
+
+ private:
+  enum Keys {
+    kKeyForNothing = 0,
+    kKeyForPositional = -1,
+  };
+
+  class InitializerImpl;
+
+  static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
+
+  // CallbackRunner:
+  const Any& const_value() const {
+    DCHECK(const_value_);
+    return *const_value_;
+  }
+
+  const DestPtr& dest() const {
+    DCHECK(dest_ptr_);
+    return dest_ptr_;
+  }
+
+  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate) override;
+  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
+  void RunTypeCallback(const std::string& in, OpsResult* out);
+
+  // For positional, this is -1, for group-header, this is -2.
+  int key_ = kKeyForNothing;
+  int group_ = 0;
+  std::unique_ptr<NamesInfo> names_info_;
+  std::string help_doc_;
+  bool is_required_ = false;
+
+  // CallbackRunner members.
+  CallbackRunner::Delegate* runner_delegate_ = nullptr;
+  std::unique_ptr<OpsFactory> ops_factory_;
+  std::unique_ptr<Operations> action_ops_;
+  std::unique_ptr<Operations> type_ops_;
+  std::unique_ptr<Any> const_value_;
+  std::unique_ptr<Any> default_value_;
+  std::unique_ptr<ActionCallback> custom_action_;
+  std::unique_ptr<TypeCallback> custom_type_;
+  Actions action_code_ = Actions::kNoAction;
+  Types type_code_ = Types::kNothing;
+  Mode mode_ = kModeNoMode;
+  DestPtr dest_ptr_;
+};
+
 template <typename T>
 class CustomTypeCallback : public TypeCallback {
  public:
@@ -1096,109 +1193,6 @@ struct Names {
   Names(std::initializer_list<const char*> names);
 };
 
-// Holds all meta-info about an argument.
-class ArgumentImpl : public Argument, private CallbackRunner {
- public:
-  ArgumentImpl(Argument::NextOptionKey* next_key,
-               std::unique_ptr<NamesInfo> names,
-               int group);
-
-  std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
-  bool IsOption() const override { return is_option(); }
-  int GetKey() const override { return key(); }
-
-  int key() const { return key_; }
-  int group() const { return group_; }
-  bool is_option() const { return names_info_->is_option; }
-  bool is_required() const { return is_required_; }
-
-  const std::string& help_doc() const { return help_doc_; }
-  const char* doc() const {
-    return help_doc_.empty() ? nullptr : help_doc_.c_str();
-  }
-
-  const std::string& meta_var() const { return names_info_->meta_var; }
-  const char* arg() const {
-    DCHECK(!meta_var().empty());
-    return meta_var().c_str();
-  }
-
-  // TODO: split the long_names, short_names from Names into name, key and
-  // alias.
-  const std::vector<std::string>& long_names() const {
-    return names_info_->long_names;
-  }
-  const std::vector<char>& short_names() const {
-    return names_info_->short_names;
-  }
-
-  const char* name() const {
-    return long_names().empty() ? nullptr : long_names()[0].c_str();
-  }
-
-  CallbackRunner* GetCallbackRunner() override { return this; }
-
-  // [--name|-n|-whatever=[value]] or output
-  void FormatArgsDoc(std::ostream& os) const override;
-
-  void Finalize() override;
-  void InitActionCallback();
-  void InitTypeCallback();
-  void PerformTypeCheck() const;
-
-  void CompileToArgpOptions(std::vector<argp_option>* options) const override;
-
-  bool Before(const Argument* that) const override {
-    return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
-  }
-
- private:
-  enum Keys {
-    kKeyForNothing = 0,
-    kKeyForPositional = -1,
-  };
-
-  class InitializerImpl;
-
-  static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
-
-  // CallbackRunner:
-  const Any& const_value() const {
-    DCHECK(const_value_);
-    return *const_value_;
-  }
-
-  const DestPtr& dest() const {
-    DCHECK(dest_ptr_);
-    return dest_ptr_;
-  }
-
-  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate) override;
-  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
-  void RunTypeCallback(const std::string& in, OpsResult* out);
-
-  // For positional, this is -1, for group-header, this is -2.
-  int key_ = kKeyForNothing;
-  int group_ = 0;
-  std::unique_ptr<NamesInfo> names_info_;
-  std::string help_doc_;
-  bool is_required_ = false;
-
-  // CallbackRunner members.
-  CallbackRunner::Delegate* runner_delegate_ = nullptr;
-  std::unique_ptr<OpsFactory> ops_factory_;
-  std::unique_ptr<Operations> action_ops_;
-  std::unique_ptr<Operations> type_ops_;
-  std::unique_ptr<Any> const_value_;
-  std::unique_ptr<Any> default_value_;
-  std::unique_ptr<ActionCallback> custom_action_;
-  std::unique_ptr<TypeCallback> custom_type_;
-  Actions action_code_ = Actions::kNoAction;
-  Types type_code_ = Types::kNothing;
-  Mode mode_ = kModeNoMode;
-  DestPtr dest_ptr_;
-};
-
 class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
  public:
   explicit InitializerImpl(ArgumentImpl* impl) : impl_(impl) {}
@@ -1339,12 +1333,13 @@ class ArgumentGroup : public ArgumentContainer {
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
 class ArgumentHolderImpl : public ArgumentHolder,
-                           public Argument::NextOptionKey,
                            public ArgpParser::Delegate {
  public:
   ArgumentHolderImpl();
 
   // ArgumentHolder:
+  int GetNextOptionKey() override { return next_key_++; }
+
   // Add an arg to a specific group.
   Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
                                int group) override;
@@ -1402,8 +1397,6 @@ class ArgumentHolderImpl : public ArgumentHolder,
     return &groups_[group - 1];
   }
 
-  // Argument::NextOptionKey:
-  int GetNextKey() override { return next_key_++; }
 
   bool CheckNamesConflict(const NamesInfo& names);
 
@@ -1818,9 +1811,8 @@ struct MetaTypeHint<T, MetaTypes::kList> {
 };
 
 template <typename T>
-struct DefaultTypeHint<
-    T,
-    std::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
+struct DefaultTypeHint<T,
+                       std::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
     : MetaTypeHint<T> {};
 
 }  // namespace argparse
