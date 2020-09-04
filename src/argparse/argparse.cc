@@ -157,30 +157,30 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
   os << ']';
 }
 
-static bool TypesToOpsKind(Types in, OpsKind* out) {
-  static const std::map<Types, OpsKind> kTypesToOpsKind{
-      {Types::kOpen, OpsKind::kOpen},
-      {Types::kParse, OpsKind::kParse},
-  };
-  auto iter = kTypesToOpsKind.find(in);
-  if (iter == kTypesToOpsKind.end())
-    return false;
-  *out = iter->second;
-  return true;
+static OpsKind TypesToOpsKind(Types in) {
+  switch (in) {
+    case Types::kOpen:
+      return OpsKind::kOpen;
+    case Types::kParse:
+      return OpsKind::kParse;
+    default:
+      DCHECK2(false, "No corresponding OpsKind");
+  }
 }
 
-static bool ActionsToOpsKind(Actions in, OpsKind* out) {
-  static const std::map<Actions, OpsKind> kActionsToOpsKind{
-      {Actions::kAppend, OpsKind::kAppend},
-      {Actions::kAppendConst, OpsKind::kAppendConst},
-      {Actions::kStore, OpsKind::kStore},
-      {Actions::kStoreConst, OpsKind::kStoreConst},
-  };
-  auto iter = kActionsToOpsKind.find(in);
-  if (iter == kActionsToOpsKind.end())
-    return false;
-  *out = iter->second;
-  return true;
+static OpsKind ActionsToOpsKind(Actions in) {
+  switch (in) {
+    case Actions::kAppend:
+      return OpsKind::kAppend;
+    case Actions::kAppendConst:
+      return OpsKind::kAppendConst;
+    case Actions::kStore:
+      return OpsKind::kStore;
+    case Actions::kStoreConst:
+      return OpsKind::kStoreConst;
+    default:
+      DCHECK2(false, "No corresponding OpsKind");
+  }
 }
 
 static bool ActionNeedsConstValue(Actions in) {
@@ -194,20 +194,47 @@ static bool ActionNeedsDest(Actions in) {
 }
 
 static bool ActionNeedsTypeCallback(Actions in) {
+  return in == Actions::kAppend || in == Actions::kStore ||
+         in == Actions::kCustom;
 }
 
 const char* TypesToString(Types in) {
-  static const std::map<Types, std::string> kTypesToString{
-      {Types::kOpen, "Open"},
-      {Types::kParse, "Parse"},
-      {Types::kCustom, "Custom"},
-      {Types::kNothing, "Nothing"},
-  };
-  DCHECK(kTypesToString.find(in) != kTypesToString.end());
-  return kTypesToString.find(in)->second.c_str();
+  switch (in) {
+    case Types::kOpen:
+      return "Open";
+    case Types::kParse:
+      return "Parse";
+    case Types::kCustom:
+      return "Custom";
+    case Types::kNothing:
+      return "Nothing";
+  }
 }
 
-const char* ActionsToString(Actions in) {}
+const char* ActionsToString(Actions in) {
+  switch (in) {
+    case Actions::kAppend:
+      return "Append";
+    case Actions::kAppendConst:
+      return "AppendConst";
+    case Actions::kCustom:
+      return "Custom";
+    case Actions::kNoAction:
+      return "NoAction";
+    case Actions::kPrintHelp:
+      return "PrintHelp";
+    case Actions::kPrintUsage:
+      return "PrintUsage";
+    case Actions::kStore:
+      return "Store";
+    case Actions::kStoreConst:
+      return "StoreConst";
+    case Actions::kStoreFalse:
+      return "StoreFalse";
+    case Actions::kStoreTrue:
+      return "StoreTrue";
+  }
+}
 
 void ArgumentImpl::InitActionCallback() {
   const bool need_dest = ActionNeedsDest(action_code_);
@@ -236,10 +263,7 @@ void ArgumentImpl::InitActionCallback() {
   action_ops_ = ops_factory_->Create();
 
   // See if Ops supports this action.
-  OpsKind ops_kind;
-  // Custom action don't have an OpsKind so it can't be checked.
-  bool ok = ActionsToOpsKind(action_code_, &ops_kind);
-  DCHECK(ok);
+  auto ops_kind = ActionsToOpsKind(action_code_);
   CHECK_USER(action_ops_->IsSupported(ops_kind),
              "Action %s is not supported by type %s",
              ActionsToString(action_code_), action_ops_->GetTypeName());
@@ -280,9 +304,7 @@ void ArgumentImpl::InitTypeCallback() {
   }
 
   // See if type_code_ is supported.
-  OpsKind ops;
-  bool ok = TypesToOpsKind(type_code_, &ops);
-  DCHECK(ok);
+  auto ops= TypesToOpsKind(type_code_);
   CHECK_USER(type_ops_->IsSupported(ops), "Type %s is not supported by type %s",
              TypesToString(type_code_), type_ops_->GetTypeName());
 

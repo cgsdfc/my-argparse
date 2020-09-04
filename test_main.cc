@@ -24,5 +24,4 @@ int main(int argc, char const* argv[]) {
       .action([](int* a, Result<int> b) {})
       .type([](const std::string& in) { return false; });
 
-  std::cout << TypeHintTraits<double>::Run();
 }
