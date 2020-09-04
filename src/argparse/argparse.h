@@ -263,7 +263,7 @@ struct DefaultTypeNameTraits {
 // User can change their typenames by specifying this traits.
 // The default is gcc's demangle result. The TypeName() will respect this.
 template <typename T>
-struct TypeNameTraits : DefaultTypeNameTraits<T> {};
+struct TypeHintTraits : DefaultTypeNameTraits<T> {};
 
 namespace detail {
 // clang-format off
@@ -711,11 +711,11 @@ struct OpsImpl;
 
 const char* OpsToString(OpsKind ops);
 
-const char* TypeNameImpl(const std::type_info& type, std::string (*callback)());
+const char* TypeNameImpl(const std::type_info& type);
 
 template <typename T>
 const char* TypeName() {
-  return TypeNameImpl(typeid(T), &TypeNameTraits<T>::Run);
+  return TypeNameImpl(typeid(T));
 }
 
 template <OpsKind Ops, typename T>
@@ -1679,15 +1679,15 @@ template <>
 struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
 
 template <>
-struct TypeNameTraits<std::string> {
+struct TypeHintTraits<std::string> {
   static std::string Run() { return "std::string"; }
 };
 template <>
-struct TypeNameTraits<std::ofstream> {
+struct TypeHintTraits<std::ofstream> {
   static std::string Run() { return "std::ofstream"; }
 };
 template <>
-struct TypeNameTraits<std::ifstream> {
+struct TypeHintTraits<std::ifstream> {
   static std::string Run() { return "std::ifstream"; }
 };
 

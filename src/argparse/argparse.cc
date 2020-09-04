@@ -804,15 +804,11 @@ std::string Demangle(const char* mangled_name) {
   return result;
 }
 
-const char* TypeNameImpl(const std::type_info& type,
-                         std::string (*callback)()) {
-  // Some typenames like std::string, is very ugly since it is a typedef...
-  // Provide a chance to let user change their typenames..
+const char* TypeNameImpl(const std::type_info& type) {
   static std::map<std::type_index, std::string> g_typenames;
-
   auto iter = g_typenames.find(type);
   if (iter == g_typenames.end()) {
-    g_typenames.emplace(type, callback());
+    g_typenames.emplace(type, Demangle(type.name()));
   }
   return g_typenames[type].c_str();
 }
