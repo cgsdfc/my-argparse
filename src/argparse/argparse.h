@@ -558,6 +558,7 @@ struct NamesInfo {
   explicit NamesInfo(std::string name);
   // Option.
   explicit NamesInfo(std::vector<const char*> names);
+  bool CheckNamesConflict(std::set<std::string>* all);
 };
 
 struct NumArgsInfo {
@@ -1286,7 +1287,8 @@ class ArgumentContainer {
                                const char* help = {},
                                Type type = {},
                                Action action = {}) {
-    auto* arg = AddArgument(std::move(names));
+    DCHECK(names.info);
+    auto* arg = AddArgument(std::move(names.info));
     ArgumentBuilder builder(arg->CreateInitializer());
     builder.dest(std::move(dest))
         .help(help)
@@ -1298,7 +1300,7 @@ class ArgumentContainer {
   virtual ~ArgumentContainer() {}
 
  private:
-  virtual Argument* AddArgument(Names names) = 0;
+  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
 };
 
 inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
@@ -1315,8 +1317,8 @@ class ArgumentGroup : public ArgumentContainer {
       : holder_(holder), group_(group) {}
 
  private:
-  Argument* AddArgument(Names names) override {
-    // return holder_->AddArgumentToGroup(std::move(names), group_);
+  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+    return holder_->AddArgumentToGroup(std::move(names), group_);
   }
 
   int group_;
@@ -1392,7 +1394,7 @@ class ArgumentHolderImpl : public ArgumentHolder,
   int NextOptionKey() override { return next_key_++; }
   void OnArgumentCreated(Argument* arg) override;
 
-  bool CheckNamesConflict(const Names& names);
+  bool CheckNamesConflict(const NamesInfo& names);
 
   void SetDirty(bool dirty) { dirty_ = dirty; }
   bool dirty() const { return dirty_; }
@@ -1563,8 +1565,8 @@ class ArgumentParser : public ArgumentContainer {
   const char* program_bug_address() const { return argp_program_bug_address; }
 
  private:
-  Argument* AddArgument(Names names) override {
-    // return holder_->AddArgument(std::move(names));
+  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+    return holder_->AddArgument(std::move(names));
   }
   Options user_options_;
   std::unique_ptr<ArgumentHolder> holder_;

@@ -62,15 +62,16 @@ ArgumentImpl::ArgumentImpl(Argument::Delegate* delegate,
                            std::unique_ptr<NamesInfo> names,
                            int group)
     : delegate_(delegate), group_(group) {
-  // InitNames(names);
-  // InitKey(names.is_option);
+  InitNames(std::move(names));
+  InitKey(names->is_option);
   delegate_->OnArgumentCreated(this);
 }
 
 void ArgumentImpl::InitNames(std::unique_ptr<NamesInfo> names) {
-  // long_names_ = std::move(names.long_names);
-  // short_names_ = std::move(names.short_names);
-  // meta_var_ = std::move(names.meta_var);
+  // TOOD: just set an info..
+  long_names_ = std::move(names->long_names);
+  short_names_ = std::move(names->short_names);
+  meta_var_ = std::move(names->meta_var);
 }
 
 void ArgumentImpl::InitKey(bool is_option) {
@@ -505,7 +506,7 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
     std::unique_ptr<NamesInfo> names,
     int group) {
   // First check if this arg will conflict with existing ones.
-  // CHECK_USER(CheckNamesConflict(names), "Names conflict with existing names!");
+  CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
   DCHECK2(group <= groups_.size(), "No such group");
   GroupFromID(group)->IncRef();
   Argument& arg = arguments_.emplace_back(this, std::move(names), group);
@@ -582,15 +583,15 @@ int ArgumentHolderImpl::AddGroup(const char* header) {
   return group;
 }
 
-bool ArgumentHolderImpl::CheckNamesConflict(const Names& names) {
-  // for (auto&& long_name : names.long_names)
-  //   if (!name_set_.insert(long_name).second)
-  //     return false;
-  // // May not use multiple short names.
-  // for (char short_name : names.short_names)
-  //   if (!name_set_.insert(std::string(&short_name, 1)).second)
-  //     return false;
-  // return true;
+bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
+  for (auto&& long_name : names.long_names)
+    if (!name_set_.insert(long_name).second)
+      return false;
+  // May not use multiple short names.
+  for (char short_name : names.short_names)
+    if (!name_set_.insert(std::string(&short_name, 1)).second)
+      return false;
+  return true;
 }
 
 void ArgumentParser::parse_args(int argc, const char** argv) {
