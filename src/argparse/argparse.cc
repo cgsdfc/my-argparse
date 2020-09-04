@@ -12,43 +12,49 @@ Context::Context(const Argument* argument, const char* value, ArgpState state)
     this->value.assign(value);
 }
 
+NamesInfo::NamesInfo(std::string name) {
+  is_option = false;
+  meta_var = ToUpper(name);
+  long_names.push_back(std::move(name));
+}
+
+NamesInfo::NamesInfo(std::vector<const char*> names) {
+  is_option = true;
+  for (auto name : names) {
+    std::size_t len = std::strlen(name);
+    CHECK_USER(IsValidOptionName(name, len), "Not a valid option name: %s",
+               name);
+    if (IsLongOptionName(name, len)) {
+      // Strip leading '-' at most twice.
+      for (int i = 0; *name == '-' && i < 2; ++i) {
+        ++name;
+        --len;
+      }
+      long_names.emplace_back(name, len);
+    } else {
+      short_names.push_back(name[1]);
+    }
+  }
+  if (long_names.size())
+    meta_var = ToUpper(long_names[0]);
+  else
+    meta_var = ToUpper({&short_names[0], 1});
+}
+
 Names::Names(const char* name) {
   if (name[0] == '-') {
-    InitOptions({name});
+    info.reset(new NamesInfo(std::vector<const char*>{name}));
     return;
   }
   auto len = std::strlen(name);
   CHECK_USER(IsValidPositionalName(name, len),
              "Not a valid positional name: %s", name);
-  // is_option = false;
-  // std::string positional(name, len);
-  // meta_var = ToUpper(positional);
-  // long_names.push_back(std::move(positional));
+  info.reset(new NamesInfo(name));
 }
 
-void Names::InitOptions(std::initializer_list<const char*> names) {
+Names::Names(std::initializer_list<const char*> names) {
   CHECK_USER(names.size(), "At least one name must be provided");
-  // is_option = true;
-
-  // for (auto name : names) {
-  //   std::size_t len = std::strlen(name);
-  //   CHECK_USER(IsValidOptionName(name, len), "Not a valid option name: %s",
-  //              name);
-  //   if (IsLongOptionName(name, len)) {
-  //     // Strip leading '-' at most twice.
-  //     for (int i = 0; *name == '-' && i < 2; ++i) {
-  //       ++name;
-  //       --len;
-  //     }
-  //     long_names.emplace_back(name, len);
-  //   } else {
-  //     short_names.push_back(name[1]);
-  //   }
-  // }
-  // if (long_names.size())
-  //   meta_var = ToUpper(long_names[0]);
-  // else
-  //   meta_var = ToUpper({&short_names[0], 1});
+  info.reset(new NamesInfo(names));
 }
 
 // ArgumentImpl:

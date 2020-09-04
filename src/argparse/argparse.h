@@ -551,10 +551,13 @@ class CallbackRunner {
 struct NamesInfo {
   bool is_option = false;
   std::vector<std::string> long_names;
-  std::vector<std::string> short_names;
+  std::vector<char> short_names;
+  std::string meta_var;
 
-  NamesInfo(bool i, std::vector<std::string> l, std::vector<std::string> s)
-      : is_option(i), long_names(std::move(l)), short_names(std::move(s)) {}
+  // Positional.
+  explicit NamesInfo(std::string name);
+  // Option.
+  explicit NamesInfo(std::vector<const char*> names);
 };
 
 struct NumArgsInfo {
@@ -1070,16 +1073,8 @@ inline std::string ToUpper(const std::string& in) {
 
 struct Names {
   std::unique_ptr<NamesInfo> info;
-  // std::vector<std::string> long_names;
-
-  // // TODO: Ban short name alias.
-  // std::vector<char> short_names;
-  // bool is_option;
-  // std::string meta_var;
-
   Names(const char* name);
-  Names(std::initializer_list<const char*> names) { InitOptions(names); }
-  void InitOptions(std::initializer_list<const char*> names);
+  Names(std::initializer_list<const char*> names);
 };
 
 // Holds all meta-info about an argument.
