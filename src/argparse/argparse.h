@@ -719,10 +719,20 @@ class ArgpParser {
 
 class ArgumentHolder {
  public:
-    virtual int GetNextOptionKey() = 0;
+  virtual int GetNextOptionKey() = 0;
   virtual Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
                                        int group) = 0;
-  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  // // Gid for two builtin groups.
+  enum GroupID {
+    kOptionGroup = 1,
+    kPositionalGroup = 2,
+  };
+
+  Argument* AddArgument(std::unique_ptr<NamesInfo> names) {
+    int group = names->is_option ? kOptionGroup : kPositionalGroup;
+    return AddArgumentToGroup(std::move(names), group);
+  }
+
   virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
   virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
   // Get a reusable Parser. As long as the state of holder isn't changed, the
@@ -1344,11 +1354,6 @@ class ArgumentHolderImpl : public ArgumentHolder,
   Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
                                int group) override;
 
-  // TODO: since in most cases, parse_args() is only called once, we may
-  // compile all the options in one shot before parse_args() is called and
-  // throw the options array away after using it.
-  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override;
-
   ArgumentGroup AddArgumentGroup(const char* header) override;
 
   std::unique_ptr<ArgpParser> CreateParser() override {
@@ -1403,12 +1408,6 @@ class ArgumentHolderImpl : public ArgumentHolder,
   void SetDirty(bool dirty) { dirty_ = dirty; }
   bool dirty() const { return dirty_; }
   static constexpr unsigned kFirstArgumentKey = 128;
-
-  // // Gid for two builtin groups.
-  enum GroupID {
-    kOptionGroup = 1,
-    kPositionalGroup = 2,
-  };
 
   // We have to explicitly manage group_id (instead of using 0 to inherit the
   // gid from the preivous entry) since the user can add option and positionals

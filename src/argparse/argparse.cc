@@ -509,11 +509,6 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
   return arg;
 }
 
-Argument* ArgumentHolderImpl::AddArgument(std::unique_ptr<NamesInfo> names) {
-  int group = names->is_option ? kOptionGroup : kPositionalGroup;
-  return AddArgumentToGroup(std::move(names), group);
-}
-
 ArgumentGroup ArgumentHolderImpl::AddArgumentGroup(const char* header) {
   int group = AddGroup(header);
   return ArgumentGroup(this, group);
