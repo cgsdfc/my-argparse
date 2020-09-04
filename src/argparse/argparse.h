@@ -563,6 +563,13 @@ struct TypeInfo {
   std::unique_ptr<Operations> ops;
   std::unique_ptr<TypeCallback> callback;
   Mode mode;
+
+  TypeInfo() = default;
+  explicit TypeInfo(Mode m) : type_code(Types::kOpen), mode(m) {}
+  explicit TypeInfo(std::unique_ptr<TypeCallback> cb)
+      : type_code(Types::kCustom), callback(std::move(cb)) {}
+  explicit TypeInfo(std::unique_ptr<Operations> ops)
+      : type_code(Types::kParse), ops(std::move(ops)) {}
 };
 
 // This initializes an Argument.
@@ -963,29 +970,19 @@ struct Type {
 
   // To explicitly request a type, use Type<double>().
   template <typename T>
-  Type() {
-    info->type_code = Types::kParse;
-    info->ops = CreateOperations<T>();
-  }
+  Type() : info(new TypeInfo(CreateOperations<T>())) {}
 
   // Use it to provide your own TypeCallback impl.
-  Type(TypeCallback* cb) {
-    info->type_code = Types::kCustom;
-    info->callback.reset(cb);
-  }
+  Type(TypeCallback* cb)
+      : info(new TypeInfo(std::unique_ptr<TypeCallback>(cb))) {}
 
   // Use FileType("rw") to request opening a file to read/write.
-  Type(FileType file_type) {
-    info->type_code = Types::kOpen;
-    info->mode = file_type.mode();
-  }
+  Type(FileType file_type) : info(new TypeInfo(file_type.mode())) {}
 
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  /* implicit */ Type(Callback&& cb) {
-    info->type_code = Types::kCustom;
-    info->callback = CreateTypeCallback(std::forward<Callback>(cb));
-  }
+  /* implicit */ Type(Callback&& cb)
+      : info(new TypeInfo(CreateTypeCallback(std::forward<Callback>(cb)))) {}
 };
 
 Actions StringToActions(const std::string& str);
