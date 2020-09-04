@@ -23,7 +23,7 @@
 
 // Perform a runtime check for user's error.
 #define CHECK_USER(expr, format, ...) \
-  CheckUserError((expr), {__LINE__, __FILE__}, (format), ##__VA_ARGS__)
+  CheckUserError(bool(expr), {__LINE__, __FILE__}, (format), ##__VA_ARGS__)
 
 namespace argparse {
 
@@ -488,6 +488,7 @@ class Operations {
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
+  virtual const char* TypeName() { return nullptr; }
   virtual ~Operations() {}
 };
 
@@ -1102,6 +1103,9 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   void FormatArgsDoc(std::ostream& os) const override;
 
   void Finalize() override;
+  void InitActionCallback();
+  void InitTypeCallback();
+  void PerformTypeCheck() const;
 
   void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 

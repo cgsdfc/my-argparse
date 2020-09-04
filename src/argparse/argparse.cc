@@ -157,10 +157,151 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
   os << ']';
 }
 
+static bool TypesToOpsKind(Types in, OpsKind* out) {
+  static const std::map<Types, OpsKind> kTypesToOpsKind{
+      {Types::kOpen, OpsKind::kOpen},
+      {Types::kParse, OpsKind::kParse},
+  };
+  auto iter = kTypesToOpsKind.find(in);
+  if (iter == kTypesToOpsKind.end())
+    return false;
+  *out = iter->second;
+  return true;
+}
+
+static bool ActionsToOpsKind(Actions in, OpsKind* out) {
+  static const std::map<Actions, OpsKind> kActionsToOpsKind{
+      {Actions::kAppend, OpsKind::kAppend},
+      {Actions::kAppendConst, OpsKind::kAppendConst},
+      {Actions::kStore, OpsKind::kStore},
+      {Actions::kStoreConst, OpsKind::kStoreConst},
+  };
+  auto iter = kActionsToOpsKind.find(in);
+  if (iter == kActionsToOpsKind.end())
+    return false;
+  *out = iter->second;
+  return true;
+}
+
+static bool ActionNeedsConstValue(Actions in) {
+  return in == Actions::kStoreConst || in == Actions::kAppendConst;
+}
+
+static bool ActionNeedsDest(Actions in) {
+  // These actions don't need a dest.
+  return !(in == Actions::kPrintHelp || in == Actions::kPrintUsage ||
+           in == Actions::kNoAction);
+}
+
+static bool ActionNeedsTypeCallback(Actions in) {
+}
+
+const char* TypesToString(Types in) {
+  static const std::map<Types, std::string> kTypesToString{
+      {Types::kOpen, "Open"},
+      {Types::kParse, "Parse"},
+      {Types::kCustom, "Custom"},
+      {Types::kNothing, "Nothing"},
+  };
+  DCHECK(kTypesToString.find(in) != kTypesToString.end());
+  return kTypesToString.find(in)->second.c_str();
+}
+
+const char* ActionsToString(Actions in) {}
+
+void ArgumentImpl::InitActionCallback() {
+  const bool need_dest = ActionNeedsDest(action_code_);
+  CHECK_USER(dest_ptr_ || !need_dest,
+             "Action %s needs a dest, which is not provided",
+             ActionsToString(action_code_));
+
+  if (!need_dest) {
+    // This action don't need a dest (provided or not).
+    return;
+  }
+
+  DCHECK(dest_ptr_ && ops_factory_);
+
+  if (action_code_ == Actions::kCustom) {
+    DCHECK(custom_action_);
+    return;
+  }
+
+  if (action_code_ == Actions::kNoAction) {
+    // If there is a dest, but no explicit action given, default is store.
+    action_code_ = Actions::kStore;
+  }
+
+  // Ops of action is always created from dest's ops-factory.
+  action_ops_ = ops_factory_->Create();
+
+  // See if Ops supports this action.
+  OpsKind ops_kind;
+  // Custom action don't have an OpsKind so it can't be checked.
+  bool ok = ActionsToOpsKind(action_code_, &ops_kind);
+  DCHECK(ok);
+  CHECK_USER(action_ops_->IsSupported(ops_kind),
+             "Action %s is not supported by type %s",
+             ActionsToString(action_code_), action_ops_->TypeName());
+
+  // See if const value is provided as needed.
+  if (ActionNeedsConstValue(action_code_)) {
+    CHECK_USER(const_value_.get(),
+               "Action %s needs a const value, which is not provided",
+               ActionsToString(action_code_));
+  }
+}
+
+void ArgumentImpl::InitTypeCallback() {
+  if (!ActionNeedsTypeCallback(action_code_)) {
+    // Some action, like print usage, store const.., don't need a type..
+    type_code_ = Types::kNothing;
+    type_ops_.reset();
+    return;
+  }
+
+  if (type_code_ == Types::kCustom) {
+    DCHECK(custom_type_);
+    type_ops_.reset();
+    return;
+  }
+
+  // Create type_ops_.
+  if (!type_ops_) {
+    type_ops_ = action_code_ == Actions::kAppend
+                    ? ops_factory_->CreateValueTypeOps()
+                    : ops_factory_->Create();
+  }
+
+  // Figure out type_code_.
+  if (type_code_ == Types::kNothing) {
+    // The action needs a type, but is not explicityl set, so default is parse.
+    type_code_ = Types::kParse;
+  }
+
+  // See if type_code_ is supported.
+  OpsKind ops;
+  bool ok = TypesToOpsKind(type_code_, &ops);
+  DCHECK(ok);
+  CHECK_USER(type_ops_->IsSupported(ops), "Type %s is not supported by type %s",
+             TypesToString(type_code_), type_ops_->TypeName());
+
+  if (type_code_ == Types::kOpen) {
+    DCHECK(mode_ != kModeNoMode);
+  }
+}
+
+void ArgumentImpl::PerformTypeCheck() const {
+  // if (!dest_ptr_) return;
+  // if (action_code_ == Actions::kStore && !custom_type_) {
+  //   CHECK_USER(action_ops_->Type() == type_ops_->Type());
+  // }
+}
+
 void ArgumentImpl::Finalize() {
-  // DCHECK(!callback_runner_ && callback_resolver_);
-  // callback_runner_ = callback_resolver_->CreateCallbackRunner();
-  // callback_resolver_.reset();
+  InitActionCallback();
+  InitTypeCallback();
+  PerformTypeCheck();
 }
 
 void ArgumentHolderImpl::CompileToArgpOptions(
@@ -254,7 +395,7 @@ void ArgpParserImpl::ParseArgs(ArgArray args) {
 }
 
 bool ArgpParserImpl::ParseKnownArgs(ArgArray args,
-                                   std::vector<std::string>* rest) {
+                                    std::vector<std::string>* rest) {
   int arg_index;
   error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
                              &arg_index, this);
@@ -686,7 +827,9 @@ void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...) {
   std::vfprintf(stderr, fmt, ap);
   va_end(ap);
 
-  std::fprintf(stderr, "\n\nPlease check your code and read the documents of argparse.\n\n");
+  std::fprintf(
+      stderr,
+      "\n\nPlease check your code and read the documents of argparse.\n\n");
   std::abort();
 }
 
