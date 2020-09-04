@@ -61,25 +61,19 @@ Names::Names(std::initializer_list<const char*> names) {
 ArgumentImpl::ArgumentImpl(Argument::Delegate* delegate,
                            std::unique_ptr<NamesInfo> names,
                            int group)
-    : delegate_(delegate), group_(group) {
-  InitNames(std::move(names));
-  InitKey(names->is_option);
+    : delegate_(delegate), names_info_(std::move(names)), group_(group) {
+  DCHECK(names_info_);
+  DCHECK(delegate);
+  InitKey();
   delegate_->OnArgumentCreated(this);
 }
 
-void ArgumentImpl::InitNames(std::unique_ptr<NamesInfo> names) {
-  // TOOD: just set an info..
-  long_names_ = std::move(names->long_names);
-  short_names_ = std::move(names->short_names);
-  meta_var_ = std::move(names->meta_var);
-}
-
-void ArgumentImpl::InitKey(bool is_option) {
-  if (!is_option) {
+void ArgumentImpl::InitKey() {
+  if (!names_info_->is_option) {
     key_ = kKeyForPositional;
     return;
   }
-  key_ = short_names_.empty() ? delegate_->NextOptionKey() : short_names_[0];
+  key_ = short_names().empty() ? delegate_->NextOptionKey() : short_names()[0];
 }
 
 void ArgumentImpl::CompileToArgpOptions(
@@ -98,7 +92,7 @@ void ArgumentImpl::CompileToArgpOptions(
   opt.key = key();
   options->push_back(opt);
   // TODO: handle alias correctly. Add all aliases.
-  for (auto first = long_names_.begin() + 1, last = long_names_.end();
+  for (auto first = long_names().begin() + 1, last = long_names().end();
        first != last; ++first) {
     argp_option opt_alias;
     std::memcpy(&opt_alias, &opt, sizeof(argp_option));
@@ -144,13 +138,13 @@ void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
   }
   os << '[';
   std::size_t i = 0;
-  const auto size = long_names_.size() + short_names_.size();
+  const auto size = long_names().size() + short_names().size();
 
   for (; i < size; ++i) {
-    if (i < long_names_.size()) {
-      os << "--" << long_names_[i];
+    if (i < long_names().size()) {
+      os << "--" << long_names()[i];
     } else {
-      os << '-' << short_names_[i - long_names_.size()];
+      os << '-' << short_names()[i - long_names().size()];
     }
     if (i < size - 1)
       os << '|';

@@ -558,7 +558,6 @@ struct NamesInfo {
   explicit NamesInfo(std::string name);
   // Option.
   explicit NamesInfo(std::vector<const char*> names);
-  bool CheckNamesConflict(std::set<std::string>* all);
 };
 
 struct NumArgsInfo {
@@ -1112,7 +1111,7 @@ class ArgumentImpl : public Argument, private CallbackRunner {
 
   int key() const { return key_; }
   int group() const { return group_; }
-  bool is_option() const { return key_ != kKeyForPositional; }
+  bool is_option() const { return names_info_->is_option; }
   bool is_required() const { return is_required_; }
 
   const std::string& help_doc() const { return help_doc_; }
@@ -1120,19 +1119,23 @@ class ArgumentImpl : public Argument, private CallbackRunner {
     return help_doc_.empty() ? nullptr : help_doc_.c_str();
   }
 
-  const std::string& meta_var() const { return meta_var_; }
+  const std::string& meta_var() const { return names_info_->meta_var; }
   const char* arg() const {
-    DCHECK(!meta_var_.empty());
-    return meta_var_.c_str();
+    DCHECK(!meta_var().empty());
+    return meta_var().c_str();
   }
 
   // TODO: split the long_names, short_names from Names into name, key and
   // alias.
-  const std::vector<std::string>& long_names() const { return long_names_; }
-  const std::vector<char>& short_names() const { return short_names_; }
+  const std::vector<std::string>& long_names() const {
+    return names_info_->long_names;
+  }
+  const std::vector<char>& short_names() const {
+    return names_info_->short_names;
+  }
 
   const char* name() const {
-    return long_names_.empty() ? nullptr : long_names_[0].c_str();
+    return long_names().empty() ? nullptr : long_names()[0].c_str();
   }
 
   CallbackRunner* GetCallbackRunner() override { return this; }
@@ -1159,11 +1162,7 @@ class ArgumentImpl : public Argument, private CallbackRunner {
 
   class InitializerImpl;
 
-  // Fill in members to do with names.
-  void InitNames(std::unique_ptr<NamesInfo> names);
-
-  // Initialize the key member. Must be called after InitNames().
-  void InitKey(bool is_option);
+  void InitKey();
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
@@ -1187,10 +1186,11 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
+  std::unique_ptr<NamesInfo> names_info_;
   std::string help_doc_;
-  std::vector<std::string> long_names_;
-  std::vector<char> short_names_;
-  std::string meta_var_;
+  // std::vector<std::string> long_names_;
+  // std::vector<char> short_names_;
+  // std::string meta_var_;
   bool is_required_ = false;
 
   // CallbackRunner members.
@@ -1217,7 +1217,7 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
     impl_->help_doc_ = std::move(help_doc);
   }
   void SetMetaVar(std::string meta_var) override {
-    impl_->meta_var_ = std::move(meta_var);
+    impl_->names_info_->meta_var = std::move(meta_var);
   }
   void SetDest(std::unique_ptr<DestInfo> dest) override {
     DCHECK(dest);
