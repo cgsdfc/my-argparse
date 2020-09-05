@@ -263,23 +263,8 @@ std::string TypeHint() {
   return TypeHintTraits<T>::Run();
 }
 
-#ifndef ARGPARSE_USE_FMTLIB
-#define ARGPARSE_USE_FMTLIB (0)
-#endif
-
 template <typename T>
-struct FmtlibFormatTraits {
-  static std::string Run(const T& in) {
-#if ARGPARSE_USE_FMTLIB
-    return fmt::format("{}", in);
-#endif
-  }
-};
-
-template <typename T, typename SFINAE = void>
-struct DefaultFormatTraits {
-
-};
+const char* TypeName();
 
 template <typename T, typename SFINAE = void>
 struct has_insert_operator : std::false_type {};
@@ -290,9 +275,51 @@ struct has_insert_operator<T,
                                                 << std::declval<const T&>())>>
     : std::true_type {};
 
-// template <typename T>
-// struct DefaultFormatTraits<T, std::enable_if_t<ARGPARSE_USE_FMTLIB>>
-//     : FmtlibFormatTraits<T> {};
+template <typename T>
+struct DummyFormatTraits {
+  static std::string Run(const T& in) {
+    std::ostringstream os;
+    os << "<" << TypeName<T>() << " object>";
+    return os.str();
+  }
+};
+
+template <typename T>
+struct StringStreamFormatTraits {
+  static std::string Run(const T& in) {
+    std::ostringstream os;
+    os << in;
+    CHECK_USER(os.good(), "error formatting type %s: std::ostream failed",
+               TypeName<T>());
+    return os.str();
+  }
+};
+
+template <typename T, typename SFINAE = void>
+struct DefaultFormatTraits;
+
+template <>
+struct DefaultFormatTraits<bool, void> {
+  static std::string Run(bool in) { return in ? "true" : "false"; }
+};
+
+#if ARGPARSE_USE_FMTLIB
+template <typename T>
+struct FmtlibFormatTraits {
+  static std::string Run(const T& in) { return fmt::format("{}", in); }
+};
+// Handled by fmtlib completely.
+template <typename T, typename SFINAE>
+struct DefaultFormatTraits : FmtlibFormatTraits<T> {};
+#else
+// Default version is dummy..
+template <typename T, typename SFINAE>
+struct DefaultFormatTraits : DummyFormatTraits<T> {};
+template <typename T>
+struct DefaultFormatTraits<T, std::enable_if_t<has_insert_operator<T>{}>>
+    : StringStreamFormatTraits<T> {};
+#endif
+// Handling for file obj..
 
 // The rules for FormatTraits are:
 // 1. If fmtlib is found, use its functionality.
@@ -300,7 +327,13 @@ struct has_insert_operator<T,
 // use that. Specially, std::boolalpha is used.
 // 3. Fall back to a format: <Type object>.
 template <typename T>
-struct FormatTraits;
+struct FormatTraits : DefaultFormatTraits<T> {};
+
+// Helper function:
+template <typename T>
+std::string Format(const T& in) {
+  return FormatTraits<T>::Run(in);
+}
 
 namespace detail {
 // clang-format off
