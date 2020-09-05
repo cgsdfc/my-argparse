@@ -308,14 +308,56 @@ void CallbackInfo::InitTypeCallback() {
   // }
 }
 
+void CallbackInfo::InitDefaultValue() {
+  switch (action->action_code) {
+    case Actions::kStoreFalse:
+      default_value = MakeAny(true);
+      break;
+    case Actions::kStoreTrue:
+      default_value = MakeAny(false);
+      break;
+    default:
+      break;
+  }
+}
+
 void CallbackInfo::Initialize() {
   InitActionCallback();
   InitTypeCallback();
+  InitDefaultValue();
 }
 
-void ArgumentImpl::Finalize() {
+void ArgumentImpl::Initialize(HelpFormatPolicy policy) {
   DCHECK(callback_info_);
   callback_info_->Initialize();
+  ProcessHelpFormatPolicy(policy);
+}
+
+void CallbackInfo::FormatTypeHint(std::ostream& os) const {
+  if (type->ops) {
+    os << "(type: " << type->ops->GetTypeHint() << ")";
+  }
+}
+
+void CallbackInfo::FormatDefaultValue(std::ostream& os) const {
+  // The type of default value is always the type of dest.
+  // the type of dest is reflected by action_ops.
+  if (default_value && dest_ops) {
+    os << "(default: " << dest_ops->FormatValue(*default_value) << ")";
+  }
+}
+
+void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
+  if (policy == HelpFormatPolicy::kDefault)
+    return;
+  std::ostringstream os;
+  os << "  ";
+  if (policy == HelpFormatPolicy::kTypeHint) {
+    callback_info_->FormatTypeHint(os);
+  } else if (policy == HelpFormatPolicy::kDefaultValueHint) {
+    callback_info_->FormatDefaultValue(os);
+  }
+  help_doc_.append(os.str());
 }
 
 void ArgumentHolderImpl::CompileToArgpOptions(
@@ -334,7 +376,7 @@ void ArgumentHolderImpl::CompileToArgpOptions(
   // TODO: if there is not pos/opt at all but there are two groups, will argp
   // still print these empty groups?
   for (Argument& arg : arguments_) {
-    arg.Finalize();
+    arg.Initialize(help_format_policy_);
     arg.CompileToArgpOptions(options);
   }
   // Only when at least one opt/pos presents should we generate their groups.
@@ -663,23 +705,26 @@ void CallbackInfo::RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
   // }
 }
 
+void TypeInfo::Run(const std::string& in, OpsResult* out) {
+  DCHECK(ops);
+  switch (type_code) {
+    case Types::kParse:
+      ops->Parse(in, out);
+      break;
+    case Types::kOpen:
+      ops->Open(in, mode, out);
+      break;
+    case Types::kNothing:
+      break;
+    case Types::kCustom:
+      DCHECK(callback);
+      callback->Run(in, out);
+      break;
+  }
+}
+
 void CallbackInfo::RunTypeCallback(const std::string& in, OpsResult* out) {
-  // auto* ops = type_ops_.get();
-  // DCHECK(ops);
-  // switch (type_code_) {
-  //   case Types::kParse:
-  //     ops->Parse(in, out);
-  //     break;
-  //   case Types::kOpen:
-  //     ops->Open(in, mode_, out);
-  //     break;
-  //   case Types::kNothing:
-  //     break;
-  //   case Types::kCustom:
-  //     DCHECK(custom_type_);
-  //     custom_type_->Run(in, out);
-  //     break;
-  // }
+  type->Run(in, out);
 }
 
 void CallbackInfo::RunCallback(Context* ctx,

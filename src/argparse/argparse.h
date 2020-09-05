@@ -18,6 +18,10 @@
 #include <variant>
 #include <vector>
 
+#ifdef ARGPARSE_USE_FMTLIB
+#include <fmt/core.h>
+#endif
+
 #define DCHECK(expr) assert(expr)
 #define DCHECK2(expr, msg) assert(expr&& msg)
 
@@ -259,6 +263,45 @@ std::string TypeHint() {
   return TypeHintTraits<T>::Run();
 }
 
+#ifndef ARGPARSE_USE_FMTLIB
+#define ARGPARSE_USE_FMTLIB (0)
+#endif
+
+template <typename T>
+struct FmtlibFormatTraits {
+  static std::string Run(const T& in) {
+#if ARGPARSE_USE_FMTLIB
+    return fmt::format("{}", in);
+#endif
+  }
+};
+
+template <typename T, typename SFINAE = void>
+struct DefaultFormatTraits {
+
+};
+
+template <typename T, typename SFINAE = void>
+struct has_insert_operator : std::false_type {};
+
+template <typename T>
+struct has_insert_operator<T,
+                           std::void_t<decltype(std::declval<std::ostream&>()
+                                                << std::declval<const T&>())>>
+    : std::true_type {};
+
+// template <typename T>
+// struct DefaultFormatTraits<T, std::enable_if_t<ARGPARSE_USE_FMTLIB>>
+//     : FmtlibFormatTraits<T> {};
+
+// The rules for FormatTraits are:
+// 1. If fmtlib is found, use its functionality.
+// 2. If no fmtlib, but operator<<(std::ostream&, const T&) is defined for T,
+// use that. Specially, std::boolalpha is used.
+// 3. Fall back to a format: <Type object>.
+template <typename T>
+struct FormatTraits;
+
 namespace detail {
 // clang-format off
 
@@ -484,6 +527,7 @@ class Operations {
   virtual bool IsSupported(OpsKind ops) = 0;
   virtual const char* GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
+  virtual std::string FormatValue(const Any& val) = 0;
   virtual ~Operations() {}
 };
 
@@ -544,6 +588,8 @@ class CallbackRunner {
     virtual void HandlePrintUsage(Context* ctx) = 0;
     virtual void HandlePrintHelp(Context* ctx) = 0;
   };
+  // Before the callback is run, allow default value to be set.
+  virtual void InitCallback() {}
   virtual void RunCallback(Context* ctx, Delegate* delegate) = 0;
   virtual ~CallbackRunner() {}
 };
@@ -592,21 +638,29 @@ struct TypeInfo {
       : type_code(Types::kCustom), callback(std::move(cb)) {}
   explicit TypeInfo(std::unique_ptr<Operations> ops)
       : type_code(Types::kParse), ops(std::move(ops)) {}
+
+  void Run(const std::string& in, OpsResult* out);
 };
 
 // Keep all info needed for running callback.
-struct CallbackInfo {
+struct CallbackInfo : public CallbackRunner {
   std::unique_ptr<DestInfo> dest;
-  std::unique_ptr<Operations> action_ops;
   std::unique_ptr<ActionInfo> action;
   std::unique_ptr<TypeInfo> type;
   std::unique_ptr<NumArgsInfo> num_args;
   std::unique_ptr<Any> const_value;
   std::unique_ptr<Any> default_value;
+  std::unique_ptr<Operations> action_ops;
+  std::unique_ptr<Operations> dest_ops;
 
   void Initialize();
-  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate);
+  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate) override;
+  void FormatTypeHint(std::ostream& os) const;
+  void FormatDefaultValue(std::ostream& os) const;
 
+  Types type_code() const { return type->type_code; }
+  Operations* type_ops() const { return type->ops.get(); }
+  Mode mode() const { return type->mode; }
   // Helpers:
  private:
   CallbackRunner::Delegate* runner_delegate_ = nullptr;
@@ -621,6 +675,7 @@ struct CallbackInfo {
   // }
   void InitActionCallback();
   void InitTypeCallback();
+  void InitDefaultValue();
   void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
   void RunTypeCallback(const std::string& in, OpsResult* out);
 };
@@ -641,11 +696,24 @@ class ArgumentInitializer {
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
 };
 
+enum class HelpFormatPolicy {
+  kDefault,           // add nothing.
+  kTypeHint,          // add (type: <type-hint>) to help doc.
+  kDefaultValueHint,  // add (default: <default-value>) to help doc.
+};
+
 class Argument {
  public:
-  // Finalize...
+  // The initialization process of an Argument is:
+  // 1. contructor is called, names and is_option is determined.
+  // 2. ArgumentInitializer is created and its methods are called.
+  // Different properties of an arg are set.
+  // 3. Initialize() is called, this validates various aspects of an arg and
+  // prepares it for running callbacks.
+  // This initialization process can only happen once for an arg.
+
   virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
-  virtual void Finalize() = 0;
+  virtual void Initialize(HelpFormatPolicy policy) = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
 
   virtual bool IsOption() const = 0;
@@ -890,6 +958,9 @@ class OperationsImpl : public Operations {
   }
   const char* GetTypeName() override { return TypeName<T>(); }
   std::string GetTypeHint() override { return TypeHint<T>(); }
+  std::string FormatValue(const Any& val) override {
+    return FormatTraits<T>::Run(AnyCast<T>(val));
+  }
 };
 
 template <typename T>
@@ -967,12 +1038,16 @@ class ArgumentImpl : public Argument {
     return long_names().empty() ? nullptr : long_names()[0].c_str();
   }
 
-  CallbackRunner* GetCallbackRunner() override {  }
+  CallbackRunner* GetCallbackRunner() override {
+    DCHECK(callback_info_);
+    return callback_info_.get();
+   }
 
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostream& os) const override;
 
-  void Finalize() override;
+  void Initialize(HelpFormatPolicy policy) override;
+  void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
 
   void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 
@@ -990,28 +1065,12 @@ class ArgumentImpl : public Argument {
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
-  // CallbackRunner:
-
-  // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
   int group_ = 0;
   std::unique_ptr<NamesInfo> names_info_;
   std::string help_doc_;
   bool is_required_ = false;
-
-  // CallbackRunner members.
   std::unique_ptr<CallbackInfo> callback_info_;
-  // std::unique_ptr<OpsFactory> ops_factory_;
-  // std::unique_ptr<Operations> action_ops_;
-  // std::unique_ptr<Operations> type_ops_;
-  // std::unique_ptr<Any> const_value_;
-  // std::unique_ptr<Any> default_value_;
-  // std::unique_ptr<ActionCallback> custom_action_;
-  // std::unique_ptr<TypeCallback> custom_type_;
-  // Actions action_code_ = Actions::kNoAction;
-  // Types type_code_ = Types::kNothing;
-  // Mode mode_ = kModeNoMode;
-  // DestPtr dest_ptr_;
 };
 
 template <typename T>
@@ -1406,6 +1465,8 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // unsigned next_group_id_ = kFirstUserGroup;
   unsigned next_key_ = kFirstArgumentKey;
   bool dirty_ = true;
+  // Control what extra info appear in the help doc.
+  HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
   // indexed by their define-order.
