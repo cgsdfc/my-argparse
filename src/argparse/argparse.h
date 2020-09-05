@@ -614,16 +614,19 @@ struct Context {
 
 class CallbackRunner {
  public:
-  class Delegate {
+  class Delegate { // should be called Client??
    public:
     virtual ~Delegate() {}
-    virtual void HandleCallbackError(Context* ctx) = 0;
-    virtual void HandlePrintUsage(Context* ctx) = 0;
-    virtual void HandlePrintHelp(Context* ctx) = 0;
+    // virtual bool has_value() = 0;
+    virtual bool GetValue(std::string* out) = 0;
+
+    virtual void HandleCallbackError(const std::string& errmsg) = 0;
+    virtual void HandlePrintUsage() = 0;
+    virtual void HandlePrintHelp() = 0;
   };
   // Before the callback is run, allow default value to be set.
   virtual void InitCallback() {}
-  virtual void RunCallback(Context* ctx, Delegate* delegate) = 0;
+  virtual void RunCallback(std::unique_ptr<Delegate> delegate) = 0;
   virtual ~CallbackRunner() {}
 };
 
@@ -687,7 +690,7 @@ struct CallbackInfo : public CallbackRunner {
   std::unique_ptr<Operations> dest_ops;
 
   void Initialize();
-  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate) override;
+  void RunCallback(std::unique_ptr<Delegate> delegate) override;
   void FormatTypeHint(std::ostream& os) const;
   void FormatDefaultValue(std::ostream& os) const;
 
@@ -709,7 +712,7 @@ struct CallbackInfo : public CallbackRunner {
   void InitActionCallback();
   void InitTypeCallback();
   void InitDefaultValue();
-  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
+  void RunActionCallback(std::unique_ptr<Any> data, Delegate*);
   void RunTypeCallback(const std::string& in, OpsResult* out);
 };
 
@@ -1516,7 +1519,7 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
 
 // This handles the argp_parser_t function and provide a bunch of context during
 // the parsing.
-class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
+class ArgpParserImpl : public ArgpParser {
  public:
   // When this is constructed, Delegate must have been added options.
   explicit ArgpParserImpl(ArgpParser::Delegate* delegate);
@@ -1534,19 +1537,19 @@ class ArgpParserImpl : public ArgpParser, private CallbackRunner::Delegate {
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
   void RunCallback(Argument* arg, char* value, ArgpState state) {
-    Context ctx(arg, value, state);
-    arg->GetCallbackRunner()->RunCallback(&ctx, this);
+    // Context ctx(arg, value, state);
+    // arg->GetCallbackRunner()->RunCallback(&ctx, this);
   }
 
   // CallbackRunner::Delegate:
-  void HandleCallbackError(Context* ctx) override {
-    ctx->state.ErrorF("error parsing argument: %s", ctx->errmsg.c_str());
-  }
+  // void HandleCallbackError(Context* ctx) override {
+  //   ctx->state.ErrorF("error parsing argument: %s", ctx->errmsg.c_str());
+  // }
 
-  void HandlePrintUsage(Context* ctx) override { ctx->state.PrintUsage(); }
-  void HandlePrintHelp(Context* ctx) override {
-    ctx->state.PrintHelp(stderr, 0);
-  }
+  // void HandlePrintUsage(Context* ctx) override { ctx->state.PrintUsage(); }
+  // void HandlePrintHelp(Context* ctx) override {
+  //   ctx->state.PrintHelp(stderr, 0);
+  // }
 
   error_t DoParse(int key, char* arg, ArgpState state);
 

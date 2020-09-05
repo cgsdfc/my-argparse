@@ -667,7 +667,8 @@ Actions StringToActions(const std::string& str) {
   return iter->second;
 }
 
-void CallbackInfo::RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
+void CallbackInfo::RunActionCallback(std::unique_ptr<Any> data,
+                                     CallbackRunner::Delegate* ctx) {
   // auto* ops = action_ops_.get();
   // DCHECK(ops);
 
@@ -727,18 +728,20 @@ void CallbackInfo::RunTypeCallback(const std::string& in, OpsResult* out) {
   type->Run(in, out);
 }
 
-void CallbackInfo::RunCallback(Context* ctx,
-                               CallbackRunner::Delegate* delegate) {
-  runner_delegate_ = delegate;
+void CallbackInfo::RunCallback(
+    std::unique_ptr<CallbackRunner::Delegate> delegate) {
+  // runner_delegate_ = delegate;
+  std::string in;
   OpsResult result;
-  if (ctx->has_value)
-    RunTypeCallback(ctx->value, &result);
+  if (delegate->GetValue(&in))
+    RunTypeCallback(in, &result);
   if (result.has_error) {
-    ctx->errmsg = std::move(result.errmsg);
-    runner_delegate_->HandleCallbackError(ctx);
+    delegate->HandleCallbackError(result.errmsg);
+    // ctx->errmsg = std::move(result.errmsg);
+    // runner_delegate_->HandleCallbackError(ctx);
     return;
   }
-  RunActionCallback(std::move(result.value), ctx);
+  RunActionCallback(std::move(result.value), delegate.get());
 }
 
 std::string ModeToChars(Mode mode) {
