@@ -602,27 +602,16 @@ class ActionCallback {
   virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
 };
 
-// This is an internal class to communicate data/state between user's callback.
-struct Context {
-  Context(const Argument* argument, const char* value, ArgpState state);
-  const bool has_value;
-  const Argument* argument;
-  ArgpState state;
-  std::string value;
-  std::string errmsg;
-};
-
 class CallbackRunner {
  public:
+  // Communicate with outside when callback is fired.
   class Delegate { // should be called Client??
    public:
     virtual ~Delegate() {}
-    // virtual bool has_value() = 0;
     virtual bool GetValue(std::string* out) = 0;
-
-    virtual void HandleCallbackError(const std::string& errmsg) = 0;
-    virtual void HandlePrintUsage() = 0;
-    virtual void HandlePrintHelp() = 0;
+    virtual void OnCallbackError(const std::string& errmsg) = 0;
+    virtual void OnPrintUsage() = 0;
+    virtual void OnPrintHelp() = 0;
   };
   // Before the callback is run, allow default value to be set.
   virtual void InitCallback() {}
@@ -1517,6 +1506,32 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   std::unique_ptr<ArgpParser> parser_;
 };
 
+// This is an internal class to communicate data/state between user's callback.
+class Context : public CallbackRunner::Delegate {
+ public:
+  Context(const Argument* argument, const char* value, ArgpState state);
+
+  void OnCallbackError(const std::string& errmsg) override {
+    return state_.ErrorF("error parsing argument: %s", errmsg.c_str());
+  }
+
+  void OnPrintUsage() override { return state_.PrintUsage(); }
+  void OnPrintHelp() override { return state_.PrintHelp(stderr, 0); }
+  bool GetValue(std::string* out) override {
+    if (has_value_) {
+      *out = value_;
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  const bool has_value_;
+  const Argument* arg_;
+  ArgpState state_;
+  std::string value_;
+};
+
 // This handles the argp_parser_t function and provide a bunch of context during
 // the parsing.
 class ArgpParserImpl : public ArgpParser {
@@ -1537,19 +1552,9 @@ class ArgpParserImpl : public ArgpParser {
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
   void RunCallback(Argument* arg, char* value, ArgpState state) {
-    // Context ctx(arg, value, state);
-    // arg->GetCallbackRunner()->RunCallback(&ctx, this);
+    arg->GetCallbackRunner()->RunCallback(
+        std::make_unique<Context>(arg, value, state));
   }
-
-  // CallbackRunner::Delegate:
-  // void HandleCallbackError(Context* ctx) override {
-  //   ctx->state.ErrorF("error parsing argument: %s", ctx->errmsg.c_str());
-  // }
-
-  // void HandlePrintUsage(Context* ctx) override { ctx->state.PrintUsage(); }
-  // void HandlePrintHelp(Context* ctx) override {
-  //   ctx->state.PrintHelp(stderr, 0);
-  // }
 
   error_t DoParse(int key, char* arg, ArgpState state);
 

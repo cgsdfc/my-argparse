@@ -7,9 +7,9 @@
 namespace argparse {
 
 Context::Context(const Argument* argument, const char* value, ArgpState state)
-    : has_value(bool(value)), argument(argument), state(state) {
-  if (has_value)
-    this->value.assign(value);
+    : has_value_(bool(value)), arg_(argument), state_(state) {
+  if (has_value_)
+    this->value_.assign(value);
 }
 
 NamesInfo::NamesInfo(std::string name) {
@@ -736,7 +736,7 @@ void CallbackInfo::RunCallback(
   if (delegate->GetValue(&in))
     RunTypeCallback(in, &result);
   if (result.has_error) {
-    delegate->HandleCallbackError(result.errmsg);
+    delegate->OnCallbackError(result.errmsg);
     // ctx->errmsg = std::move(result.errmsg);
     // runner_delegate_->HandleCallbackError(ctx);
     return;
