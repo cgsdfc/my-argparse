@@ -6,7 +6,9 @@
 
 namespace argparse {
 
-Context::Context(const Argument* argument, const char* value, ArgpState state)
+ArgpParserImpl::Context::Context(const Argument* argument,
+                                 const char* value,
+                                 ArgpState state)
     : has_value_(bool(value)), arg_(argument), state_(state) {
   if (has_value_)
     this->value_.assign(value);
@@ -416,6 +418,11 @@ ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
   argp_.args_doc = args_doc_.c_str();
 }
 
+void ArgpParserImpl::RunCallback(Argument* arg, char* value, ArgpState state) {
+  arg->GetCallbackRunner()->RunCallback(
+      std::make_unique<Context>(arg, value, state));
+}
+
 void ArgpParserImpl::Init(const Options& options) {
   if (options.program_version)
     argp_program_version = options.program_version;
@@ -668,7 +675,7 @@ Actions StringToActions(const std::string& str) {
 }
 
 void CallbackInfo::RunActionCallback(std::unique_ptr<Any> data,
-                                     CallbackRunner::Delegate* ctx) {
+                                     CallbackRunner::Delegate* delegate) {
   // auto* ops = action_ops_.get();
   // DCHECK(ops);
 
@@ -730,15 +737,12 @@ void CallbackInfo::RunTypeCallback(const std::string& in, OpsResult* out) {
 
 void CallbackInfo::RunCallback(
     std::unique_ptr<CallbackRunner::Delegate> delegate) {
-  // runner_delegate_ = delegate;
   std::string in;
   OpsResult result;
   if (delegate->GetValue(&in))
     RunTypeCallback(in, &result);
   if (result.has_error) {
     delegate->OnCallbackError(result.errmsg);
-    // ctx->errmsg = std::move(result.errmsg);
-    // runner_delegate_->HandleCallbackError(ctx);
     return;
   }
   RunActionCallback(std::move(result.value), delegate.get());

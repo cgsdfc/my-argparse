@@ -688,7 +688,6 @@ struct CallbackInfo : public CallbackRunner {
   Mode mode() const { return type->mode; }
   // Helpers:
  private:
-  CallbackRunner::Delegate* runner_delegate_ = nullptr;
   // const Any& const_value() const {
   //   // DCHECK(const_value_);
   //   // return *const_value_;
@@ -1506,32 +1505,6 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   std::unique_ptr<ArgpParser> parser_;
 };
 
-// This is an internal class to communicate data/state between user's callback.
-class Context : public CallbackRunner::Delegate {
- public:
-  Context(const Argument* argument, const char* value, ArgpState state);
-
-  void OnCallbackError(const std::string& errmsg) override {
-    return state_.ErrorF("error parsing argument: %s", errmsg.c_str());
-  }
-
-  void OnPrintUsage() override { return state_.PrintUsage(); }
-  void OnPrintHelp() override { return state_.PrintHelp(stderr, 0); }
-  bool GetValue(std::string* out) override {
-    if (has_value_) {
-      *out = value_;
-      return true;
-    }
-    return false;
-  }
-
- private:
-  const bool has_value_;
-  const Argument* arg_;
-  ArgpState state_;
-  std::string value_;
-};
-
 // This handles the argp_parser_t function and provide a bunch of context during
 // the parsing.
 class ArgpParserImpl : public ArgpParser {
@@ -1551,10 +1524,10 @@ class ArgpParserImpl : public ArgpParser {
   void set_args_doc(const char* args_doc) { argp_.args_doc = args_doc; }
   void AddFlags(int flags) { parser_flags_ |= flags; }
 
-  void RunCallback(Argument* arg, char* value, ArgpState state) {
-    arg->GetCallbackRunner()->RunCallback(
-        std::make_unique<Context>(arg, value, state));
-  }
+  // This is an internal class to communicate data/state between user's
+  // callback.
+  class Context;
+  void RunCallback(Argument* arg, char* value, ArgpState state);
 
   error_t DoParse(int key, char* arg, ArgpState state);
 
@@ -1579,6 +1552,32 @@ class ArgpParserImpl : public ArgpParser {
   std::string args_doc_;
   std::vector<argp_option> argp_options_;
   HelpFilterCallback help_filter_;
+};
+
+class ArgpParserImpl::Context : public CallbackRunner::Delegate {
+ public:
+  Context(const Argument* argument, const char* value, ArgpState state);
+
+  void OnCallbackError(const std::string& errmsg) override {
+    return state_.ErrorF("error parsing argument: %s", errmsg.c_str());
+  }
+
+  void OnPrintUsage() override { return state_.PrintUsage(); }
+  void OnPrintHelp() override { return state_.PrintHelp(stderr, help_flags_); }
+  bool GetValue(std::string* out) override {
+    if (has_value_) {
+      *out = value_;
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  const bool has_value_;
+  const Argument* arg_;
+  ArgpState state_;
+  std::string value_;
+  int help_flags_ = 0;
 };
 
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
