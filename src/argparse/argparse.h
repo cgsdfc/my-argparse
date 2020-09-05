@@ -609,6 +609,16 @@ struct CallbackInfo {
 
   // Helpers:
  private:
+  CallbackRunner::Delegate* runner_delegate_ = nullptr;
+  // const Any& const_value() const {
+  //   // DCHECK(const_value_);
+  //   // return *const_value_;
+  // }
+
+  // const DestPtr& dest() const {
+  //   // DCHECK(dest_ptr_);
+  //   // return dest_ptr_;
+  // }
   void InitActionCallback();
   void InitTypeCallback();
   void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
@@ -918,7 +928,7 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 }
 
 // Holds all meta-info about an argument.
-class ArgumentImpl : public Argument, private CallbackRunner {
+class ArgumentImpl : public Argument {
  public:
   ArgumentImpl(ArgumentHolder* holder,
                std::unique_ptr<NamesInfo> names,
@@ -957,15 +967,12 @@ class ArgumentImpl : public Argument, private CallbackRunner {
     return long_names().empty() ? nullptr : long_names()[0].c_str();
   }
 
-  CallbackRunner* GetCallbackRunner() override { return this; }
+  CallbackRunner* GetCallbackRunner() override {  }
 
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostream& os) const override;
 
   void Finalize() override;
-  void InitActionCallback();
-  void InitTypeCallback();
-  void PerformTypeCheck() const;
 
   void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 
@@ -984,19 +991,6 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
   // CallbackRunner:
-  const Any& const_value() const {
-    DCHECK(const_value_);
-    return *const_value_;
-  }
-
-  const DestPtr& dest() const {
-    DCHECK(dest_ptr_);
-    return dest_ptr_;
-  }
-
-  void RunCallback(Context* ctx, CallbackRunner::Delegate* delegate) override;
-  void RunActionCallback(std::unique_ptr<Any> data, Context* ctx);
-  void RunTypeCallback(const std::string& in, OpsResult* out);
 
   // For positional, this is -1, for group-header, this is -2.
   int key_ = kKeyForNothing;
@@ -1006,18 +1000,18 @@ class ArgumentImpl : public Argument, private CallbackRunner {
   bool is_required_ = false;
 
   // CallbackRunner members.
-  CallbackRunner::Delegate* runner_delegate_ = nullptr;
-  std::unique_ptr<OpsFactory> ops_factory_;
-  std::unique_ptr<Operations> action_ops_;
-  std::unique_ptr<Operations> type_ops_;
-  std::unique_ptr<Any> const_value_;
-  std::unique_ptr<Any> default_value_;
-  std::unique_ptr<ActionCallback> custom_action_;
-  std::unique_ptr<TypeCallback> custom_type_;
-  Actions action_code_ = Actions::kNoAction;
-  Types type_code_ = Types::kNothing;
-  Mode mode_ = kModeNoMode;
-  DestPtr dest_ptr_;
+  std::unique_ptr<CallbackInfo> callback_info_;
+  // std::unique_ptr<OpsFactory> ops_factory_;
+  // std::unique_ptr<Operations> action_ops_;
+  // std::unique_ptr<Operations> type_ops_;
+  // std::unique_ptr<Any> const_value_;
+  // std::unique_ptr<Any> default_value_;
+  // std::unique_ptr<ActionCallback> custom_action_;
+  // std::unique_ptr<TypeCallback> custom_type_;
+  // Actions action_code_ = Actions::kNoAction;
+  // Types type_code_ = Types::kNothing;
+  // Mode mode_ = kModeNoMode;
+  // DestPtr dest_ptr_;
 };
 
 template <typename T>
@@ -1205,7 +1199,8 @@ struct Names {
 
 class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
  public:
-  explicit InitializerImpl(ArgumentImpl* impl) : impl_(impl) {}
+  InitializerImpl(ArgumentImpl* impl, CallbackInfo* cb_info)
+      : impl_(impl), cb_info_(cb_info) {}
 
   void SetRequired(bool required) override { impl_->is_required_ = required; }
   void SetHelpDoc(std::string help_doc) override {
@@ -1214,38 +1209,36 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
   void SetMetaVar(std::string meta_var) override {
     impl_->names_info_->meta_var = std::move(meta_var);
   }
-  void SetDest(std::unique_ptr<DestInfo> dest) override {
-    DCHECK(dest);
-    impl_->dest_ptr_ = dest->dest_ptr;
-    impl_->ops_factory_ = std::move(dest->ops_factory);
+  void SetDest(std::unique_ptr<DestInfo> info) override {
+    DCHECK(info);
+    cb_info_->dest = std::move(info);
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
     DCHECK(info);
-    impl_->type_code_ = info->type_code;
-    impl_->type_ops_ = std::move(info->ops);
-    impl_->custom_type_ = std::move(info->callback);
-    impl_->mode_ = info->mode;
+    cb_info_->type = std::move(info);
   }
   void SetAction(std::unique_ptr<ActionInfo> info) override {
     DCHECK(info);
-    impl_->action_code_ = info->action_code;
-    impl_->custom_action_ = std::move(info->callback);
+    cb_info_->action = std::move(info);
   }
   void SetConstValue(std::unique_ptr<Any> value) override {
     DCHECK(value);
-    impl_->const_value_ = std::move(value);
+    cb_info_->const_value = std::move(value);
   }
   void SetDefaultValue(std::unique_ptr<Any> value) override {
     DCHECK(value);
-    impl_->default_value_ = std::move(value);
+    cb_info_->default_value = std::move(value);
   }
 
  private:
   ArgumentImpl* impl_;
+  CallbackInfo* cb_info_;
 };
 
 inline std::unique_ptr<ArgumentInitializer> ArgumentImpl::CreateInitializer() {
-  return std::make_unique<InitializerImpl>(this);
+  DCHECK(!callback_info_);
+  callback_info_.reset(new CallbackInfo);
+  return std::make_unique<InitializerImpl>(this, callback_info_.get());
 }
 
 class ArgumentBuilder {
@@ -1342,8 +1335,7 @@ class ArgumentGroup : public ArgumentContainer {
 };
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
-class ArgumentHolderImpl : public ArgumentHolder,
-                           public ArgpParser::Delegate {
+class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
  public:
   ArgumentHolderImpl();
 
@@ -1401,7 +1393,6 @@ class ArgumentHolderImpl : public ArgumentHolder,
     DCHECK(group <= groups_.size());
     return &groups_[group - 1];
   }
-
 
   bool CheckNamesConflict(const NamesInfo& names);
 

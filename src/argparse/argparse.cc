@@ -231,94 +231,91 @@ const char* ActionsToString(Actions in) {
   }
 }
 
-void ArgumentImpl::InitActionCallback() {
-  const bool need_dest = ActionNeedsDest(action_code_);
-  CHECK_USER(dest_ptr_ || !need_dest,
-             "Action %s needs a dest, which is not provided",
-             ActionsToString(action_code_));
+void CallbackInfo::InitActionCallback() {
+  // const bool need_dest = ActionNeedsDest(action_code_);
+  // CHECK_USER(dest_ptr_ || !need_dest,
+  //            "Action %s needs a dest, which is not provided",
+  //            ActionsToString(action_code_));
 
-  if (!need_dest) {
-    // This action don't need a dest (provided or not).
-    return;
-  }
+  // if (!need_dest) {
+  //   // This action don't need a dest (provided or not).
+  //   return;
+  // }
 
-  DCHECK(dest_ptr_ && ops_factory_);
+  // DCHECK(dest_ptr_ && ops_factory_);
 
-  if (action_code_ == Actions::kCustom) {
-    DCHECK(custom_action_);
-    return;
-  }
+  // if (action_code_ == Actions::kCustom) {
+  //   DCHECK(custom_action_);
+  //   return;
+  // }
 
-  if (action_code_ == Actions::kNoAction) {
-    // If there is a dest, but no explicit action given, default is store.
-    action_code_ = Actions::kStore;
-  }
+  // if (action_code_ == Actions::kNoAction) {
+  //   // If there is a dest, but no explicit action given, default is store.
+  //   action_code_ = Actions::kStore;
+  // }
 
-  // Ops of action is always created from dest's ops-factory.
-  action_ops_ = ops_factory_->Create();
+  // // Ops of action is always created from dest's ops-factory.
+  // action_ops_ = ops_factory_->Create();
 
-  // See if Ops supports this action.
-  auto ops_kind = ActionsToOpsKind(action_code_);
-  CHECK_USER(action_ops_->IsSupported(ops_kind),
-             "Action %s is not supported by type %s",
-             ActionsToString(action_code_), action_ops_->GetTypeName());
+  // // See if Ops supports this action.
+  // auto ops_kind = ActionsToOpsKind(action_code_);
+  // CHECK_USER(action_ops_->IsSupported(ops_kind),
+  //            "Action %s is not supported by type %s",
+  //            ActionsToString(action_code_), action_ops_->GetTypeName());
 
-  // See if const value is provided as needed.
-  if (ActionNeedsConstValue(action_code_)) {
-    CHECK_USER(const_value_.get(),
-               "Action %s needs a const value, which is not provided",
-               ActionsToString(action_code_));
-  }
-}
-
-void ArgumentImpl::InitTypeCallback() {
-  if (!ActionNeedsTypeCallback(action_code_)) {
-    // Some action, like print usage, store const.., don't need a type..
-    type_code_ = Types::kNothing;
-    type_ops_.reset();
-    return;
-  }
-
-  if (type_code_ == Types::kCustom) {
-    DCHECK(custom_type_);
-    type_ops_.reset();
-    return;
-  }
-
-  // Create type_ops_.
-  if (!type_ops_) {
-    type_ops_ = action_code_ == Actions::kAppend
-                    ? ops_factory_->CreateValueTypeOps()
-                    : ops_factory_->Create();
-  }
-
-  // Figure out type_code_.
-  if (type_code_ == Types::kNothing) {
-    // The action needs a type, but is not explicityl set, so default is parse.
-    type_code_ = Types::kParse;
-  }
-
-  // See if type_code_ is supported.
-  auto ops= TypesToOpsKind(type_code_);
-  CHECK_USER(type_ops_->IsSupported(ops), "Type %s is not supported by type %s",
-             TypesToString(type_code_), type_ops_->GetTypeName());
-
-  if (type_code_ == Types::kOpen) {
-    DCHECK(mode_ != kModeNoMode);
-  }
-}
-
-void ArgumentImpl::PerformTypeCheck() const {
-  // if (!dest_ptr_) return;
-  // if (action_code_ == Actions::kStore && !custom_type_) {
-  //   CHECK_USER(action_ops_->Type() == type_ops_->Type());
+  // // See if const value is provided as needed.
+  // if (ActionNeedsConstValue(action_code_)) {
+  //   CHECK_USER(const_value_.get(),
+  //              "Action %s needs a const value, which is not provided",
+  //              ActionsToString(action_code_));
   // }
 }
 
-void ArgumentImpl::Finalize() {
+void CallbackInfo::InitTypeCallback() {
+  // if (!ActionNeedsTypeCallback(action->action_code)) {
+  //   // Some action, like print usage, store const.., don't need a type..
+  //   type_code_ = Types::kNothing;
+  //   type_ops_.reset();
+  //   return;
+  // }
+
+  // if (type_code_ == Types::kCustom) {
+  //   DCHECK(custom_type_);
+  //   type_ops_.reset();
+  //   return;
+  // }
+
+  // // Create type_ops_.
+  // if (!type_ops_) {
+  //   type_ops_ = action_code_ == Actions::kAppend
+  //                   ? ops_factory_->CreateValueTypeOps()
+  //                   : ops_factory_->Create();
+  // }
+
+  // // Figure out type_code_.
+  // if (type_code_ == Types::kNothing) {
+  //   // The action needs a type, but is not explicityl set, so default is parse.
+  //   type_code_ = Types::kParse;
+  // }
+
+  // // See if type_code_ is supported.
+  // auto ops= TypesToOpsKind(type_code_);
+  // CHECK_USER(type_ops_->IsSupported(ops), "Type %s is not supported by type %s",
+  //            TypesToString(type_code_), type_ops_->GetTypeName());
+
+  // if (type_code_ == Types::kOpen) {
+  //   DCHECK(mode_ != kModeNoMode);
+  // }
+}
+
+void CallbackInfo::Initialize() {
   InitActionCallback();
   InitTypeCallback();
-  PerformTypeCheck();
+}
+
+void ArgumentImpl::Finalize() {
+  DCHECK(callback_info_);
+  callback_info_->Initialize();
 }
 
 void ArgumentHolderImpl::CompileToArgpOptions(
@@ -628,64 +625,64 @@ Actions StringToActions(const std::string& str) {
   return iter->second;
 }
 
-void ArgumentImpl::RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
-  auto* ops = action_ops_.get();
-  DCHECK(ops);
+void CallbackInfo::RunActionCallback(std::unique_ptr<Any> data, Context* ctx) {
+  // auto* ops = action_ops_.get();
+  // DCHECK(ops);
 
-  switch (action_code_) {
-    case Actions::kNoAction:
-      break;
-    case Actions::kStore:
-      ops->Store(dest(), std::move(data));
-      break;
-    case Actions::kStoreConst:
-      ops->StoreConst(dest(), const_value());
-      break;
-    case Actions::kStoreTrue:
-      ops->StoreConst(dest(), MakeAnyOnStack(true));
-      break;
-    case Actions::kStoreFalse:
-      ops->StoreConst(dest(), MakeAnyOnStack(false));
-      break;
-    case Actions::kAppend:
-      ops->Append(dest(), std::move(data));
-      break;
-    case Actions::kAppendConst:
-      ops->AppendConst(dest(), const_value());
-      break;
-    case Actions::kPrintHelp:
-      runner_delegate_->HandlePrintHelp(ctx);
-      break;
-    case Actions::kPrintUsage:
-      runner_delegate_->HandlePrintUsage(ctx);
-      break;
-    case Actions::kCustom:
-      DCHECK(custom_action_);
-      custom_action_->Run(dest(), std::move(data));
-      break;
-  }
+  // switch (action_code_) {
+  //   case Actions::kNoAction:
+  //     break;
+  //   case Actions::kStore:
+  //     ops->Store(dest(), std::move(data));
+  //     break;
+  //   case Actions::kStoreConst:
+  //     ops->StoreConst(dest(), const_value());
+  //     break;
+  //   case Actions::kStoreTrue:
+  //     ops->StoreConst(dest(), MakeAnyOnStack(true));
+  //     break;
+  //   case Actions::kStoreFalse:
+  //     ops->StoreConst(dest(), MakeAnyOnStack(false));
+  //     break;
+  //   case Actions::kAppend:
+  //     ops->Append(dest(), std::move(data));
+  //     break;
+  //   case Actions::kAppendConst:
+  //     ops->AppendConst(dest(), const_value());
+  //     break;
+  //   case Actions::kPrintHelp:
+  //     runner_delegate_->HandlePrintHelp(ctx);
+  //     break;
+  //   case Actions::kPrintUsage:
+  //     runner_delegate_->HandlePrintUsage(ctx);
+  //     break;
+  //   case Actions::kCustom:
+  //     DCHECK(custom_action_);
+  //     custom_action_->Run(dest(), std::move(data));
+  //     break;
+  // }
 }
 
-void ArgumentImpl::RunTypeCallback(const std::string& in, OpsResult* out) {
-  auto* ops = type_ops_.get();
-  DCHECK(ops);
-  switch (type_code_) {
-    case Types::kParse:
-      ops->Parse(in, out);
-      break;
-    case Types::kOpen:
-      ops->Open(in, mode_, out);
-      break;
-    case Types::kNothing:
-      break;
-    case Types::kCustom:
-      DCHECK(custom_type_);
-      custom_type_->Run(in, out);
-      break;
-  }
+void CallbackInfo::RunTypeCallback(const std::string& in, OpsResult* out) {
+  // auto* ops = type_ops_.get();
+  // DCHECK(ops);
+  // switch (type_code_) {
+  //   case Types::kParse:
+  //     ops->Parse(in, out);
+  //     break;
+  //   case Types::kOpen:
+  //     ops->Open(in, mode_, out);
+  //     break;
+  //   case Types::kNothing:
+  //     break;
+  //   case Types::kCustom:
+  //     DCHECK(custom_type_);
+  //     custom_type_->Run(in, out);
+  //     break;
+  // }
 }
 
-void ArgumentImpl::RunCallback(Context* ctx,
+void CallbackInfo::RunCallback(Context* ctx,
                                CallbackRunner::Delegate* delegate) {
   runner_delegate_ = delegate;
   OpsResult result;
