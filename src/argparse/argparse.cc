@@ -314,9 +314,11 @@ void CallbackInfo::InitDefaultValue() {
   switch (action->action_code) {
     case Actions::kStoreFalse:
       default_value = MakeAny(true);
+      const_value = MakeAny(false);
       break;
     case Actions::kStoreTrue:
       default_value = MakeAny(false);
+      const_value = MakeAny(true);
       break;
     default:
       break;
@@ -344,8 +346,8 @@ void CallbackInfo::FormatTypeHint(std::ostream& os) const {
 void CallbackInfo::FormatDefaultValue(std::ostream& os) const {
   // The type of default value is always the type of dest.
   // the type of dest is reflected by action_ops.
-  if (default_value && dest_ops) {
-    os << "(default: " << dest_ops->FormatValue(*default_value) << ")";
+  if (default_value && dest) {
+    os << "(default: " << dest->ops->FormatValue(*default_value) << ")";
   }
 }
 

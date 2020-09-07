@@ -638,14 +638,18 @@ struct NumArgsInfo {
 struct DestInfo {
   DestPtr dest_ptr;
   std::unique_ptr<OpsFactory> ops_factory;
+  std::unique_ptr<Operations> ops;
 
   DestInfo(DestPtr d, std::unique_ptr<OpsFactory> f)
-      : dest_ptr(d), ops_factory(std::move(f)) {}
+      : dest_ptr(d), ops_factory(std::move(f)) {
+    ops = ops_factory->Create();
+  }
 };
 
 struct ActionInfo {
   Actions action_code = Actions::kNoAction;
   std::unique_ptr<ActionCallback> callback;
+  std::unique_ptr<Operations> ops;
 
   explicit ActionInfo(Actions a) : action_code(a) {}
   explicit ActionInfo(std::unique_ptr<ActionCallback> cb)
@@ -675,8 +679,6 @@ struct CallbackInfo : public CallbackRunner {
   std::unique_ptr<NumArgsInfo> num_args;
   std::unique_ptr<Any> const_value;
   std::unique_ptr<Any> default_value;
-  std::unique_ptr<Operations> action_ops;
-  std::unique_ptr<Operations> dest_ops;
 
   void Initialize();
   void RunCallback(std::unique_ptr<Delegate> delegate) override;
