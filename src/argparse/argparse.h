@@ -1089,8 +1089,8 @@ class ArgumentImpl::CallbackInfo : public CallbackRunner {
     DCHECK(dest_info_);
     return dest_info_->dest_ptr;
   }
-  void InitActionCallback();
-  void InitTypeCallback();
+  void InitAction();
+  void InitType();
   void InitDefaultValue();
   void RunActionCallback(std::unique_ptr<Any> data, Delegate*);
   void RunTypeCallback(const std::string& in, OpsResult* out);

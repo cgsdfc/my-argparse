@@ -233,9 +233,19 @@ const char* ActionsToString(Actions in) {
   }
 }
 
-void ArgumentImpl::CallbackInfo::InitActionCallback() {
+void ArgumentImpl::CallbackInfo::InitAction() {
   if (!action_info_) {
     action_info_ = std::make_unique<ActionInfo>();
+  }
+
+  if (action_info_->action_code == Actions::kCustom) {
+    DCHECK(action_info_->callback);
+    return;
+  }
+
+  if (action_info_->action_code == Actions::kNoAction) {
+    // If there is a dest, but no explicit action given, default is store.
+    action_info_->action_code = Actions::kStore;
   }
 
   auto action_code = action_info_->action_code;
@@ -246,21 +256,13 @@ void ArgumentImpl::CallbackInfo::InitActionCallback() {
 
   if (!need_dest) {
     // This action don't need a dest (provided or not).
+    dest_info_.reset();
     return;
-  }
-
-  if (action_code == Actions::kCustom) {
-    DCHECK(action_info_->callback);
-    return;
-  }
-
-  if (action_code == Actions::kNoAction) {
-    // If there is a dest, but no explicit action given, default is store.
-    action_code = Actions::kStore;
   }
 
   // Ops of action is always created from dest's ops-factory.
   DCHECK(dest_info_ && dest_info_->ops_factory);
+  DCHECK(!action_info_->ops);
   action_info_->ops = dest_info_->ops_factory->Create();
 
   // See if Ops supports this action.
@@ -278,40 +280,42 @@ void ArgumentImpl::CallbackInfo::InitActionCallback() {
   }
 }
 
-void ArgumentImpl::CallbackInfo::InitTypeCallback() {
+void ArgumentImpl::CallbackInfo::InitType() {
   if (!type_info_) {
     type_info_ = std::make_unique<TypeInfo>();
   }
 
-  auto action_code = action_info_->action_code;
-  if (!ActionNeedsTypeCallback(action_code)) {
+  if (type_info_->type_code == Types::kCustom) {
+    DCHECK(type_info_->callback);
+    type_info_->ops.reset();
+    return;
+  }
+
+  if (!ActionNeedsTypeCallback(action_info_->action_code)) {
     // Some action, like print usage, store const.., don't need a type..
     type_info_->type_code = Types::kNothing;
     type_info_->ops.reset();
     return;
   }
 
-  auto type_code = type_info_->type_code;
-  if (type_code == Types::kCustom) {
-    DCHECK(type_info_->callback);
-    type_info_->ops.reset();
-    return;
-  }
-
-  // Create type_ops_.
-  if (!type_info_->ops) {
-    auto* ops_factory = dest_info_->ops_factory.get();
-    type_info_->ops = action_code == Actions::kAppend
-                    ? ops_factory->CreateValueTypeOps()
-                    : ops_factory->Create();
-  }
-
   // Figure out type_code_.
-  if (type_code == Types::kNothing) {
+  if (type_info_->type_code == Types::kNothing) {
     // The action needs a type, but is not explicitly set, so default is kParse.
     // So if your dest is a filetype, but type is not FileType, it will be an
     // error.
     type_info_->type_code = Types::kParse;
+  }
+
+  auto type_code = type_info_->type_code;
+  // If type_code is open, mode shouldn't be no mode.
+  DCHECK(type_code != Types::kOpen || type_info_->mode != kModeNoMode);
+
+  // Create type_ops_.
+  if (!type_info_->ops) {
+    auto* ops_factory = dest_info_->ops_factory.get();
+    type_info_->ops = action_info_->action_code == Actions::kAppend
+                          ? ops_factory->CreateValueTypeOps()
+                          : ops_factory->Create();
   }
 
   // See if type_code_ is supported.
@@ -320,9 +324,6 @@ void ArgumentImpl::CallbackInfo::InitTypeCallback() {
   CHECK_USER(type_ops->IsSupported(ops),
              "Type %s is not supported by type % s ", TypesToString(type_code),
              type_ops->GetTypeName());
-
-  // If type_code is open, mode shouldn't be no mode.
-  DCHECK(type_code != Types::kOpen || type_info_->mode != kModeNoMode);
 }
 
 void ArgumentImpl::CallbackInfo::InitDefaultValue() {
@@ -341,8 +342,8 @@ void ArgumentImpl::CallbackInfo::InitDefaultValue() {
 }
 
 void ArgumentImpl::CallbackInfo::Initialize() {
-  InitActionCallback();
-  InitTypeCallback();
+  InitAction();
+  InitType();
   InitDefaultValue();
 }
 
