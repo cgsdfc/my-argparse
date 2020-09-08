@@ -560,6 +560,7 @@ class Operations {
   virtual bool IsSupported(OpsKind ops) = 0;
   virtual const char* GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
+  virtual const std::type_info& GetTypeInfo() = 0;
   virtual std::string FormatValue(const Any& val) = 0;
   virtual ~Operations() {}
 };
@@ -669,8 +670,6 @@ struct TypeInfo {
       : type_code(Types::kCustom), callback(std::move(cb)) {}
   explicit TypeInfo(std::unique_ptr<Operations> ops)
       : type_code(Types::kParse), ops(std::move(ops)) {}
-
-  void Run(const std::string& in, OpsResult* out);
 };
 
 // Keep all info needed for running callback.
@@ -955,6 +954,7 @@ class OperationsImpl : public Operations {
   std::string FormatValue(const Any& val) override {
     return FormatTraits<T>::Run(AnyCast<T>(val));
   }
+  const std::type_info& GetTypeInfo() override { return typeid(T); }
 };
 
 template <typename T>
@@ -1075,25 +1075,21 @@ class ArgumentImpl::CallbackInfo : public CallbackRunner {
  private:
   friend class ArgumentImpl::InitializerImpl;
 
-  Types type_code() const { return type_info_->type_code; }
-  Operations* type_ops() const { return type_info_->ops.get(); }
-  Mode mode() const { return type_info_->mode; }
-
   void RunCallback(std::unique_ptr<Delegate> delegate) override;
+  void InitAction();
+  void InitType();
+  void InitDefaultValue();
+  void RunAction(std::unique_ptr<Any> data, Delegate*);
+  void RunType(const std::string& in, OpsResult* out);
   // Helpers:
   const Any& const_value() const {
     DCHECK(const_value_);
     return *const_value_;
   }
-  const DestPtr& dest() const {
+  const DestPtr& dest_ptr() const {
     DCHECK(dest_info_);
     return dest_info_->dest_ptr;
   }
-  void InitAction();
-  void InitType();
-  void InitDefaultValue();
-  void RunActionCallback(std::unique_ptr<Any> data, Delegate*);
-  void RunTypeCallback(const std::string& in, OpsResult* out);
 
   std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfo> action_info_;

@@ -345,6 +345,12 @@ void ArgumentImpl::CallbackInfo::Initialize() {
   InitAction();
   InitType();
   InitDefaultValue();
+  // TODO: Do some type checking..
+  // if (dest_info_ && action_info_->ops) {
+  //   CHECK_USER(
+  //       dest_info_->ops->GetTypeInfo() == action_info_->ops->GetTypeInfo(),
+  //       "Type of dest should match type of action");
+  // }
 }
 
 void ArgumentImpl::Initialize(HelpFormatPolicy policy) {
@@ -692,60 +698,35 @@ Actions StringToActions(const std::string& str) {
   return iter->second;
 }
 
-void ArgumentImpl::CallbackInfo::RunActionCallback(
-    std::unique_ptr<Any> data,
-    CallbackRunner::Delegate* delegate) {
-  // auto* ops = action_ops_.get();
-  // DCHECK(ops);
-
-  // switch (action_code_) {
-  //   case Actions::kNoAction:
-  //     break;
-  //   case Actions::kStore:
-  //     ops->Store(dest(), std::move(data));
-  //     break;
-  //   case Actions::kStoreConst:
-  //     ops->StoreConst(dest(), const_value());
-  //     break;
-  //   case Actions::kStoreTrue:
-  //     ops->StoreConst(dest(), MakeAnyOnStack(true));
-  //     break;
-  //   case Actions::kStoreFalse:
-  //     ops->StoreConst(dest(), MakeAnyOnStack(false));
-  //     break;
-  //   case Actions::kAppend:
-  //     ops->Append(dest(), std::move(data));
-  //     break;
-  //   case Actions::kAppendConst:
-  //     ops->AppendConst(dest(), const_value());
-  //     break;
-  //   case Actions::kPrintHelp:
-  //     runner_delegate_->HandlePrintHelp(ctx);
-  //     break;
-  //   case Actions::kPrintUsage:
-  //     runner_delegate_->HandlePrintUsage(ctx);
-  //     break;
-  //   case Actions::kCustom:
-  //     DCHECK(custom_action_);
-  //     custom_action_->Run(dest(), std::move(data));
-  //     break;
-  // }
-}
-
-void TypeInfo::Run(const std::string& in, OpsResult* out) {
-  DCHECK(ops);
-  switch (type_code) {
-    case Types::kParse:
-      ops->Parse(in, out);
+void ArgumentImpl::CallbackInfo::RunAction(std::unique_ptr<Any> data,
+                                           CallbackRunner::Delegate* delegate) {
+  auto* ops = action_info_->ops.get();
+  switch (action_info_->action_code) {
+    case Actions::kNoAction:
       break;
-    case Types::kOpen:
-      ops->Open(in, mode, out);
+    case Actions::kStore:
+      ops->Store(dest_ptr(), std::move(data));
       break;
-    case Types::kNothing:
+    case Actions::kStoreConst:
+    case Actions::kStoreTrue:
+    case Actions::kStoreFalse:
+      ops->StoreConst(dest_ptr(), const_value());
       break;
-    case Types::kCustom:
-      DCHECK(callback);
-      callback->Run(in, out);
+    case Actions::kAppend:
+      ops->Append(dest_ptr(), std::move(data));
+      break;
+    case Actions::kAppendConst:
+      ops->AppendConst(dest_ptr(), const_value());
+      break;
+    case Actions::kPrintHelp:
+      delegate->OnPrintHelp();
+      break;
+    case Actions::kPrintUsage:
+      delegate->OnPrintUsage();
+      break;
+    case Actions::kCustom:
+      DCHECK(action_info_->callback);
+      action_info_->callback->Run(dest_ptr(), std::move(data));
       break;
   }
 }
@@ -755,9 +736,24 @@ CallbackRunner* ArgumentImpl::GetCallbackRunner() {
   return callback_info_.get();
 }
 
-void ArgumentImpl::CallbackInfo::RunTypeCallback(const std::string& in,
-                                                 OpsResult* out) {
-  type_info_->Run(in, out);
+void ArgumentImpl::CallbackInfo::RunType(const std::string& in,
+                                         OpsResult* out) {
+  auto* ops = type_info_->ops.get();
+  switch (type_info_->type_code) {
+    case Types::kNothing:
+      break;
+    case Types::kParse:
+      ops->Parse(in, out);
+      break;
+    case Types::kOpen:
+      DCHECK(type_info_->mode != kModeNoMode);
+      ops->Open(in, type_info_->mode, out);
+      break;
+    case Types::kCustom:
+      DCHECK(type_info_->callback);
+      type_info_->callback->Run(in, out);
+      break;
+  }
 }
 
 void ArgumentImpl::CallbackInfo::RunCallback(
@@ -765,12 +761,12 @@ void ArgumentImpl::CallbackInfo::RunCallback(
   std::string in;
   OpsResult result;
   if (delegate->GetValue(&in))
-    RunTypeCallback(in, &result);
+    RunType(in, &result);
   if (result.has_error) {
     delegate->OnCallbackError(result.errmsg);
     return;
   }
-  RunActionCallback(std::move(result.value), delegate.get());
+  RunAction(std::move(result.value), delegate.get());
 }
 
 std::string ModeToChars(Mode mode) {
