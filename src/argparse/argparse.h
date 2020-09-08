@@ -1208,28 +1208,30 @@ struct Type {
 
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  /* implicit */ Type(Callback&& cb)
+  Type(Callback&& cb)
       : info(new TypeInfo(CreateTypeCallback(std::forward<Callback>(cb)))) {}
 };
 
 Actions StringToActions(const std::string& str);
 
-// Type-erasured
 struct Action {
   std::unique_ptr<ActionInfo> info;
 
   Action() = default;
   Action(Action&&) = default;
 
+  // action("store_true").
   Action(const char* action_string)
       : info(new ActionInfo(StringToActions(action_string))) {}
 
+  // action(new MyAction()).
   Action(ActionCallback* cb)
       : info(new ActionInfo(std::unique_ptr<ActionCallback>(cb))) {}
 
+  // action([](T* out, Result<T> in) {})
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  /* implicit */ Action(Callback&& cb)
+  Action(Callback&& cb)
       : info(new ActionInfo(CreateActionCallback(std::forward<Callback>(cb)))) {
   }
 };
@@ -1239,7 +1241,7 @@ struct Dest {
 
   Dest() = default;
   template <typename T>
-  /* implicit */ Dest(T* ptr)
+  Dest(T* ptr)
       : info(new DestInfo(DestPtr(ptr), CreateOperationsFactory<T>())) {
     CHECK_USER(ptr, "Pointer passed to dest() must not be null.");
   }
