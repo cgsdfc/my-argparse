@@ -753,6 +753,7 @@ class ArgArray {
   char** argv_;
 };
 
+// TODO: change this..
 class ArgpParser {
  public:
   class Delegate {
@@ -790,6 +791,7 @@ class ArgpParser {
   static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
 };
 
+// TODO: add lookup methods and iterate methods...
 class ArgumentHolder {
  public:
   virtual int GetNextOptionKey() = 0;
@@ -799,6 +801,7 @@ class ArgumentHolder {
   enum GroupID {
     kOptionGroup = 1,
     kPositionalGroup = 2,
+    kAllGroups = -1,
   };
 
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) {
@@ -807,10 +810,15 @@ class ArgumentHolder {
   }
 
   virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
-  // virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
-  // Get a reusable Parser. As long as the state of holder isn't changed, the
-  // instance returned is the same.
-  // virtual ArgpParser* GetParser() { return nullptr; }
+
+  virtual Argument* FindOptionalArgument(int key) = 0;
+  virtual Argument* FindPositionalArgument(int index) = 0;
+  // Do something for each arguments. Order is unspecified.
+  virtual void ForEachArgument(int group,
+                               std::function<bool(Argument*)> callback) = 0;
+  // TODO: expose Group.
+  virtual void ForEachGroup(std::function<bool()> callback) = 0;
+
   virtual ~ArgumentHolder() {}
 };
 
@@ -828,18 +836,21 @@ struct OptionsInfo {
 // Parser contains everythings it needs to parse arguments.
 class Parser {
  public:
-  class Delegate {
-   public:
-  };
   virtual ~Parser() {}
   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
 };
 
 class ParserFactory {
  public:
+  // Interaction when creating parser.
+  class Delegate {
+   public:
+    virtual ~Delegate() {}
+    virtual std::unique_ptr<OptionsInfo> GetOptions() = 0;
+  };
   virtual ~ParserFactory() {}
   virtual std::unique_ptr<Parser> CreateParser(
-      std::unique_ptr<OptionsInfo> options) = 0;
+      std::unique_ptr<Delegate> delegate) = 0;
 };
 
 // Combination of Holder and Parser. ArgumentParser should be impl'ed in terms
@@ -847,9 +858,13 @@ class ParserFactory {
 class ArgumentController {
  public:
   virtual ~ArgumentController() {}
+  // Parse args, if rest is null, exit on error. Otherwise put unknown ones into
+  // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args,
                               std::vector<std::string>* rest) = 0;
+  // Add arg to main holder.
   virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  // Add group to main holder.
   virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
   virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
@@ -1657,7 +1672,7 @@ class ArgumentControllerImpl : public ArgumentController {
   Parser* GetParser() {
     if (dirty() || !parser_) {
       SetDirty(false);
-      parser_ = parser_factory_->CreateParser(std::move(options_info_));
+      parser_ = parser_factory_->CreateParser(nullptr);
     }
     return parser_.get();
   }
