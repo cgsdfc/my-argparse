@@ -618,15 +618,6 @@ Argument* ArgumentHolderImpl::FindPositionalArgument(int index) {
              : nullptr;
 }
 
-ArgpParser* ArgumentHolderImpl::GetParser() {
-  if (dirty()) {
-    parser_ = CreateParser();
-    SetDirty(false);
-  }
-  DCHECK(parser_);
-  return parser_.get();
-}
-
 int ArgumentHolderImpl::AddGroup(const char* header) {
   int group = groups_.size() + 1;
   groups_.emplace_back(group, header);
@@ -645,11 +636,16 @@ bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
   return true;
 }
 
-void ArgumentParser::parse_args(int argc, const char** argv) {
-  auto* parser = holder_->GetParser();
-  parser->Init(user_options_.options);
-  return parser->ParseArgs(ArgArray(argc, argv));
+std::unique_ptr<ArgumentController> ArgumentController::Create() {
+  return nullptr;
 }
+
+// void ArgumentParser::parse_args(int argc, const char** argv) {
+//   controller_->ParseKnownArgs(ArgArray(argc, argv), nullptr);
+//   // auto* parser = holder_->GetParser();
+//   // // parser->Init(user_options_.options);
+//   // return parser->ParseArgs(ArgArray(argc, argv));
+// }
 
 bool IsValidPositionalName(const char* name, std::size_t len) {
   if (!name || !len || !std::isalpha(name[0]))

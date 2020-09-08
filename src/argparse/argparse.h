@@ -736,6 +736,8 @@ class ArgArray {
   ArgArray(int argc, const char** argv)
       : argc_(argc), argv_(const_cast<char**>(argv)) {}
   ArgArray(std::vector<const char*>* v) : ArgArray(v->size(), v->data()) {}
+  // ArgArray(std::initializer_list<const char*> list)
+  //     : ArgArray(list.size(), list.begin()) {}
 
   int argc() const { return argc_; }
   std::size_t size() const { return argc(); }
@@ -805,11 +807,53 @@ class ArgumentHolder {
   }
 
   virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
-  virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
+  // virtual std::unique_ptr<ArgpParser> CreateParser() = 0;
   // Get a reusable Parser. As long as the state of holder isn't changed, the
   // instance returned is the same.
-  virtual ArgpParser* GetParser() { return nullptr; }
+  // virtual ArgpParser* GetParser() { return nullptr; }
   virtual ~ArgumentHolder() {}
+};
+
+struct OptionsInfo {
+  int flags = 0;
+  const char* program_version = {};
+  const char* description = {};
+  const char* after_doc = {};
+  const char* domain = {};
+  const char* email = {};
+  ProgramVersionCallback program_version_callback;
+  HelpFilterCallback help_filter;
+};
+
+// Parser contains everythings it needs to parse arguments.
+class Parser {
+ public:
+  class Delegate {
+   public:
+  };
+  virtual ~Parser() {}
+  virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
+};
+
+class ParserFactory {
+ public:
+  virtual ~ParserFactory() {}
+  virtual std::unique_ptr<Parser> CreateParser(
+      std::unique_ptr<OptionsInfo> options) = 0;
+};
+
+// Combination of Holder and Parser. ArgumentParser should be impl'ed in terms
+// of this.
+class ArgumentController {
+ public:
+  virtual ~ArgumentController() {}
+  virtual bool ParseKnownArgs(ArgArray args,
+                              std::vector<std::string>* rest) = 0;
+  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
+  virtual ArgumentHolder* GetMainHolder() = 0;
+  virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
+  static std::unique_ptr<ArgumentController> Create();
 };
 
 // End of interfaces. Begin of Impls.
@@ -1435,11 +1479,6 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
 
   ArgumentGroup AddArgumentGroup(const char* header) override;
 
-  std::unique_ptr<ArgpParser> CreateParser() override {
-    return ArgpParser::Create(this);
-  }
-  ArgpParser* GetParser() override;
-
   const std::map<int, Argument*>& optional_arguments() const {
     return optional_arguments_;
   }
@@ -1505,8 +1544,8 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   std::vector<Group> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;
-  // Reusable cached parser instance.
-  std::unique_ptr<ArgpParser> parser_;
+  // // Reusable cached parser instance.
+  // std::unique_ptr<ArgpParser> parser_;
 };
 
 // This handles the argp_parser_t function and provide a bunch of context during
@@ -1584,6 +1623,52 @@ class ArgpParserImpl::Context : public CallbackRunner::Delegate {
   int help_flags_ = 0;
 };
 
+class ArgumentControllerImpl : public ArgumentController {
+ public:
+  explicit ArgumentControllerImpl(
+      std::unique_ptr<ParserFactory> parser_factory);
+
+  ArgumentHolder* GetMainHolder() override {
+    return main_holder_.get();
+  }
+
+  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+    SetDirty(true);
+    return GetMainHolder()->AddArgument(std::move(names));
+  }
+
+  ArgumentGroup AddArgumentGroup(const char* header) override {
+    SetDirty(true);
+    return GetMainHolder()->AddArgumentGroup(header);
+  }
+
+  void SetOptions(std::unique_ptr<OptionsInfo> info) override {
+    SetDirty(true);
+    options_info_ = std::move(info);
+  }
+
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override {
+    return GetParser()->ParseKnownArgs(args, rest);
+  }
+
+ private:
+  void SetDirty(bool dirty) { dirty_ = dirty; }
+  bool dirty() const { return dirty_; }
+  Parser* GetParser() {
+    if (dirty() || !parser_) {
+      SetDirty(false);
+      parser_ = parser_factory_->CreateParser(std::move(options_info_));
+    }
+    return parser_.get();
+  }
+
+  bool dirty_ = false;
+  std::unique_ptr<ParserFactory> parser_factory_;
+  std::unique_ptr<Parser> parser_;
+  std::unique_ptr<OptionsInfo> options_info_;
+  std::unique_ptr<ArgumentHolder> main_holder_;
+};
+
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
 // passed to argp_parse().
 enum Flags {
@@ -1596,65 +1681,69 @@ enum Flags {
 // Options to ArgumentParser constructor.
 struct Options {
   // Only the most common options are listed in this list.
-  Options(const char* version = nullptr, const char* description = nullptr) {
-    options.program_version = version;
-    options.description = description;
-  }
+  Options() : info(new OptionsInfo) {}
   Options& version(const char* v) {
-    options.program_version = v;
+    info->program_version = v;
     return *this;
   }
   Options& version(ProgramVersionCallback callback) {
-    options.program_version_callback = callback;
+    info->program_version_callback = callback;
     return *this;
   }
   Options& description(const char* d) {
-    options.description = d;
+    info->description = d;
     return *this;
   }
   Options& after_doc(const char* a) {
-    options.after_doc = a;
+    info->after_doc = a;
     return *this;
   }
   Options& domain(const char* d) {
-    options.domain = d;
+    info->domain = d;
     return *this;
   }
   Options& email(const char* b) {
-    options.email = b;
+    info->email = b;
     return *this;
   }
   Options& flags(Flags f) {
-    options.flags |= f;
+    info->flags |= f;
     return *this;
   }
   Options& help_filter(HelpFilterCallback cb) {
-    options.help_filter = std::move(cb);
+    info->help_filter = std::move(cb);
     return *this;
   }
 
-  ArgpParser::Options options;
+  std::unique_ptr<OptionsInfo> info;
 };
 
 class ArgumentParser : public ArgumentContainer {
  public:
-  explicit ArgumentParser(const Options& options = {})
-      : holder_(new ArgumentHolderImpl()), user_options_(options) {}
-
-  Options& options() { return user_options_; }
+  ArgumentParser() : controller_(ArgumentController::Create()) {}
+  explicit ArgumentParser(Options options) : ArgumentParser() {
+    if (options.info)
+      controller_->SetOptions(std::move(options.info));
+  }
 
   ArgumentGroup add_argument_group(const char* header) {
-    return holder_->AddArgumentGroup(header);
+    return controller_->AddArgumentGroup(header);
   }
 
-  void parse_args(int argc, const char** argv);
+  void parse_args(ArgArray args) {
+    DCHECK(controller_);
+    controller_->ParseKnownArgs(args, nullptr);
+  }
 
   // Helper for demo and testing.
-  void parse_args(std::initializer_list<const char*> args) {
-    std::vector<const char*> args_copy(args.begin(), args.end());
-    return parse_args(args.size(), args_copy.data());
+  // void parse_args(std::initializer_list<const char*> args) {
+  //   std::vector<const char*> args_copy(args.begin(), args.end());
+  //   return parse_args(args.size(), args_copy.data());
+  // }
+  bool parse_known_args(ArgArray args, std::vector<std::string>* out) {
+    DCHECK(out);
+    return controller_->ParseKnownArgs(args, out);
   }
-  // TODO: parse_known_args()
 
   const char* program_name() const { return program_invocation_name; }
   const char* program_short_name() const {
@@ -1665,10 +1754,9 @@ class ArgumentParser : public ArgumentContainer {
 
  private:
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
-    return holder_->AddArgument(std::move(names));
+    return controller_->AddArgument(std::move(names));
   }
-  Options user_options_;
-  std::unique_ptr<ArgumentHolder> holder_;
+  std::unique_ptr<ArgumentController> controller_;
 };
 
 // wstring is not supported now.
