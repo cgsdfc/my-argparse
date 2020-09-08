@@ -651,6 +651,7 @@ struct ActionInfo {
   std::unique_ptr<ActionCallback> callback;
   std::unique_ptr<Operations> ops;
 
+  ActionInfo() = default;
   explicit ActionInfo(Actions a) : action_code(a) {}
   explicit ActionInfo(std::unique_ptr<ActionCallback> cb)
       : action_code(Actions::kCustom), callback(std::move(cb)) {}
@@ -660,8 +661,9 @@ struct TypeInfo {
   Types type_code = Types::kNothing;
   std::unique_ptr<Operations> ops;
   std::unique_ptr<TypeCallback> callback;
-  Mode mode;
+  Mode mode = kModeNoMode;
 
+  TypeInfo() = default;
   explicit TypeInfo(Mode m) : type_code(Types::kOpen), mode(m) {}
   explicit TypeInfo(std::unique_ptr<TypeCallback> cb)
       : type_code(Types::kCustom), callback(std::move(cb)) {}
@@ -672,40 +674,6 @@ struct TypeInfo {
 };
 
 // Keep all info needed for running callback.
-struct CallbackInfo : public CallbackRunner {
-  std::unique_ptr<DestInfo> dest;
-  std::unique_ptr<ActionInfo> action;
-  std::unique_ptr<TypeInfo> type;
-  std::unique_ptr<NumArgsInfo> num_args;
-  std::unique_ptr<Any> const_value;
-  std::unique_ptr<Any> default_value;
-
-  void Initialize();
-  void RunCallback(std::unique_ptr<Delegate> delegate) override;
-  void FormatTypeHint(std::ostream& os) const;
-  void FormatDefaultValue(std::ostream& os) const;
-
-  Types type_code() const { return type->type_code; }
-  Operations* type_ops() const { return type->ops.get(); }
-  Mode mode() const { return type->mode; }
-  // Helpers:
- private:
-  // const Any& const_value() const {
-  //   // DCHECK(const_value_);
-  //   // return *const_value_;
-  // }
-
-  // const DestPtr& dest() const {
-  //   // DCHECK(dest_ptr_);
-  //   // return dest_ptr_;
-  // }
-  void InitActionCallback();
-  void InitTypeCallback();
-  void InitDefaultValue();
-  void RunActionCallback(std::unique_ptr<Any> data, Delegate*);
-  void RunTypeCallback(const std::string& in, OpsResult* out);
-};
-
 // This initializes an Argument.
 class ArgumentInitializer {
  public:
@@ -1064,10 +1032,7 @@ class ArgumentImpl : public Argument {
     return long_names().empty() ? nullptr : long_names()[0].c_str();
   }
 
-  CallbackRunner* GetCallbackRunner() override {
-    DCHECK(callback_info_);
-    return callback_info_.get();
-   }
+  CallbackRunner* GetCallbackRunner() override;
 
   // [--name|-n|-whatever=[value]] or output
   void FormatArgsDoc(std::ostream& os) const override;
@@ -1088,6 +1053,7 @@ class ArgumentImpl : public Argument {
   };
 
   class InitializerImpl;
+  class CallbackInfo;
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
@@ -1097,6 +1063,44 @@ class ArgumentImpl : public Argument {
   std::string help_doc_;
   bool is_required_ = false;
   std::unique_ptr<CallbackInfo> callback_info_;
+};
+
+// Callback relative things are put into this class.
+class ArgumentImpl::CallbackInfo : public CallbackRunner {
+ public:
+  void Initialize();
+  void FormatTypeHint(std::ostream& os) const;
+  void FormatDefaultValue(std::ostream& os) const;
+
+ private:
+  friend class ArgumentImpl::InitializerImpl;
+
+  Types type_code() const { return type_info_->type_code; }
+  Operations* type_ops() const { return type_info_->ops.get(); }
+  Mode mode() const { return type_info_->mode; }
+
+  void RunCallback(std::unique_ptr<Delegate> delegate) override;
+  // Helpers:
+  const Any& const_value() const {
+    DCHECK(const_value_);
+    return *const_value_;
+  }
+  const DestPtr& dest() const {
+    DCHECK(dest_info_);
+    return dest_info_->dest_ptr;
+  }
+  void InitActionCallback();
+  void InitTypeCallback();
+  void InitDefaultValue();
+  void RunActionCallback(std::unique_ptr<Any> data, Delegate*);
+  void RunTypeCallback(const std::string& in, OpsResult* out);
+
+  std::unique_ptr<DestInfo> dest_info_;
+  std::unique_ptr<ActionInfo> action_info_;
+  std::unique_ptr<TypeInfo> type_info_;
+  std::unique_ptr<NumArgsInfo> num_args_;
+  std::unique_ptr<Any> const_value_;
+  std::unique_ptr<Any> default_value_;
 };
 
 template <typename T>
@@ -1296,23 +1300,23 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
   }
   void SetDest(std::unique_ptr<DestInfo> info) override {
     DCHECK(info);
-    cb_info_->dest = std::move(info);
+    cb_info_->dest_info_ = std::move(info);
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
     DCHECK(info);
-    cb_info_->type = std::move(info);
+    cb_info_->type_info_ = std::move(info);
   }
   void SetAction(std::unique_ptr<ActionInfo> info) override {
     DCHECK(info);
-    cb_info_->action = std::move(info);
+    cb_info_->action_info_ = std::move(info);
   }
   void SetConstValue(std::unique_ptr<Any> value) override {
     DCHECK(value);
-    cb_info_->const_value = std::move(value);
+    cb_info_->const_value_ = std::move(value);
   }
   void SetDefaultValue(std::unique_ptr<Any> value) override {
     DCHECK(value);
-    cb_info_->default_value = std::move(value);
+    cb_info_->default_value_ = std::move(value);
   }
 
  private:
