@@ -100,33 +100,6 @@ bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
   return std::strcmp(a->name(), b->name()) < 0;
 }
 
-// void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
-//   if (!is_option()) {
-//     os << meta_var();
-//     return;
-//   }
-//   os << '[';
-//   std::size_t i = 0;
-//   const auto size = long_names().size() + short_names().size();
-
-//   for (; i < size; ++i) {
-//     if (i < long_names().size()) {
-//       os << "--" << long_names()[i];
-//     } else {
-//       os << '-' << short_names()[i - long_names().size()];
-//     }
-//     if (i < size - 1)
-//       os << '|';
-//   }
-
-//   if (!is_required())
-//     os << '[';
-//   os << '=' << meta_var();
-//   if (!is_required())
-//     os << ']';
-//   os << ']';
-// }
-
 static OpsKind TypesToOpsKind(Types in) {
   switch (in) {
     case Types::kOpen:
@@ -358,23 +331,6 @@ void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
   }
   help_doc_.append(os.str());
 }
-
-// void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
-//   std::vector<Argument*> args(arguments_.size());
-//   std::transform(arguments_.begin(), arguments_.end(), args.begin(),
-//                  [](ArgumentImpl& arg) { return &arg; });
-//   std::sort(args.begin(), args.end(),
-//             [](Argument* a, Argument* b) { return a->Before(b); });
-
-//   // join the dump of each arg with a space.
-//   std::ostringstream os;
-//   for (std::size_t i = 0, size = args.size(); i < size; ++i) {
-//     args[i]->FormatArgsDoc(os);
-//     if (i != size - 1)
-//       os << ' ';
-//   }
-//   args_doc->assign(os.str());
-// }
 
 std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
   return std::make_unique<ArgpParserImpl>(delegate);
@@ -932,4 +888,54 @@ void ArgpCompiler::Initialize() {
     return InitGroup(group);
   });
 }
+
+void ArgpCompiler::CompileUsageFor(Argument* arg, std::ostream& os) {
+    if (!arg->IsOption()) {
+      os << arg->GetNamesInfo()->meta_var;
+      return;
+    }
+    os << '[';
+    std::size_t i = 0;
+    const auto& long_names = arg->GetNamesInfo()->long_names;
+    const auto& short_names = arg->GetNamesInfo()->short_names;
+    const auto size = long_names.size() + short_names.size();
+
+    for (; i < size; ++i) {
+      if (i < long_names.size()) {
+        os << "--" << long_names[i];
+      } else {
+        os << '-' << short_names[i - long_names.size()];
+      }
+      if (i < size - 1)
+        os << '|';
+    }
+
+    if (!arg->IsRequired())
+      os << '[';
+    os << '=' << arg->GetNamesInfo()->meta_var;
+    if (!arg->IsRequired())
+      os << ']';
+    os << ']';
+}
+
+void ArgpCompiler::CompileUsage(std::string* out) {
+  std::vector<Argument*> args;
+  args.reserve(holder_->GetArgumentCount());
+  holder_->ForEachArgument(
+      [&args](Argument* arg) { return args.push_back(arg); });
+
+  std::sort(args.begin(), args.end(),
+            [](Argument* a, Argument* b) { return a->Before(b); });
+
+  // join the dump of each arg with a space.
+  std::ostringstream os;
+  for (std::size_t i = 0, size = args.size(); i < size; ++i) {
+    CompileUsageFor(args[i], os);
+    if (i != size - 1)
+      os << ' ';
+  }
+
+  *out = os.str();
+}
+
 }  // namespace argparse

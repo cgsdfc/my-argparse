@@ -1698,7 +1698,7 @@ class ArgumentControllerImpl : public ArgumentController {
 // Compile Arguments to argp data and various things needed by the parser.
 class ArgpCompiler {
  public:
-  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) {}
+  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) { Initialize(); }
 
   void CompileOptions(std::vector<argp_option>* out);
   void CompileUsage(std::string* out);
@@ -1707,9 +1707,9 @@ class ArgpCompiler {
 
  private:
   void Initialize();
-
   void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
   void CompileArgument(Argument* arg, std::vector<argp_option>* out);
+  void CompileUsageFor(Argument* arg, std::ostream& os);
   int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
   int FindArgument(Argument* a) { return argument_to_id_[a]; }
   void InitGroup(ArgumentGroup* group);
