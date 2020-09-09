@@ -580,9 +580,9 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
 
 ArgumentHolder::Group* ArgumentHolderImpl::AddArgumentGroup(
     const char* header) {
-      
-  // int group = AddGroup(header);
-  // return ArgumentGroup(this, group);
+  auto* group = new GroupImpl(this, header);
+  groups_.emplace_back(group);
+  return group;
 }
 
 // ArgumentHolderImpl::Group::Group(int group, const char* header)
@@ -604,8 +604,8 @@ ArgumentHolder::Group* ArgumentHolderImpl::AddArgumentGroup(
 // }
 
 ArgumentHolderImpl::ArgumentHolderImpl() {
-  // AddGroup("optional arguments");
-  // AddGroup("positional arguments");
+  AddArgumentGroup("optional arguments");
+  AddArgumentGroup("positional arguments");
 }
 
 // Argument* ArgumentHolderImpl::FindOptionalArgument(int key) {

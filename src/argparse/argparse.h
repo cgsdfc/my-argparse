@@ -826,11 +826,6 @@ class ArgumentHolder {
   // virtual Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
   //                                      int group) = 0;
   // // Gid for two builtin groups.
-  enum GroupID {
-    kOptionGroup = 1,
-    kPositionalGroup = 2,
-    kAllGroups = -1,
-  };
 
   // Helper method to add arg to default group.
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) {
@@ -1493,16 +1488,14 @@ inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
 // Impl add_group() call.
 class ArgumentGroup : public ArgumentContainer {
  public:
-  ArgumentGroup(ArgumentHolder* holder, int group)
-      : holder_(holder), group_(group) {}
+  ArgumentGroup(ArgumentHolder::Group* group) : group_(group) {}
 
  private:
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
-    // return holder_->AddArgumentToGroup(std::move(names), group_);
+    return group_->AddArgument(std::move(names));
   }
 
-  int group_;
-  ArgumentHolder* holder_;
+  ArgumentHolder::Group* group_;
 };
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
@@ -1526,10 +1519,26 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
     for (ArgumentImpl& arg : arguments_)
       callback(&arg);
   }
+  void ForEachGroup(std::function<void(Group*)> callback) override {
+    for (auto& group : groups_)
+      callback(group.get());
+  }
+
+  Group* GetDefaultOptionGroup() override {
+    return groups_[kOptionGroup].get();
+  }
+  Group* GetDefaultPositionalGroup() override {
+    return groups_[kPositionalGroup].get();
+  }
 
  private:
   // Add an arg to a specific group.
   Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names, Group* group);
+
+  enum GroupID {
+    kOptionGroup = 0,
+    kPositionalGroup = 1,
+  };
 
   // ArgpParser::Delegate:
   // static constexpr int kAverageAliasCount = 4;
@@ -1588,7 +1597,7 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // indexed by their key.
   std::map<int, Argument*> optional_arguments_;
   // groups must be random-accessed.
-  std::list<GroupImpl> groups_;
+  std::vector<std::unique_ptr<Group>> groups_;
   // std::vector<Group> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;
@@ -1704,7 +1713,7 @@ class ArgumentControllerImpl : public ArgumentController {
 
   ArgumentGroup AddArgumentGroup(const char* header) override {
     SetDirty(true);
-    // return GetMainHolder()->AddArgumentGroup(header);
+    return GetMainHolder()->AddArgumentGroup(header);
   }
 
   void SetOptions(std::unique_ptr<OptionsInfo> info) override {
