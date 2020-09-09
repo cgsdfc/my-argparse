@@ -716,7 +716,7 @@ class Argument {
   // virtual void CompileToArgpOptions(
   //     std::vector<argp_option>* options) const = 0;
   virtual bool Before(const Argument* that) const = 0;
-
+  virtual const NamesInfo* GetNamesInfo() = 0;
   bool IsOption() { return GetNamesInfo()->is_option; }
   // const char* GetMetaVar() {
   //   const auto& mv = GetNamesInfo()->meta_var;
@@ -727,9 +727,6 @@ class Argument {
   // }
 
   virtual ~Argument() {}
-
-private:
-  virtual const NamesInfo* GetNamesInfo() = 0;
 };
 
 // Return value of help filter function.
@@ -821,6 +818,7 @@ class ArgumentGroup {
   virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
   // Add an arg to this group.
   virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  virtual int GetArgumentCount() = 0;
 };
 
 // TODO: add lookup methods and iterate methods...
@@ -830,26 +828,16 @@ class ArgumentHolder {
   virtual ArgumentGroup* GetDefaultPositionalGroup() = 0;
   virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
 
-  // virtual Argument* FindArgumentIf(
-  //     std::function<bool(Argument*)> callback) = 0;
-  // virtual Group* FindGroupIf(std::function<bool(Group*)> callback) = 0;
-
-  // virtual int GetNextOptionKey() = 0;
-  // virtual Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
-  //                                      int group) = 0;
-  // // Gid for two builtin groups.
-
   // Helper method to add arg to default group.
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) {
     auto* group = names->is_option ? GetDefaultOptionGroup()
                                    : GetDefaultPositionalGroup();
     return group->AddArgument(std::move(names));
-    // int group = names->is_option ? kOptionGroup : kPositionalGroup;
-    // return AddArgumentToGroup(std::move(names), group);
   }
 
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
+  virtual int GetArgumentCount() = 0;
   virtual ~ArgumentHolder() {}
 };
 
@@ -1508,21 +1496,11 @@ class ArgumentGroupProxy : public ArgumentContainer {
 };
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
-class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
+class ArgumentHolderImpl : public ArgumentHolder {
  public:
   ArgumentHolderImpl();
 
-  // ArgumentHolder:
-  // int GetNextOptionKey() override { return next_key_++; }
-
   ArgumentGroup* AddArgumentGroup(const char* header) override;
-
-  // const std::map<int, Argument*>& optional_arguments() const {
-  //   return optional_arguments_;
-  // }
-  // const std::vector<Argument*>& positional_arguments() const {
-  //   return positional_arguments_;
-  // }
 
   void ForEachArgument(std::function<void(Argument*)> callback) override {
     for (ArgumentImpl& arg : arguments_)
@@ -1540,6 +1518,8 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
     return groups_[kPositionalGroup].get();
   }
 
+  int GetArgumentCount() override { return arguments_.size(); }
+
  private:
   // Add an arg to a specific group.
   Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
@@ -1554,41 +1534,13 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // void CompileToArgpOptions(std::vector<argp_option>* options) override;
   // void GenerateArgsDoc(std::string* args_doc) override;
 
-  // Argument* FindOptionalArgument(int key) override;
-  // Argument* FindPositionalArgument(int index) override;
-  // std::size_t PositionalArgumentCount() override {
-  //   return positional_arguments_.size();
-  // }
-
   // If there is a group, but it has no member, it will not be added to
   // argp_options. This class manages the logic above. It also frees the
   // Argument class from managing groups as well as option and positional.
   class GroupImpl;
 
-  // class Group {
-  //  public:
-  //   Group(int group, const char* header);
-  //   void IncRef() { ++members_; }
-  //   void CompileToArgpOption(std::vector<argp_option>* options) const;
-
-  //  private:
-  //   unsigned group_;        // The group id.
-  //   std::string header_;    // the text provided by user plus a ':'.
-  //   unsigned members_ = 0;  // If this is 0, no header will be gen'ed.
-  // };
-
-  // Create a new group.
-  // int AddGroup(const char* header);
-
-  // Group* GroupFromID(int group) {
-  //   DCHECK(group <= groups_.size());
-  //   return &groups_[group - 1];
-  // }
-
   bool CheckNamesConflict(const NamesInfo& names);
 
-  // void SetDirty(bool dirty) { dirty_ = dirty; }
-  // bool dirty() const { return dirty_; }
   static constexpr unsigned kFirstArgumentKey = 128;
 
   // We have to explicitly manage group_id (instead of using 0 to inherit the
@@ -1596,18 +1548,11 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // in any order. Automatical inheriting gid will mess up.
   // unsigned next_group_id_ = kFirstUserGroup;
   // unsigned next_key_ = kFirstArgumentKey;
-  // bool dirty_ = true;
   // Control what extra info appear in the help doc.
   HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
-  // indexed by their define-order.
-  // std::vector<Argument*> positional_arguments_;
-  // indexed by their key.
-  // std::map<int, Argument*> optional_arguments_;
-  // groups must be random-accessed.
   std::vector<std::unique_ptr<ArgumentGroup>> groups_;
-  // std::vector<Group> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;
 };
@@ -1622,13 +1567,17 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
   }
 
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+    ++members_;
     return holder_->AddArgumentToGroup(std::move(names), this);
   }
   const char* GetHeader() override { return header_.c_str(); }
 
+  int GetArgumentCount() override { return members_; }
+
  private:
   ArgumentHolderImpl* holder_;
   std::string header_;  // the text provided by user plus a ':'.
+  int members_ = 0;
 };
 
 // This handles the argp_parser_t function and provide a bunch of context during
@@ -1750,13 +1699,35 @@ class ArgumentControllerImpl : public ArgumentController {
   std::unique_ptr<ArgumentHolder> main_holder_;
 };
 
-struct ArgpData {
-  int parser_flags = 0;
-  argp argp_info = {};
-  std::string program_doc;
-  std::string args_doc;
-  std::vector<argp_option> argp_options;
+// Compile Arguments to argp data and various things needed by the parser.
+class ArgpCompiler {
+ public:
+  ArgpCompiler(ArgumentHolder* holder);
+
+  void CompileOptions(std::vector<argp_option>* out);
+  void CompileUsage(std::string* out);
+  void CompileArgumentIndexes(std::map<int, Argument*>* optionals,
+                              std::vector<Argument*>* positionals);
+
+ private:
+  void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
+  void CompileArgument(Argument* arg, std::vector<argp_option>* out);
+  int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
+  int FindArgument(Argument* a) { return argument_to_id_[a]; }
+
+  ArgumentHolder* holder_;
+  HelpFormatPolicy policy_;
+  std::map<Argument*, int> argument_to_id_;
+  std::map<ArgumentGroup*, int> group_to_id_;
 };
+
+// struct ArgpData {
+//   int parser_flags = 0;
+//   argp argp_info = {};
+//   std::string program_doc;
+//   std::string args_doc;
+//   std::vector<argp_option> argp_options;
+// };
 
 class ParserImpl {
  public:

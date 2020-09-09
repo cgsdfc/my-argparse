@@ -907,4 +907,54 @@ void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...) {
   std::abort();
 }
 
+void ArgpCompiler::CompileGroup(ArgumentGroup* group,
+                                std::vector<argp_option>* out) {
+  if (!group->GetArgumentCount())
+    return;
+  argp_option opt{};
+  opt.group = group_to_id_[group];
+  opt.doc = group->GetHeader();
+  out->push_back(opt);
+}
+
+void ArgpCompiler::CompileArgument(Argument* arg,
+                                   std::vector<argp_option>* out) {
+  argp_option opt{};
+  opt.doc = arg->GetDoc();
+  opt.group = FindGroup(arg->GetGroup());
+  // opt.name = name();
+
+  if (!arg->IsOption()) {
+    // positional means none-zero in only doc and name, and flag should be
+    // OPTION_DOC.
+    opt.flags = OPTION_DOC;
+    return out->push_back(opt);
+  }
+
+  // opt.arg = arg();
+  opt.key = FindArgument(arg);
+  out->push_back(opt);
+
+  // TODO: handle alias correctly. Add all aliases.
+  auto* info = arg->GetNamesInfo();
+  for (auto first = info->long_names.begin() + 1, last = info->long_names.end();
+       first != last; ++first) {
+    argp_option opt_alias;
+    std::memcpy(&opt_alias, &opt, sizeof(argp_option));
+    opt.name = first->c_str();
+    opt.flags = OPTION_ALIAS;
+    out->push_back(opt_alias);
+  }
+}
+
+void ArgpCompiler::CompileOptions(std::vector<argp_option>* out) {
+  holder_->ForEachGroup(
+      [this, out](ArgumentGroup* g) { return CompileGroup(g, out); });
+  holder_->ForEachArgument([this, out](Argument* arg) {
+    arg->Initialize(policy_);
+    return CompileArgument(arg, out);
+  });
+  out->push_back({});
+}
+
 }  // namespace argparse
