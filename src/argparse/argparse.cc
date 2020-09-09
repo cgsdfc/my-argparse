@@ -60,8 +60,7 @@ Names::Names(std::initializer_list<const char*> names) {
 }
 
 // ArgumentImpl:
-ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names,
-                           ArgumentHolder::Group* group)
+ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names, Group* group)
     : names_info_(std::move(names)), group_ptr_(group) {
   DCHECK(names_info_);
   // if (!names_info_->is_option) {
@@ -578,7 +577,7 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
   return arg;
 }
 
-ArgumentHolder::Group* ArgumentHolderImpl::AddArgumentGroup(
+Group* ArgumentHolderImpl::AddArgumentGroup(
     const char* header) {
   auto* group = new GroupImpl(this, header);
   groups_.emplace_back(group);

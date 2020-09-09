@@ -33,6 +33,7 @@ namespace argparse {
 
 class Argument;
 class ArgumentGroup;
+class Group;
 
 using ::argp;
 using ::argp_error;
@@ -704,19 +705,32 @@ class Argument {
   // 3. Initialize() is called, this validates various aspects of an arg and
   // prepares it for running callbacks.
   // This initialization process can only happen once for an arg.
-
   virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
   virtual void Initialize(HelpFormatPolicy policy) = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
+  virtual const char* GetDoc() = 0;
+  virtual bool IsRequired() = 0;
+  virtual Group* GetGroup() = 0;
 
-  virtual bool IsOption() const = 0;
   // virtual int GetKey() const = 0;
   // virtual void FormatArgsDoc(std::ostream& os) const = 0;
   // virtual void CompileToArgpOptions(
   //     std::vector<argp_option>* options) const = 0;
   virtual bool Before(const Argument* that) const = 0;
 
+  bool IsOption() { return GetNamesInfo()->is_option; }
+  // const char* GetMetaVar() {
+  //   const auto& mv = GetNamesInfo()->meta_var;
+  //   return mv.empty() ? nullptr : mv.c_str();
+  // }
+  // const char * GetName() {
+    
+  // }
+
   virtual ~Argument() {}
+
+private:
+  virtual const NamesInfo* GetNamesInfo() = 0;
 };
 
 // Return value of help filter function.
@@ -800,20 +814,20 @@ class PointerNullIterator {
   virtual ~PointerNullIterator() {}
 };
 
+class Group {
+ public:
+  virtual ~Group() {}
+  virtual const char* GetHeader() = 0;
+  // virtual int GetID() = 0;
+  // Visit each arg.
+  virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
+  // Add an arg to this group.
+  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+};
+
 // TODO: add lookup methods and iterate methods...
 class ArgumentHolder {
  public:
-  class Group {
-   public:
-    virtual ~Group() {}
-    virtual const char* GetHeader() = 0;
-    // virtual int GetID() = 0;
-    // Visit each arg.
-    virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
-    // Add an arg to this group.
-    virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
-  };
-
   virtual Group* GetDefaultOptionGroup() = 0;
   virtual Group* GetDefaultPositionalGroup() = 0;
   virtual Group* AddArgumentGroup(const char* header) = 0;
@@ -1073,18 +1087,17 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
  public:
-  ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentHolder::Group* group);
+  ArgumentImpl(std::unique_ptr<NamesInfo> names, Group* group);
 
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
-  bool IsOption() const override { return is_option(); }
-  // int GetKey() const override { return key(); }
-
-  // int key() const { return key_; }
-  // int group() const { return group_; }
+  Group* GetGroup() override { return group_ptr_; }
+  const NamesInfo* GetNamesInfo() override { return names_info_.get(); }
+  bool IsRequired() override { return is_required(); }
   bool is_option() const { return names_info_->is_option; }
   bool is_required() const { return is_required_; }
 
   const std::string& help_doc() const { return help_doc_; }
+  const char* GetDoc() override { return doc(); }
   const char* doc() const {
     return help_doc_.empty() ? nullptr : help_doc_.c_str();
   }
@@ -1116,7 +1129,8 @@ class ArgumentImpl : public Argument {
   void Initialize(HelpFormatPolicy policy) override;
   void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
 
-  // void CompileToArgpOptions(std::vector<argp_option>* options) const override;
+  // void CompileToArgpOptions(std::vector<argp_option>* options) const
+  // override;
 
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
@@ -1136,7 +1150,7 @@ class ArgumentImpl : public Argument {
   // int key_ = kKeyForNothing;
   // int group_ = 0;
   std::unique_ptr<NamesInfo> names_info_;
-  ArgumentHolder::Group* group_ptr_;
+  Group* group_ptr_;
   std::string help_doc_;
   bool is_required_ = false;
   std::unique_ptr<CallbackInfo> callback_info_;
@@ -1486,14 +1500,14 @@ inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
 // Impl add_group() call.
 class ArgumentGroup : public ArgumentContainer {
  public:
-  ArgumentGroup(ArgumentHolder::Group* group) : group_(group) {}
+  ArgumentGroup(Group* group) : group_(group) {}
 
  private:
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
     return group_->AddArgument(std::move(names));
   }
 
-  ArgumentHolder::Group* group_;
+  Group* group_;
 };
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
@@ -1601,7 +1615,7 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   std::set<std::string> name_set_;
 };
 
-class ArgumentHolderImpl::GroupImpl : public ArgumentHolder::Group {
+class ArgumentHolderImpl::GroupImpl : public Group {
  public:
   GroupImpl(ArgumentHolderImpl* holder, const char* header)
       : holder_(holder), header_(header) {
@@ -1700,9 +1714,7 @@ class ArgumentControllerImpl : public ArgumentController {
   explicit ArgumentControllerImpl(
       std::unique_ptr<ParserFactory> parser_factory);
 
-  ArgumentHolder* GetMainHolder() override {
-    return main_holder_.get();
-  }
+  ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
 
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
     SetDirty(true);
@@ -1750,8 +1762,7 @@ struct ArgpData {
 };
 
 class ParserImpl {
-public:
-   
+ public:
 };
 
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
