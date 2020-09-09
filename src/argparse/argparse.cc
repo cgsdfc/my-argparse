@@ -62,8 +62,8 @@ Names::Names(std::initializer_list<const char*> names) {
 // ArgumentImpl:
 ArgumentImpl::ArgumentImpl(ArgumentHolder* holder,
                            std::unique_ptr<NamesInfo> names,
-                           int group)
-    : names_info_(std::move(names)), group_(group) {
+                           ArgumentHolder::Group* group)
+    : names_info_(std::move(names)), group_ptr_(group) {
   DCHECK(names_info_);
   if (!names_info_->is_option) {
     key_ = kKeyForPositional;
@@ -386,47 +386,47 @@ void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
   help_doc_.append(os.str());
 }
 
-void ArgumentHolderImpl::CompileToArgpOptions(
-    std::vector<argp_option>* options) {
-  if (arguments_.empty())
-    return options->push_back({});
+// void ArgumentHolderImpl::CompileToArgpOptions(
+//     std::vector<argp_option>* options) {
+//   if (arguments_.empty())
+//     return options->push_back({});
 
-  const unsigned option_size =
-      arguments_.size() + groups_.size() + kAverageAliasCount + 1;
-  options->reserve(option_size);
+//   const unsigned option_size =
+//       arguments_.size() + groups_.size() + kAverageAliasCount + 1;
+//   options->reserve(option_size);
 
-  for (const Group& group : groups_) {
-    group.CompileToArgpOption(options);
-  }
+//   for (const Group& group : groups_) {
+//     group.CompileToArgpOption(options);
+//   }
 
-  // TODO: if there is not pos/opt at all but there are two groups, will argp
-  // still print these empty groups?
-  for (Argument& arg : arguments_) {
-    arg.Initialize(help_format_policy_);
-    arg.CompileToArgpOptions(options);
-  }
-  // Only when at least one opt/pos presents should we generate their groups.
-  options->push_back({});
+//   // TODO: if there is not pos/opt at all but there are two groups, will argp
+//   // still print these empty groups?
+//   for (Argument& arg : arguments_) {
+//     arg.Initialize(help_format_policy_);
+//     arg.CompileToArgpOptions(options);
+//   }
+//   // Only when at least one opt/pos presents should we generate their groups.
+//   options->push_back({});
 
-  // PrintArgpOptionArray(*options);
-}
+//   // PrintArgpOptionArray(*options);
+// }
 
-void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
-  std::vector<Argument*> args(arguments_.size());
-  std::transform(arguments_.begin(), arguments_.end(), args.begin(),
-                 [](ArgumentImpl& arg) { return &arg; });
-  std::sort(args.begin(), args.end(),
-            [](Argument* a, Argument* b) { return a->Before(b); });
+// void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
+//   std::vector<Argument*> args(arguments_.size());
+//   std::transform(arguments_.begin(), arguments_.end(), args.begin(),
+//                  [](ArgumentImpl& arg) { return &arg; });
+//   std::sort(args.begin(), args.end(),
+//             [](Argument* a, Argument* b) { return a->Before(b); });
 
-  // join the dump of each arg with a space.
-  std::ostringstream os;
-  for (std::size_t i = 0, size = args.size(); i < size; ++i) {
-    args[i]->FormatArgsDoc(os);
-    if (i != size - 1)
-      os << ' ';
-  }
-  args_doc->assign(os.str());
-}
+//   // join the dump of each arg with a space.
+//   std::ostringstream os;
+//   for (std::size_t i = 0, size = args.size(); i < size; ++i) {
+//     args[i]->FormatArgsDoc(os);
+//     if (i != size - 1)
+//       os << ' ';
+//   }
+//   args_doc->assign(os.str());
+// }
 
 std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
   return std::make_unique<ArgpParserImpl>(delegate);
@@ -561,69 +561,70 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
 }
 
 Argument* ArgumentHolderImpl::AddArgumentToGroup(
-    std::unique_ptr<NamesInfo> names,
-    int group) {
+    std::unique_ptr<NamesInfo> names, Group* group) {
   // First check if this arg will conflict with existing ones.
   CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
-  DCHECK2(group <= groups_.size(), "No such group");
-  GroupFromID(group)->IncRef();
-  SetDirty(true);
+  // DCHECK2(group <= groups_.size(), "No such group");
+  // GroupFromID(group)->IncRef();
+  // SetDirty(true);
 
   ArgumentImpl* arg = &arguments_.emplace_back(this, std::move(names), group);
-  if (arg->is_option()) {
-    bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
-    DCHECK(inserted);
-  } else {
-    positional_arguments_.push_back(arg);
-  }
+  // if (arg->is_option()) {
+  //   bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
+  //   DCHECK(inserted);
+  // } else {
+  //   positional_arguments_.push_back(arg);
+  // }
   return arg;
 }
 
-ArgumentGroup ArgumentHolderImpl::AddArgumentGroup(const char* header) {
-  int group = AddGroup(header);
-  return ArgumentGroup(this, group);
+ArgumentHolder::Group* ArgumentHolderImpl::AddArgumentGroup(
+    const char* header) {
+      
+  // int group = AddGroup(header);
+  // return ArgumentGroup(this, group);
 }
 
-ArgumentHolderImpl::Group::Group(int group, const char* header)
-    : group_(group), header_(header) {
-  DCHECK(group_ > 0);
-  DCHECK(header_.size());
-  if (header_.back() != ':')
-    header_.push_back(':');
-}
+// ArgumentHolderImpl::Group::Group(int group, const char* header)
+//     : group_(group), header_(header) {
+//   DCHECK(group_ > 0);
+//   DCHECK(header_.size());
+//   if (header_.back() != ':')
+//     header_.push_back(':');
+// }
 
-void ArgumentHolderImpl::Group::CompileToArgpOption(
-    std::vector<argp_option>* options) const {
-  if (!members_)
-    return;
-  argp_option opt{};
-  opt.group = group_;
-  opt.doc = header_.c_str();
-  options->push_back(opt);
-}
+// void ArgumentHolderImpl::Group::CompileToArgpOption(
+//     std::vector<argp_option>* options) const {
+//   if (!members_)
+//     return;
+//   argp_option opt{};
+//   opt.group = group_;
+//   opt.doc = header_.c_str();
+//   options->push_back(opt);
+// }
 
 ArgumentHolderImpl::ArgumentHolderImpl() {
-  AddGroup("optional arguments");
-  AddGroup("positional arguments");
+  // AddGroup("optional arguments");
+  // AddGroup("positional arguments");
 }
 
-Argument* ArgumentHolderImpl::FindOptionalArgument(int key) {
-  auto iter = optional_arguments_.find(key);
-  return iter == optional_arguments_.end() ? nullptr : iter->second;
-}
+// Argument* ArgumentHolderImpl::FindOptionalArgument(int key) {
+//   auto iter = optional_arguments_.find(key);
+//   return iter == optional_arguments_.end() ? nullptr : iter->second;
+// }
 
-Argument* ArgumentHolderImpl::FindPositionalArgument(int index) {
-  return (0 <= index && index < positional_arguments_.size())
-             ? positional_arguments_[index]
-             : nullptr;
-}
+// Argument* ArgumentHolderImpl::FindPositionalArgument(int index) {
+//   return (0 <= index && index < positional_arguments_.size())
+//              ? positional_arguments_[index]
+//              : nullptr;
+// }
 
-int ArgumentHolderImpl::AddGroup(const char* header) {
-  int group = groups_.size() + 1;
-  groups_.emplace_back(group, header);
-  SetDirty(true);
-  return group;
-}
+// int ArgumentHolderImpl::AddGroup(const char* header) {
+//   int group = groups_.size() + 1;
+//   groups_.emplace_back(group, header);
+//   // SetDirty(true);
+//   return group;
+// }
 
 bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
   for (auto&& long_name : names.long_names)
