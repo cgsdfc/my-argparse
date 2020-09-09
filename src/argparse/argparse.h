@@ -1530,10 +1530,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
   };
 
   // ArgpParser::Delegate:
-  // static constexpr int kAverageAliasCount = 4;
-  // void CompileToArgpOptions(std::vector<argp_option>* options) override;
-  // void GenerateArgsDoc(std::string* args_doc) override;
-
   // If there is a group, but it has no member, it will not be added to
   // argp_options. This class manages the logic above. It also frees the
   // Argument class from managing groups as well as option and positional.

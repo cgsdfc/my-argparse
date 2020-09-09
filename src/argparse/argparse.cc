@@ -71,32 +71,6 @@ ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* grou
   // short_names()[0];
 }
 
-// void ArgumentImpl::CompileToArgpOptions(
-//     std::vector<argp_option>* options) const {
-//   argp_option opt{};
-//   opt.doc = doc();
-//   opt.group = group();
-//   opt.name = name();
-//   if (!is_option()) {
-//     // positional means none-zero in only doc and name, and flag should be
-//     // OPTION_DOC.
-//     opt.flags = OPTION_DOC;
-//     return options->push_back(opt);
-//   }
-//   opt.arg = arg();
-//   opt.key = key();
-//   options->push_back(opt);
-//   // TODO: handle alias correctly. Add all aliases.
-//   for (auto first = long_names().begin() + 1, last = long_names().end();
-//        first != last; ++first) {
-//     argp_option opt_alias;
-//     std::memcpy(&opt_alias, &opt, sizeof(argp_option));
-//     opt.name = first->c_str();
-//     opt.flags = OPTION_ALIAS;
-//     options->push_back(opt_alias);
-//   }
-// }
-
 bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
                                     const ArgumentImpl* b) {
   // options go before positionals.
@@ -384,31 +358,6 @@ void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
   }
   help_doc_.append(os.str());
 }
-
-// void ArgumentHolderImpl::CompileToArgpOptions(
-//     std::vector<argp_option>* options) {
-//   if (arguments_.empty())
-//     return options->push_back({});
-
-//   const unsigned option_size =
-//       arguments_.size() + groups_.size() + kAverageAliasCount + 1;
-//   options->reserve(option_size);
-
-//   for (const Group& group : groups_) {
-//     group.CompileToArgpOption(options);
-//   }
-
-//   // TODO: if there is not pos/opt at all but there are two groups, will argp
-//   // still print these empty groups?
-//   for (Argument& arg : arguments_) {
-//     arg.Initialize(help_format_policy_);
-//     arg.CompileToArgpOptions(options);
-//   }
-//   // Only when at least one opt/pos presents should we generate their groups.
-//   options->push_back({});
-
-//   // PrintArgpOptionArray(*options);
-// }
 
 // void ArgumentHolderImpl::GenerateArgsDoc(std::string* args_doc) {
 //   std::vector<Argument*> args(arguments_.size());
