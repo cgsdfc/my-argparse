@@ -710,10 +710,10 @@ class Argument {
   virtual CallbackRunner* GetCallbackRunner() = 0;
 
   virtual bool IsOption() const = 0;
-  virtual int GetKey() const = 0;
-  virtual void FormatArgsDoc(std::ostream& os) const = 0;
-  virtual void CompileToArgpOptions(
-      std::vector<argp_option>* options) const = 0;
+  // virtual int GetKey() const = 0;
+  // virtual void FormatArgsDoc(std::ostream& os) const = 0;
+  // virtual void CompileToArgpOptions(
+  //     std::vector<argp_option>* options) const = 0;
   virtual bool Before(const Argument* that) const = 0;
 
   virtual ~Argument() {}
@@ -822,7 +822,7 @@ class ArgumentHolder {
   //     std::function<bool(Argument*)> callback) = 0;
   // virtual Group* FindGroupIf(std::function<bool(Group*)> callback) = 0;
 
-  virtual int GetNextOptionKey() = 0;
+  // virtual int GetNextOptionKey() = 0;
   // virtual Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
   //                                      int group) = 0;
   // // Gid for two builtin groups.
@@ -1073,16 +1073,14 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
  public:
-  ArgumentImpl(ArgumentHolder* holder,
-               std::unique_ptr<NamesInfo> names,
-               ArgumentHolder::Group* group);
+  ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentHolder::Group* group);
 
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
   bool IsOption() const override { return is_option(); }
-  int GetKey() const override { return key(); }
+  // int GetKey() const override { return key(); }
 
-  int key() const { return key_; }
-  int group() const { return group_; }
+  // int key() const { return key_; }
+  // int group() const { return group_; }
   bool is_option() const { return names_info_->is_option; }
   bool is_required() const { return is_required_; }
 
@@ -1113,30 +1111,30 @@ class ArgumentImpl : public Argument {
   CallbackRunner* GetCallbackRunner() override;
 
   // [--name|-n|-whatever=[value]] or output
-  void FormatArgsDoc(std::ostream& os) const override;
+  // void FormatArgsDoc(std::ostream& os) const override;
 
   void Initialize(HelpFormatPolicy policy) override;
   void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
 
-  void CompileToArgpOptions(std::vector<argp_option>* options) const override;
+  // void CompileToArgpOptions(std::vector<argp_option>* options) const override;
 
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
  private:
-  enum Keys {
-    kKeyForNothing = 0,
-    kKeyForPositional = -1,
-  };
+  // enum Keys {
+  //   kKeyForNothing = 0,
+  //   kKeyForPositional = -1,
+  // };
 
   class InitializerImpl;
   class CallbackInfo;
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
-  int key_ = kKeyForNothing;
-  int group_ = 0;
+  // int key_ = kKeyForNothing;
+  // int group_ = 0;
   std::unique_ptr<NamesInfo> names_info_;
   ArgumentHolder::Group* group_ptr_;
   std::string help_doc_;
@@ -1504,16 +1502,16 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   ArgumentHolderImpl();
 
   // ArgumentHolder:
-  int GetNextOptionKey() override { return next_key_++; }
+  // int GetNextOptionKey() override { return next_key_++; }
 
   Group* AddArgumentGroup(const char* header) override;
 
-  const std::map<int, Argument*>& optional_arguments() const {
-    return optional_arguments_;
-  }
-  const std::vector<Argument*>& positional_arguments() const {
-    return positional_arguments_;
-  }
+  // const std::map<int, Argument*>& optional_arguments() const {
+  //   return optional_arguments_;
+  // }
+  // const std::vector<Argument*>& positional_arguments() const {
+  //   return positional_arguments_;
+  // }
 
   void ForEachArgument(std::function<void(Argument*)> callback) override {
     for (ArgumentImpl& arg : arguments_)
@@ -1586,16 +1584,16 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // gid from the preivous entry) since the user can add option and positionals
   // in any order. Automatical inheriting gid will mess up.
   // unsigned next_group_id_ = kFirstUserGroup;
-  unsigned next_key_ = kFirstArgumentKey;
+  // unsigned next_key_ = kFirstArgumentKey;
   // bool dirty_ = true;
   // Control what extra info appear in the help doc.
   HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
   // indexed by their define-order.
-  std::vector<Argument*> positional_arguments_;
+  // std::vector<Argument*> positional_arguments_;
   // indexed by their key.
-  std::map<int, Argument*> optional_arguments_;
+  // std::map<int, Argument*> optional_arguments_;
   // groups must be random-accessed.
   std::vector<std::unique_ptr<Group>> groups_;
   // std::vector<Group> groups_;

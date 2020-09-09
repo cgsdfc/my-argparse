@@ -60,43 +60,43 @@ Names::Names(std::initializer_list<const char*> names) {
 }
 
 // ArgumentImpl:
-ArgumentImpl::ArgumentImpl(ArgumentHolder* holder,
-                           std::unique_ptr<NamesInfo> names,
+ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names,
                            ArgumentHolder::Group* group)
     : names_info_(std::move(names)), group_ptr_(group) {
   DCHECK(names_info_);
-  if (!names_info_->is_option) {
-    key_ = kKeyForPositional;
-    return;
-  }
-  key_ = short_names().empty() ? holder->GetNextOptionKey() : short_names()[0];
+  // if (!names_info_->is_option) {
+  //   key_ = kKeyForPositional;
+  //   return;
+  // }
+  // key_ = short_names().empty() ? holder->GetNextOptionKey() :
+  // short_names()[0];
 }
 
-void ArgumentImpl::CompileToArgpOptions(
-    std::vector<argp_option>* options) const {
-  argp_option opt{};
-  opt.doc = doc();
-  opt.group = group();
-  opt.name = name();
-  if (!is_option()) {
-    // positional means none-zero in only doc and name, and flag should be
-    // OPTION_DOC.
-    opt.flags = OPTION_DOC;
-    return options->push_back(opt);
-  }
-  opt.arg = arg();
-  opt.key = key();
-  options->push_back(opt);
-  // TODO: handle alias correctly. Add all aliases.
-  for (auto first = long_names().begin() + 1, last = long_names().end();
-       first != last; ++first) {
-    argp_option opt_alias;
-    std::memcpy(&opt_alias, &opt, sizeof(argp_option));
-    opt.name = first->c_str();
-    opt.flags = OPTION_ALIAS;
-    options->push_back(opt_alias);
-  }
-}
+// void ArgumentImpl::CompileToArgpOptions(
+//     std::vector<argp_option>* options) const {
+//   argp_option opt{};
+//   opt.doc = doc();
+//   opt.group = group();
+//   opt.name = name();
+//   if (!is_option()) {
+//     // positional means none-zero in only doc and name, and flag should be
+//     // OPTION_DOC.
+//     opt.flags = OPTION_DOC;
+//     return options->push_back(opt);
+//   }
+//   opt.arg = arg();
+//   opt.key = key();
+//   options->push_back(opt);
+//   // TODO: handle alias correctly. Add all aliases.
+//   for (auto first = long_names().begin() + 1, last = long_names().end();
+//        first != last; ++first) {
+//     argp_option opt_alias;
+//     std::memcpy(&opt_alias, &opt, sizeof(argp_option));
+//     opt.name = first->c_str();
+//     opt.flags = OPTION_ALIAS;
+//     options->push_back(opt_alias);
+//   }
+// }
 
 bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
                                     const ArgumentImpl* b) {
@@ -119,40 +119,40 @@ bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
     return bool(a->name()) < bool(b->name());
 
   // a and b are both short-only option.
-  if (!a->name() && !b->name())
-    return a->key() < b->key();
+  // if (!a->name() && !b->name())
+  //   return a->key() < b->key();
 
   // a and b are both long option.
   DCHECK(a->name() && b->name());
   return std::strcmp(a->name(), b->name()) < 0;
 }
 
-void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
-  if (!is_option()) {
-    os << meta_var();
-    return;
-  }
-  os << '[';
-  std::size_t i = 0;
-  const auto size = long_names().size() + short_names().size();
+// void ArgumentImpl::FormatArgsDoc(std::ostream& os) const {
+//   if (!is_option()) {
+//     os << meta_var();
+//     return;
+//   }
+//   os << '[';
+//   std::size_t i = 0;
+//   const auto size = long_names().size() + short_names().size();
 
-  for (; i < size; ++i) {
-    if (i < long_names().size()) {
-      os << "--" << long_names()[i];
-    } else {
-      os << '-' << short_names()[i - long_names().size()];
-    }
-    if (i < size - 1)
-      os << '|';
-  }
+//   for (; i < size; ++i) {
+//     if (i < long_names().size()) {
+//       os << "--" << long_names()[i];
+//     } else {
+//       os << '-' << short_names()[i - long_names().size()];
+//     }
+//     if (i < size - 1)
+//       os << '|';
+//   }
 
-  if (!is_required())
-    os << '[';
-  os << '=' << meta_var();
-  if (!is_required())
-    os << ']';
-  os << ']';
-}
+//   if (!is_required())
+//     os << '[';
+//   os << '=' << meta_var();
+//   if (!is_required())
+//     os << ']';
+//   os << ']';
+// }
 
 static OpsKind TypesToOpsKind(Types in) {
   switch (in) {
@@ -568,7 +568,7 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
   // GroupFromID(group)->IncRef();
   // SetDirty(true);
 
-  ArgumentImpl* arg = &arguments_.emplace_back(this, std::move(names), group);
+  ArgumentImpl* arg = &arguments_.emplace_back(std::move(names), group);
   // if (arg->is_option()) {
   //   bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
   //   DCHECK(inserted);
