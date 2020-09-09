@@ -60,7 +60,7 @@ Names::Names(std::initializer_list<const char*> names) {
 }
 
 // ArgumentImpl:
-ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names, Group* group)
+ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group)
     : names_info_(std::move(names)), group_ptr_(group) {
   DCHECK(names_info_);
   // if (!names_info_->is_option) {
@@ -560,7 +560,7 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
 }
 
 Argument* ArgumentHolderImpl::AddArgumentToGroup(
-    std::unique_ptr<NamesInfo> names, Group* group) {
+    std::unique_ptr<NamesInfo> names, ArgumentGroup* group) {
   // First check if this arg will conflict with existing ones.
   CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
   // DCHECK2(group <= groups_.size(), "No such group");
@@ -577,7 +577,7 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
   return arg;
 }
 
-Group* ArgumentHolderImpl::AddArgumentGroup(
+ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
     const char* header) {
   auto* group = new GroupImpl(this, header);
   groups_.emplace_back(group);

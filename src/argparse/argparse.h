@@ -33,7 +33,6 @@ namespace argparse {
 
 class Argument;
 class ArgumentGroup;
-class Group;
 
 using ::argp;
 using ::argp_error;
@@ -710,7 +709,7 @@ class Argument {
   virtual CallbackRunner* GetCallbackRunner() = 0;
   virtual const char* GetDoc() = 0;
   virtual bool IsRequired() = 0;
-  virtual Group* GetGroup() = 0;
+  virtual ArgumentGroup* GetGroup() = 0;
 
   // virtual int GetKey() const = 0;
   // virtual void FormatArgsDoc(std::ostream& os) const = 0;
@@ -814,11 +813,10 @@ class PointerNullIterator {
   virtual ~PointerNullIterator() {}
 };
 
-class Group {
+class ArgumentGroup {
  public:
-  virtual ~Group() {}
+  virtual ~ArgumentGroup() {}
   virtual const char* GetHeader() = 0;
-  // virtual int GetID() = 0;
   // Visit each arg.
   virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
   // Add an arg to this group.
@@ -828,9 +826,9 @@ class Group {
 // TODO: add lookup methods and iterate methods...
 class ArgumentHolder {
  public:
-  virtual Group* GetDefaultOptionGroup() = 0;
-  virtual Group* GetDefaultPositionalGroup() = 0;
-  virtual Group* AddArgumentGroup(const char* header) = 0;
+  virtual ArgumentGroup* GetDefaultOptionGroup() = 0;
+  virtual ArgumentGroup* GetDefaultPositionalGroup() = 0;
+  virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
 
   // virtual Argument* FindArgumentIf(
   //     std::function<bool(Argument*)> callback) = 0;
@@ -851,7 +849,7 @@ class ArgumentHolder {
   }
 
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
-  virtual void ForEachGroup(std::function<void(Group*)> callback) = 0;
+  virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
   virtual ~ArgumentHolder() {}
 };
 
@@ -898,7 +896,7 @@ class ArgumentController {
   // Add arg to main holder.
   virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
   // Add group to main holder.
-  virtual ArgumentGroup AddArgumentGroup(const char* header) = 0;
+  virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
   virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
   static std::unique_ptr<ArgumentController> Create();
@@ -1087,10 +1085,10 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
  public:
-  ArgumentImpl(std::unique_ptr<NamesInfo> names, Group* group);
+  ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
 
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
-  Group* GetGroup() override { return group_ptr_; }
+  ArgumentGroup* GetGroup() override { return group_ptr_; }
   const NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required(); }
   bool is_option() const { return names_info_->is_option; }
@@ -1150,7 +1148,7 @@ class ArgumentImpl : public Argument {
   // int key_ = kKeyForNothing;
   // int group_ = 0;
   std::unique_ptr<NamesInfo> names_info_;
-  Group* group_ptr_;
+  ArgumentGroup* group_ptr_;
   std::string help_doc_;
   bool is_required_ = false;
   std::unique_ptr<CallbackInfo> callback_info_;
@@ -1497,17 +1495,16 @@ inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
   }
 }
 
-// Impl add_group() call.
-class ArgumentGroup : public ArgumentContainer {
+class ArgumentGroupProxy : public ArgumentContainer {
  public:
-  ArgumentGroup(Group* group) : group_(group) {}
+  ArgumentGroupProxy(ArgumentGroup* group) : group_(group) {}
 
  private:
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
     return group_->AddArgument(std::move(names));
   }
 
-  Group* group_;
+  ArgumentGroup* group_;
 };
 
 // TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
@@ -1518,7 +1515,7 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // ArgumentHolder:
   // int GetNextOptionKey() override { return next_key_++; }
 
-  Group* AddArgumentGroup(const char* header) override;
+  ArgumentGroup* AddArgumentGroup(const char* header) override;
 
   // const std::map<int, Argument*>& optional_arguments() const {
   //   return optional_arguments_;
@@ -1531,21 +1528,21 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
     for (ArgumentImpl& arg : arguments_)
       callback(&arg);
   }
-  void ForEachGroup(std::function<void(Group*)> callback) override {
+  void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
     for (auto& group : groups_)
       callback(group.get());
   }
 
-  Group* GetDefaultOptionGroup() override {
+  ArgumentGroup* GetDefaultOptionGroup() override {
     return groups_[kOptionGroup].get();
   }
-  Group* GetDefaultPositionalGroup() override {
+  ArgumentGroup* GetDefaultPositionalGroup() override {
     return groups_[kPositionalGroup].get();
   }
 
  private:
   // Add an arg to a specific group.
-  Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names, Group* group);
+  Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
 
   enum GroupID {
     kOptionGroup = 0,
@@ -1609,13 +1606,13 @@ class ArgumentHolderImpl : public ArgumentHolder, public ArgpParser::Delegate {
   // indexed by their key.
   // std::map<int, Argument*> optional_arguments_;
   // groups must be random-accessed.
-  std::vector<std::unique_ptr<Group>> groups_;
+  std::vector<std::unique_ptr<ArgumentGroup>> groups_;
   // std::vector<Group> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;
 };
 
-class ArgumentHolderImpl::GroupImpl : public Group {
+class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
  public:
   GroupImpl(ArgumentHolderImpl* holder, const char* header)
       : holder_(holder), header_(header) {
@@ -1721,7 +1718,7 @@ class ArgumentControllerImpl : public ArgumentController {
     return GetMainHolder()->AddArgument(std::move(names));
   }
 
-  ArgumentGroup AddArgumentGroup(const char* header) override {
+  ArgumentGroup* AddArgumentGroup(const char* header) override {
     SetDirty(true);
     return GetMainHolder()->AddArgumentGroup(header);
   }
@@ -1822,7 +1819,7 @@ class ArgumentParser : public ArgumentContainer {
       controller_->SetOptions(std::move(options.info));
   }
 
-  ArgumentGroup add_argument_group(const char* header) {
+  ArgumentGroupProxy add_argument_group(const char* header) {
     return controller_->AddArgumentGroup(header);
   }
 
