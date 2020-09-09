@@ -938,4 +938,14 @@ void ArgpCompiler::CompileUsage(std::string* out) {
   *out = os.str();
 }
 
+void ArgpCompiler::CompileArgumentIndexes(ArgpIndexesInfo* out) {
+  holder_->ForEachArgument([this, out](Argument* arg) {
+    if (arg->IsOption()) {
+      out->optionals.emplace(argument_to_id_[arg], arg);
+    } else {
+      out->positionals.push_back(arg);
+    }
+  });
+}
+
 }  // namespace argparse

@@ -1695,6 +1695,11 @@ class ArgumentControllerImpl : public ArgumentController {
   std::unique_ptr<ArgumentHolder> main_holder_;
 };
 
+struct ArgpIndexesInfo {
+  std::map<int, Argument*> optionals;
+  std::vector<Argument*> positionals;
+};
+
 // Compile Arguments to argp data and various things needed by the parser.
 class ArgpCompiler {
  public:
@@ -1702,8 +1707,7 @@ class ArgpCompiler {
 
   void CompileOptions(std::vector<argp_option>* out);
   void CompileUsage(std::string* out);
-  void CompileArgumentIndexes(std::map<int, Argument*>* optionals,
-                              std::vector<Argument*>* positionals);
+  void CompileArgumentIndexes(ArgpIndexesInfo* out);
 
  private:
   void Initialize();
