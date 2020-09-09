@@ -906,4 +906,30 @@ void ArgpCompiler::CompileOptions(std::vector<argp_option>* out) {
   out->push_back({});
 }
 
+void ArgpCompiler::InitArgument(Argument* arg) {
+  const auto& short_names = arg->GetNamesInfo()->short_names;
+  int key = short_names.empty() ? next_arg_key_++ : short_names[0];
+  argument_to_id_[arg] = key;
+}
+
+void ArgpCompiler::InitGroup(ArgumentGroup* group) {
+  // There is no need to allocate special ids for default groups.
+  // 1. argp sorts groups in id order.
+  // 2. groups are in their added order.
+  // 3. Holder always adds default groups at first.
+  // 4. So default group is always presented at first.
+  group_to_id_[group] = next_group_id_++;
+}
+
+void ArgpCompiler::Initialize() {
+  // Gen keys for args.
+  holder_->ForEachArgument([this](Argument* arg) {
+    return InitArgument(arg);
+  });
+  // Gen ids for groups.
+  holder_->ForEachGroup([this](ArgumentGroup* group) {
+    // TODO: pos/opt default group..
+    return InitGroup(group);
+  });
+}
 }  // namespace argparse

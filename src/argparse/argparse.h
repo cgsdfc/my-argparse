@@ -1545,7 +1545,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
   // unsigned next_group_id_ = kFirstUserGroup;
   // unsigned next_key_ = kFirstArgumentKey;
   // Control what extra info appear in the help doc.
-  HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
+  // HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
   std::vector<std::unique_ptr<ArgumentGroup>> groups_;
@@ -1698,7 +1698,7 @@ class ArgumentControllerImpl : public ArgumentController {
 // Compile Arguments to argp data and various things needed by the parser.
 class ArgpCompiler {
  public:
-  ArgpCompiler(ArgumentHolder* holder);
+  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) {}
 
   void CompileOptions(std::vector<argp_option>* out);
   void CompileUsage(std::string* out);
@@ -1706,12 +1706,20 @@ class ArgpCompiler {
                               std::vector<Argument*>* positionals);
 
  private:
+  void Initialize();
+
   void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
   void CompileArgument(Argument* arg, std::vector<argp_option>* out);
   int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
   int FindArgument(Argument* a) { return argument_to_id_[a]; }
+  void InitGroup(ArgumentGroup* group);
+  void InitArgument(Argument* arg);
+
+  static constexpr unsigned kFirstArgumentKey = 128;
 
   ArgumentHolder* holder_;
+  int next_arg_key_ = kFirstArgumentKey;
+  int next_group_id_ = 1;
   HelpFormatPolicy policy_;
   std::map<Argument*, int> argument_to_id_;
   std::map<ArgumentGroup*, int> group_to_id_;
