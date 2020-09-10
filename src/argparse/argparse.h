@@ -58,22 +58,6 @@ struct SourceLocation {
 
 void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...);
 
-// Try to use move, fall back to copy.
-template <typename T>
-T MoveOrCopyImpl(T* val, std::true_type) {
-  return std::move(*val);
-}
-template <typename T>
-T MoveOrCopyImpl(T* val, std::false_type) {
-  return *val;
-}
-template <typename T>
-T MoveOrCopy(T* val) {
-  static_assert(std::is_copy_constructible<T>{} ||
-                std::is_move_constructible<T>{});
-  return MoveOrCopyImpl(val, std::is_move_constructible<T>{});
-}
-
 // Result<T> handles user' returned value and error using a union.
 template <typename T>
 class Result {
@@ -132,7 +116,7 @@ class Result {
   T release_value() {
     DCHECK(has_value());
     // But we don't know T is moveable or not.
-    return std::get<kValueIndex>(MoveOrCopy(&data_));
+    return std::get<kValueIndex>(std::move_if_noexcept(data_));
   }
   const T& get_value() const {
     DCHECK(has_value());
@@ -204,7 +188,7 @@ class AnyImpl : public Any {
   ~AnyImpl() override {}
   std::type_index GetType() const override { return typeid(T); }
 
-  T ReleaseValue() { return MoveOrCopy(&value_); }
+  T ReleaseValue() { return std::move_if_noexcept(value_); }
   const T& value() const { return value_; }
 
   static AnyImpl* FromAny(Any* any) {
@@ -925,7 +909,7 @@ struct OpsImpl<OpsKind::kStore, T, true> {
   static void Run(DestPtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto value = AnyCast<T>(std::move(data));
-      dest.store(MoveOrCopy(&value));
+      dest.store(std::move_if_noexcept(value));
     }
   }
 };
@@ -943,7 +927,7 @@ struct OpsImpl<OpsKind::kAppend, T, true> {
     if (data) {
       auto* ptr = dest.load_ptr<T>();
       auto value = AnyCast<ValueTypeOf<T>>(std::move(data));
-      AppendTraits<T>::Run(ptr, MoveOrCopy(&value));
+      AppendTraits<T>::Run(ptr, std::move_if_noexcept(value));
     }
   }
 };

@@ -12,19 +12,15 @@ struct AppendTraits<Appendable> {
 };
 
 
-struct FU {
-  void operator()(bool);
-  int operator()(int);
+struct NoMovable {
+  NoMovable(NoMovable&&) = delete;
+  NoMovable(const NoMovable&) { std::cout << "copy"; }
+  NoMovable() {}
 };
 
 int main(int argc, char const* argv[]) {
   ArgumentParser parser;
-
-  // parser.add_argument("out")
-  //     .action([](int* a, Result<int> b) {})
-  //     .type([](const std::string& in) { return false; });
-
-  std::cout << Format(1) << '\n';
-  std::cout << Format(false) << '\n';
-  std::cout << Format(std::ostringstream()) << '\n';
+  NoMovable v{};
+  
+  NoMovable b(std::move_if_noexcept(v));
 }
