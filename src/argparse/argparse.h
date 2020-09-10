@@ -606,7 +606,7 @@ class ActionCallback {
 class CallbackRunner {
  public:
   // Communicate with outside when callback is fired.
-  class Delegate { // should be called Client??
+  class Delegate {
    public:
     virtual ~Delegate() {}
     virtual bool GetValue(std::string* out) = 0;
@@ -673,7 +673,6 @@ struct TypeInfo {
 };
 
 // Keep all info needed for running callback.
-// This initializes an Argument.
 class ArgumentInitializer {
  public:
   virtual ~ArgumentInitializer() {}
@@ -711,10 +710,6 @@ class Argument {
   virtual bool IsRequired() = 0;
   virtual ArgumentGroup* GetGroup() = 0;
 
-  // virtual int GetKey() const = 0;
-  // virtual void FormatArgsDoc(std::ostream& os) const = 0;
-  // virtual void CompileToArgpOptions(
-  //     std::vector<argp_option>* options) const = 0;
   virtual bool Before(const Argument* that) const = 0;
   virtual const NamesInfo* GetNamesInfo() = 0;
   bool IsOption() { return GetNamesInfo()->is_option; }
@@ -827,6 +822,10 @@ class ArgumentHolder {
   virtual ArgumentGroup* GetDefaultOptionGroup() = 0;
   virtual ArgumentGroup* GetDefaultPositionalGroup() = 0;
   virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
+  virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
+  virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
+  virtual int GetArgumentCount() = 0;
+  virtual ~ArgumentHolder() {}
 
   // Helper method to add arg to default group.
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) {
@@ -834,11 +833,6 @@ class ArgumentHolder {
                                    : GetDefaultPositionalGroup();
     return group->AddArgument(std::move(names));
   }
-
-  virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
-  virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
-  virtual int GetArgumentCount() = 0;
-  virtual ~ArgumentHolder() {}
 };
 
 struct OptionsInfo {
@@ -1076,7 +1070,7 @@ class ArgumentImpl : public Argument {
   ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
 
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
-  ArgumentGroup* GetGroup() override { return group_ptr_; }
+  ArgumentGroup* GetGroup() override { return group_; }
   const NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required(); }
   bool is_option() const { return names_info_->is_option; }
@@ -1109,34 +1103,21 @@ class ArgumentImpl : public Argument {
 
   CallbackRunner* GetCallbackRunner() override;
 
-  // [--name|-n|-whatever=[value]] or output
-  // void FormatArgsDoc(std::ostream& os) const override;
-
   void Initialize(HelpFormatPolicy policy) override;
   void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
-
-  // void CompileToArgpOptions(std::vector<argp_option>* options) const
-  // override;
 
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
  private:
-  // enum Keys {
-  //   kKeyForNothing = 0,
-  //   kKeyForPositional = -1,
-  // };
-
   class InitializerImpl;
   class CallbackInfo;
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
-  // int key_ = kKeyForNothing;
-  // int group_ = 0;
   std::unique_ptr<NamesInfo> names_info_;
-  ArgumentGroup* group_ptr_;
+  ArgumentGroup* group_;
   std::string help_doc_;
   bool is_required_ = false;
   std::unique_ptr<CallbackInfo> callback_info_;
@@ -1204,7 +1185,6 @@ class CustomActionCallback : public ActionCallback {
  private:
   void Run(DestPtr dest, std::unique_ptr<Any> data) override {
     Result<V> result(AnyCast<V>(std::move(data)));
-    // UnwrapAny(std::move(data), &result);
     auto* obj = dest.template load_ptr<T>();
     std::invoke(callback_, obj, std::move(result));
   }
@@ -1495,7 +1475,6 @@ class ArgumentGroupProxy : public ArgumentContainer {
   ArgumentGroup* group_;
 };
 
-// TODO: this shouldn't inherit ArgumentContainer as it is a public interface.
 class ArgumentHolderImpl : public ArgumentHolder {
  public:
   ArgumentHolderImpl();
@@ -1529,10 +1508,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
     kPositionalGroup = 1,
   };
 
-  // ArgpParser::Delegate:
-  // If there is a group, but it has no member, it will not be added to
-  // argp_options. This class manages the logic above. It also frees the
-  // Argument class from managing groups as well as option and positional.
   class GroupImpl;
 
   bool CheckNamesConflict(const NamesInfo& names);
@@ -1542,8 +1517,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
   // We have to explicitly manage group_id (instead of using 0 to inherit the
   // gid from the preivous entry) since the user can add option and positionals
   // in any order. Automatical inheriting gid will mess up.
-  // unsigned next_group_id_ = kFirstUserGroup;
-  // unsigned next_key_ = kFirstArgumentKey;
   // Control what extra info appear in the help doc.
   // HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
   // Hold the storage of all args.
@@ -1739,6 +1712,7 @@ class ArgpCompiler {
 
 class ParserImpl {
  public:
+ private:
 };
 
 // Public flags user can use. These are corresponding to the ARGP_XXX flags

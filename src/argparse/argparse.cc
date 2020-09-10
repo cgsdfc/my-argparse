@@ -61,14 +61,8 @@ Names::Names(std::initializer_list<const char*> names) {
 
 // ArgumentImpl:
 ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group)
-    : names_info_(std::move(names)), group_ptr_(group) {
+    : names_info_(std::move(names)), group_(group) {
   DCHECK(names_info_);
-  // if (!names_info_->is_option) {
-  //   key_ = kKeyForPositional;
-  //   return;
-  // }
-  // key_ = short_names().empty() ? holder->GetNextOptionKey() :
-  // short_names()[0];
 }
 
 bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
@@ -465,21 +459,11 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
 }
 
 Argument* ArgumentHolderImpl::AddArgumentToGroup(
-    std::unique_ptr<NamesInfo> names, ArgumentGroup* group) {
+    std::unique_ptr<NamesInfo> names,
+    ArgumentGroup* group) {
   // First check if this arg will conflict with existing ones.
   CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
-  // DCHECK2(group <= groups_.size(), "No such group");
-  // GroupFromID(group)->IncRef();
-  // SetDirty(true);
-
-  ArgumentImpl* arg = &arguments_.emplace_back(std::move(names), group);
-  // if (arg->is_option()) {
-  //   bool inserted = optional_arguments_.emplace(arg->key(), arg).second;
-  //   DCHECK(inserted);
-  // } else {
-  //   positional_arguments_.push_back(arg);
-  // }
-  return arg;
+  return &arguments_.emplace_back(std::move(names), group);
 }
 
 ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
@@ -488,24 +472,6 @@ ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
   groups_.emplace_back(group);
   return group;
 }
-
-// ArgumentHolderImpl::Group::Group(int group, const char* header)
-//     : group_(group), header_(header) {
-//   DCHECK(group_ > 0);
-//   DCHECK(header_.size());
-//   if (header_.back() != ':')
-//     header_.push_back(':');
-// }
-
-// void ArgumentHolderImpl::Group::CompileToArgpOption(
-//     std::vector<argp_option>* options) const {
-//   if (!members_)
-//     return;
-//   argp_option opt{};
-//   opt.group = group_;
-//   opt.doc = header_.c_str();
-//   options->push_back(opt);
-// }
 
 ArgumentHolderImpl::ArgumentHolderImpl() {
   AddArgumentGroup("optional arguments");
@@ -521,13 +487,6 @@ ArgumentHolderImpl::ArgumentHolderImpl() {
 //   return (0 <= index && index < positional_arguments_.size())
 //              ? positional_arguments_[index]
 //              : nullptr;
-// }
-
-// int ArgumentHolderImpl::AddGroup(const char* header) {
-//   int group = groups_.size() + 1;
-//   groups_.emplace_back(group, header);
-//   // SetDirty(true);
-//   return group;
 // }
 
 bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
