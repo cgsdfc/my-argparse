@@ -726,9 +726,8 @@ class ArgArray {
  public:
   ArgArray(int argc, const char** argv)
       : argc_(argc), argv_(const_cast<char**>(argv)) {}
-  ArgArray(std::vector<const char*>* v) : ArgArray(v->size(), v->data()) {}
-  // ArgArray(std::initializer_list<const char*> list)
-  //     : ArgArray(list.size(), list.begin()) {}
+  ArgArray(std::vector<const char*>& args)
+      : ArgArray(args.size(), args.data()) {}
 
   int argc() const { return argc_; }
   std::size_t size() const { return argc(); }
@@ -1719,19 +1718,21 @@ class ArgumentParser : public ArgumentContainer {
     return controller_->AddArgumentGroup(header);
   }
 
-  void parse_args(ArgArray args) {
-    DCHECK(controller_);
-    controller_->ParseKnownArgs(args, nullptr);
+  void parse_args(int argc, const char** argv) {
+    return ParseArgs(ArgArray(argc, argv));
   }
-
   // Helper for demo and testing.
-  // void parse_args(std::initializer_list<const char*> args) {
-  //   std::vector<const char*> args_copy(args.begin(), args.end());
-  //   return parse_args(args.size(), args_copy.data());
-  // }
-  bool parse_known_args(ArgArray args, std::vector<std::string>* out) {
-    DCHECK(out);
-    return controller_->ParseKnownArgs(args, out);
+  void parse_args(std::vector<const char*> args) {
+    return ParseArgs(ArgArray(args));
+  }
+  bool parse_known_args(int argc,
+                        const char** argv,
+                        std::vector<std::string>* out) {
+    return ParseKnownArgs(ArgArray(argc, argv), out);
+  }
+  bool parse_known_args(std::vector<const char*> args,
+                        std::vector<std::string>* out) {
+    return ParseKnownArgs(args, out);
   }
 
   const char* program_name() const { return program_invocation_name; }
@@ -1742,6 +1743,15 @@ class ArgumentParser : public ArgumentContainer {
   const char* program_bug_address() const { return argp_program_bug_address; }
 
  private:
+  void ParseArgs(ArgArray args) {
+    DCHECK(controller_);
+    controller_->ParseKnownArgs(args, nullptr);
+  }
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) {
+    DCHECK(out);
+    return controller_->ParseKnownArgs(args, out);
+  }
+
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
     return controller_->AddArgument(std::move(names));
   }
