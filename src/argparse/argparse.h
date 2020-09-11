@@ -1374,47 +1374,43 @@ class ArgumentBuilder {
   std::unique_ptr<ArgumentInitializer> init_;
 };
 
-// This is an interface that provides add_argument() and other common things.
-class ArgumentContainer {
+// This is a helper that provides add_argument().
+class AddArgumentHelper {
  public:
   ArgumentBuilder add_argument(Names names,
                                Dest dest = {},
                                const char* help = {},
                                Type type = {},
-                               Action action = {}) {
-    DCHECK(names.info);
-    auto* arg = AddArgument(std::move(names.info));
-    ArgumentBuilder builder(arg->CreateInitializer());
-    builder.dest(std::move(dest))
-        .help(help)
-        .type(std::move(type))
-        .action(std::move(action));
-    return builder;
-  }
+                               Action action = {});
 
-  virtual ~ArgumentContainer() {}
+  virtual ~AddArgumentHelper() {}
 
  private:
-  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  virtual Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) = 0;
 };
 
-inline void PrintArgpOptionArray(const std::vector<argp_option>& options) {
-  for (const auto& opt : options) {
-    printf("name=%s, key=%d, arg=%s, doc=%s, group=%d\n", opt.name, opt.key,
-           opt.arg, opt.doc, opt.group);
-  }
-}
-
-class ArgumentGroupProxy : public ArgumentContainer {
+class ArgumentGroupProxy : public AddArgumentHelper {
  public:
   ArgumentGroupProxy(ArgumentGroup* group) : group_(group) {}
 
  private:
-  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+  Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
     return group_->AddArgument(std::move(names));
   }
 
   ArgumentGroup* group_;
+};
+
+// If we can do add_argument_group(), add_argument() is always possible.
+class AddArgumentGroupHelper : public AddArgumentHelper {
+ public:
+  ArgumentGroupProxy add_argument_group(const char* header) {
+    DCHECK(header);
+    return ArgumentGroupProxy(AddArgumentGroupImpl(header));
+  }
+
+ private:
+  virtual ArgumentGroup* AddArgumentGroupImpl(const char* header) = 0;
 };
 
 class ArgumentHolderImpl : public ArgumentHolder {
@@ -1454,13 +1450,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   bool CheckNamesConflict(const NamesInfo& names);
 
-  static constexpr unsigned kFirstArgumentKey = 128;
-
-  // We have to explicitly manage group_id (instead of using 0 to inherit the
-  // gid from the preivous entry) since the user can add option and positionals
-  // in any order. Automatical inheriting gid will mess up.
-  // Control what extra info appear in the help doc.
-  // HelpFormatPolicy help_format_policy_ = HelpFormatPolicy::kDefault;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
   std::vector<std::unique_ptr<ArgumentGroup>> groups_;
@@ -1706,16 +1695,12 @@ struct Options {
   std::unique_ptr<OptionsInfo> info;
 };
 
-class ArgumentParser : public ArgumentContainer {
+class ArgumentParser : public AddArgumentGroupHelper {
  public:
   ArgumentParser() : controller_(ArgumentController::Create()) {}
   explicit ArgumentParser(Options options) : ArgumentParser() {
     if (options.info)
       controller_->SetOptions(std::move(options.info));
-  }
-
-  ArgumentGroupProxy add_argument_group(const char* header) {
-    return controller_->AddArgumentGroup(header);
   }
 
   void parse_args(int argc, const char** argv) {
@@ -1752,9 +1737,15 @@ class ArgumentParser : public ArgumentContainer {
     return controller_->ParseKnownArgs(args, out);
   }
 
-  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+  // AddArgumentHelper.
+  Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
     return controller_->AddArgument(std::move(names));
   }
+  // AddArgumentGroupHelper.
+  ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
+    return controller_->AddArgumentGroup(header);
+  }
+
   std::unique_ptr<ArgumentController> controller_;
 };
 
