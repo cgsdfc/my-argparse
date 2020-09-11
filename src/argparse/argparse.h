@@ -804,6 +804,16 @@ class ArgumentGroup {
 // TODO: add lookup methods and iterate methods...
 class ArgumentHolder {
  public:
+  // Notify outside some event.
+  class Listener {
+   public:
+    virtual void OnAddArgument(Argument* arg) = 0;
+    virtual void OnAddArgumentGroup(ArgumentGroup* group) = 0;
+    virtual ~Listener() {}
+  };
+
+  virtual void SetListener(std::unique_ptr<Listener> listener) {}
+
   virtual ArgumentGroup* GetDefaultOptionGroup() = 0;
   virtual ArgumentGroup* GetDefaultPositionalGroup() = 0;
   virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
@@ -848,9 +858,16 @@ struct SubCommandInfo {
 // Like ArgumentHolder, but holds subcommands.
 class SubCommandHolder {
  public:
+  class Listener {
+   public:
+    virtual ~Listener() {}
+    virtual void OnAddSubCommand(SubCommand* sub) = 0;
+  };
+
   virtual ~SubCommandHolder() {}
   virtual void ForEachSubCommand(std::function<void(SubCommand*)> callback) = 0;
   virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
+  virtual void SetListener(std::unique_ptr<Listener> listener) = 0;
 };
 
 struct OptionsInfo {
@@ -894,11 +911,12 @@ class ArgumentController {
   virtual bool ParseKnownArgs(ArgArray args,
                               std::vector<std::string>* rest) = 0;
   // Add arg to main holder.
-  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  // virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
   // Add group to main holder.
-  virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
+  // virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
   virtual SubCommandHolder* GetSubCommandHolder() = 0;
+  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
   virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
   static std::unique_ptr<ArgumentController> Create();
 };
@@ -1573,15 +1591,15 @@ class ArgumentControllerImpl : public ArgumentController {
 
   ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
 
-  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
-    SetDirty(true);
-    return GetMainHolder()->AddArgument(std::move(names));
-  }
+  // Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+  //   SetDirty(true);
+  //   return GetMainHolder()->AddArgument(std::move(names));
+  // }
 
-  ArgumentGroup* AddArgumentGroup(const char* header) override {
-    SetDirty(true);
-    return GetMainHolder()->AddArgumentGroup(header);
-  }
+  // ArgumentGroup* AddArgumentGroup(const char* header) override {
+  //   SetDirty(true);
+  //   return GetMainHolder()->AddArgumentGroup(header);
+  // }
 
   void SetOptions(std::unique_ptr<OptionsInfo> info) override {
     SetDirty(true);
@@ -1592,13 +1610,21 @@ class ArgumentControllerImpl : public ArgumentController {
     return GetParser()->ParseKnownArgs(args, rest);
   }
 
+  // TODO: this should always create a new subcommandholder, given the input..
   SubCommandHolder* GetSubCommandHolder() override {
-    if (!subcmd_holder_)  // TODO: create subcmd..
-      ;
     return subcmd_holder_.get();
   }
 
+  // TODO: use listener pattern.
+  // SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) override {
+  //   SetDirty(true);
+  //   return GetSubCommandHolder()->AddSubCommand(std::move(info));
+  // }
+
  private:
+  // Listen to events of argumentholder and subcommand holder.
+  class ListenerImpl;
+
   void SetDirty(bool dirty) { dirty_ = dirty; }
   bool dirty() const { return dirty_; }
   Parser* GetParser() {
@@ -1615,6 +1641,20 @@ class ArgumentControllerImpl : public ArgumentController {
   std::unique_ptr<OptionsInfo> options_info_;
   std::unique_ptr<ArgumentHolder> main_holder_;
   std::unique_ptr<SubCommandHolder> subcmd_holder_;
+};
+
+class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
+                                             public SubCommandHolder::Listener {
+ public:
+  explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
+
+ private:
+  void MarkDirty() { impl_->SetDirty(true); }
+  void OnAddArgument(Argument*) override { MarkDirty(); }
+  void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
+  void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
+
+  ArgumentControllerImpl* impl_;
 };
 
 struct ArgpIndexesInfo {
@@ -1793,10 +1833,10 @@ class ArgumentParser : public MainParserHelper {
     return controller_->ParseKnownArgs(args, out);
   }
   Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
-    return controller_->AddArgument(std::move(names));
+    return controller_->GetMainHolder()->AddArgument(std::move(names));
   }
   ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
-    return controller_->AddArgumentGroup(header);
+    return controller_->GetMainHolder()->AddArgumentGroup(header);
   }
   SubCommandHolder* AddSubParsersImpl() override {
     return controller_->GetSubCommandHolder();
