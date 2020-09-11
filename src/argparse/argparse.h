@@ -820,6 +820,39 @@ class ArgumentHolder {
   }
 };
 
+class SubCommand {
+ public:
+  virtual ~SubCommand() {}
+  virtual ArgumentHolder* GetHolder() = 0;
+  virtual const char* GetName() = 0;
+  virtual const char* GetHelpDoc() = 0;
+  virtual void ForEachAlias(std::function<void(const char*)> callback) {}
+};
+
+struct SubCommandInfo {
+  std::string name;
+  std::string help_doc;
+  std::vector<std::string> aliases;
+
+  SubCommandInfo(const char* name_,
+                 const char* help,
+                 std::vector<std::string> alias) {
+    DCHECK(name_);
+    name.assign(name_);
+    if (help)
+      help_doc.assign(help);
+    aliases = std::move(alias);
+  }
+};
+
+// Like ArgumentHolder, but holds subcommands.
+class SubCommandHolder {
+ public:
+  virtual ~SubCommandHolder() {}
+  virtual void ForEachSubCommand(std::function<void(SubCommand*)> callback) = 0;
+  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
+};
+
 struct OptionsInfo {
   int flags = 0;
   const char* program_version = {};
@@ -865,6 +898,7 @@ class ArgumentController {
   // Add group to main holder.
   virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
+  virtual SubCommandHolder* GetSubCommandHolder() = 0;
   virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
   static std::unique_ptr<ArgumentController> Create();
 };
@@ -1558,6 +1592,12 @@ class ArgumentControllerImpl : public ArgumentController {
     return GetParser()->ParseKnownArgs(args, rest);
   }
 
+  SubCommandHolder* GetSubCommandHolder() override {
+    if (!subcmd_holder_)  // TODO: create subcmd..
+      ;
+    return subcmd_holder_.get();
+  }
+
  private:
   void SetDirty(bool dirty) { dirty_ = dirty; }
   bool dirty() const { return dirty_; }
@@ -1574,6 +1614,7 @@ class ArgumentControllerImpl : public ArgumentController {
   std::unique_ptr<Parser> parser_;
   std::unique_ptr<OptionsInfo> options_info_;
   std::unique_ptr<ArgumentHolder> main_holder_;
+  std::unique_ptr<SubCommandHolder> subcmd_holder_;
 };
 
 struct ArgpIndexesInfo {
@@ -1672,29 +1713,71 @@ struct Options {
   std::unique_ptr<OptionsInfo> info;
 };
 
-class ArgumentParser : public AddArgumentGroupHelper {
+class SubCommandProxy : public AddArgumentGroupHelper {
  public:
-  ArgumentParser() : controller_(ArgumentController::Create()) {}
-  explicit ArgumentParser(Options options) : ArgumentParser() {
-    if (options.info)
-      controller_->SetOptions(std::move(options.info));
+  explicit SubCommandProxy(SubCommand* sub) : sub_(sub) {}
+
+ private:
+  Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
+    return sub_->GetHolder()->AddArgument(std::move(names));
+  }
+  ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
+    return sub_->GetHolder()->AddArgumentGroup(header);
+  }
+  SubCommand* sub_;
+};
+
+class SubCommandHolderProxy {
+ public:
+  explicit SubCommandHolderProxy(SubCommandHolder* holder) : holder_(holder) {}
+
+  SubCommandProxy add_parser(const char* name,
+                             const char* help = {},
+                             std::vector<std::string> aliases = {}) {
+    auto info =
+        std::make_unique<SubCommandInfo>(name, help, std::move(aliases));
+    auto* sub = holder_->AddSubCommand(std::move(info));
+    return SubCommandProxy(sub);
   }
 
+ private:
+  SubCommandHolder* holder_;
+};
+
+// Interface of ArgumentParser.
+class MainParserHelper : public AddArgumentGroupHelper {
+ public:
   void parse_args(int argc, const char** argv) {
-    return ParseArgs(ArgArray(argc, argv));
+    ParseArgsImpl(ArgArray(argc, argv), nullptr);
   }
-  // Helper for demo and testing.
   void parse_args(std::vector<const char*> args) {
-    return ParseArgs(ArgArray(args));
+    ParseArgsImpl(ArgArray(args), nullptr);
   }
   bool parse_known_args(int argc,
                         const char** argv,
                         std::vector<std::string>* out) {
-    return ParseKnownArgs(ArgArray(argc, argv), out);
+    return ParseArgsImpl(ArgArray(argc, argv), out);
   }
   bool parse_known_args(std::vector<const char*> args,
                         std::vector<std::string>* out) {
-    return ParseKnownArgs(args, out);
+    return ParseArgsImpl(args, out);
+  }
+  SubCommandHolderProxy add_subparsers() {
+    return SubCommandHolderProxy(AddSubParsersImpl());
+  }
+
+ private:
+  virtual bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) = 0;
+  virtual SubCommandHolder* AddSubParsersImpl() = 0;
+};
+
+class ArgumentParser : public MainParserHelper {
+ public:
+  ArgumentParser() : controller_(ArgumentController::Create()) {}
+
+  explicit ArgumentParser(Options options) : ArgumentParser() {
+    if (options.info)
+      controller_->SetOptions(std::move(options.info));
   }
 
   const char* program_name() const { return program_invocation_name; }
@@ -1705,22 +1788,18 @@ class ArgumentParser : public AddArgumentGroupHelper {
   const char* program_bug_address() const { return argp_program_bug_address; }
 
  private:
-  void ParseArgs(ArgArray args) {
-    DCHECK(controller_);
-    controller_->ParseKnownArgs(args, nullptr);
-  }
-  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) {
+  bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) override {
     DCHECK(out);
     return controller_->ParseKnownArgs(args, out);
   }
-
-  // AddArgumentHelper.
   Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
     return controller_->AddArgument(std::move(names));
   }
-  // AddArgumentGroupHelper.
   ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return controller_->AddArgumentGroup(header);
+  }
+  SubCommandHolder* AddSubParsersImpl() override {
+    return controller_->GetSubCommandHolder();
   }
 
   std::unique_ptr<ArgumentController> controller_;
