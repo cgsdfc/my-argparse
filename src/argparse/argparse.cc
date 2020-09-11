@@ -293,10 +293,10 @@ void ArgumentImpl::CallbackInfo::Initialize() {
   // }
 }
 
-void ArgumentImpl::Initialize(HelpFormatPolicy policy) {
+void ArgumentImpl::Initialize() {
   DCHECK(callback_info_);
   callback_info_->Initialize();
-  ProcessHelpFormatPolicy(policy);
+  // ProcessHelpFormatPolicy(policy);
 }
 
 void ArgumentImpl::CallbackInfo::FormatTypeHint(std::ostream& os) const {
@@ -815,7 +815,6 @@ void ArgpCompiler::CompileOptions(std::vector<argp_option>* out) {
   holder_->ForEachGroup(
       [this, out](ArgumentGroup* g) { return CompileGroup(g, out); });
   holder_->ForEachArgument([this, out](Argument* arg) {
-    arg->Initialize(policy_);
     return CompileArgument(arg, out);
   });
   out->push_back({});

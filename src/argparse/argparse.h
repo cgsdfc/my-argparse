@@ -659,7 +659,6 @@ struct TypeInfo {
       : type_code(Types::kParse), ops(std::move(ops)) {}
 };
 
-// Keep all info needed for running callback.
 class ArgumentInitializer {
  public:
   virtual ~ArgumentInitializer() {}
@@ -687,11 +686,11 @@ class Argument {
   // 1. contructor is called, names and is_option is determined.
   // 2. ArgumentInitializer is created and its methods are called.
   // Different properties of an arg are set.
-  // 3. Initialize() is called, this validates various aspects of an arg and
-  // prepares it for running callbacks.
-  // This initialization process can only happen once for an arg.
+  // 3. ~ArgumentInitializer() is called, which in turn calls ArgumentImpl's
+  // init logic. This validates various aspects of an arg and prepares it for
+  // running callbacks. This initialization process can only happen once for an
+  // arg.
   virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
-  virtual void Initialize(HelpFormatPolicy policy) = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
   virtual const char* GetDoc() = 0;
   virtual bool IsRequired() = 0;
@@ -1090,7 +1089,6 @@ class ArgumentImpl : public Argument {
 
   CallbackRunner* GetCallbackRunner() override;
 
-  void Initialize(HelpFormatPolicy policy) override;
   void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
 
   bool Before(const Argument* that) const override {
@@ -1101,6 +1099,8 @@ class ArgumentImpl : public Argument {
   class InitializerImpl;
   class CallbackInfo;
 
+  // Called by InitializerImpl.
+  void Initialize();
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
   std::unique_ptr<NamesInfo> names_info_;
@@ -1360,6 +1360,7 @@ class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
     DCHECK(value);
     cb_info_->default_value_ = std::move(value);
   }
+  ~InitializerImpl() override { impl_->Initialize(); }
 
  private:
   ArgumentImpl* impl_;
