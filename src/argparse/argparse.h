@@ -34,6 +34,7 @@ namespace argparse {
 class Argument;
 class ArgumentGroup;
 
+// TODO: move this argp stuff down down down..
 using ::argp;
 using ::argp_error;
 using ::argp_failure;
@@ -56,6 +57,7 @@ struct SourceLocation {
   const char* filename;
 };
 
+// TODO: replace with CHECK(), CHECK_F, DCHECK(), DCHECK_F()
 void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...);
 
 // Result<T> handles user' returned value and error using a union.
@@ -139,6 +141,7 @@ class Result {
   std::variant<EmptyType, std::string, T> data_;
 };
 
+// TODO: Don't need this wrapper.
 // Wrapper of argp_state.
 class ArgpState {
  public:
