@@ -466,13 +466,6 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
   return &arguments_.emplace_back(std::move(names), group);
 }
 
-ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
-    const char* header) {
-  auto* group = new GroupImpl(this, header);
-  groups_.emplace_back(group);
-  return group;
-}
-
 ArgumentHolderImpl::ArgumentHolderImpl() {
   AddArgumentGroup("optional arguments");
   AddArgumentGroup("positional arguments");
@@ -964,6 +957,36 @@ ArgumentBuilder AddArgumentHelper::add_argument(Names names,
       .type(std::move(type))
       .action(std::move(action));
   return builder;
+}
+
+class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
+ public:
+  GroupImpl(ArgumentHolderImpl* holder, const char* header)
+      : holder_(holder), header_(header) {
+    DCHECK(header_.size());
+    if (header_.back() != ':')
+      header_.push_back(':');
+  }
+
+  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
+    ++members_;
+    return holder_->AddArgumentToGroup(std::move(names), this);
+  }
+  const char* GetHeader() override { return header_.c_str(); }
+
+  int GetArgumentCount() override { return members_; }
+
+ private:
+  ArgumentHolderImpl* holder_;
+  std::string header_;  // the text provided by user plus a ':'.
+  int members_ = 0;
+};
+
+ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
+    const char* header) {
+  auto* group = new GroupImpl(this, header);
+  groups_.emplace_back(group);
+  return group;
 }
 
 }  // namespace argparse
