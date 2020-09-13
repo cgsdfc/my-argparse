@@ -1503,53 +1503,6 @@ struct Names {
   Names(std::initializer_list<const char*> names);
 };
 
-class ArgumentBuilder {
- public:
-  explicit ArgumentBuilder(std::unique_ptr<ArgumentInitializer> init)
-      : init_(std::move(init)) {}
-
-  ArgumentBuilder& dest(Dest d) {
-    if (d.info)
-      init_->SetDest(std::move(d.info));
-    return *this;
-  }
-  ArgumentBuilder& action(Action a) {
-    if (a.info)
-      init_->SetAction(std::move(a.info));
-    return *this;
-  }
-  ArgumentBuilder& type(Type t) {
-    if (t.info)
-      init_->SetType(std::move(t.info));
-    return *this;
-  }
-  ArgumentBuilder& const_value(AnyValue val) {
-    init_->SetConstValue(std::move(val.data));
-    return *this;
-  }
-  ArgumentBuilder& default_value(AnyValue val) {
-    init_->SetDefaultValue(std::move(val.data));
-    return *this;
-  }
-  ArgumentBuilder& help(const char* h) {
-    if (h)
-      init_->SetHelpDoc(h);
-    return *this;
-  }
-  ArgumentBuilder& required(bool b) {
-    init_->SetRequired(b);
-    return *this;
-  }
-  ArgumentBuilder& meta_var(const char* v) {
-    if (v)
-      init_->SetMetaVar(v);
-    return *this;
-  }
-
- private:
-  std::unique_ptr<ArgumentInitializer> init_;
-};
-
 class AddArgumentHelper;
 
 class argument {
@@ -1609,11 +1562,11 @@ class argument {
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
-  ArgumentBuilder add_argument(Names names,
-                               Dest dest = {},
-                               const char* help = {},
-                               Type type = {},
-                               Action action = {});
+  void add_argument(Names names,
+                    Dest dest = {},
+                    const char* help = {},
+                    Type type = {},
+                    Action action = {});
 
   void add(argument& arg) { AddArgumentImpl(arg.ReleaseArgument()); }
   virtual ~AddArgumentHelper() {}

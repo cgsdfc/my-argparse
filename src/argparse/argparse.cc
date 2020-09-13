@@ -994,19 +994,17 @@ std::unique_ptr<ArgumentInitializer> ArgumentImpl::CreateInitializer() {
   return std::make_unique<InitializerImpl>(this, callback_info_.get());
 }
 
-ArgumentBuilder AddArgumentHelper::add_argument(Names names,
-                                                Dest dest,
-                                                const char* help,
-                                                Type type,
-                                                Action action) {
-  DCHECK(names.info);
-  auto* arg = AddArgumentImpl(std::move(names.info));
-  ArgumentBuilder builder(arg->CreateInitializer());
-  builder.dest(std::move(dest))
+void AddArgumentHelper::add_argument(Names names,
+                                     Dest dest,
+                                     const char* help,
+                                     Type type,
+                                     Action action) {
+  argument arg(std::move(names));
+  arg.dest(std::move(dest))
       .help(help)
       .type(std::move(type))
       .action(std::move(action));
-  return builder;
+  return add(arg);
 }
 
 class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
