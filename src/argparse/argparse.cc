@@ -60,11 +60,6 @@ Names::Names(std::initializer_list<const char*> names) {
 }
 
 // ArgumentImpl:
-ArgumentImpl::ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group)
-    : names_info_(std::move(names)), group_(group) {
-  DCHECK(names_info_);
-}
-
 bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
                                     const ArgumentImpl* b) {
   // options go before positionals.
@@ -468,12 +463,6 @@ void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
   if (listener_)
     listener_->OnAddArgument(arg.get());
   arguments_.push_back(std::move(arg));
-}
-
-Argument* ArgumentHolderImpl::AddArgumentToGroup(
-    std::unique_ptr<NamesInfo> names,
-    ArgumentGroup* group) {
-
 }
 
 ArgumentHolderImpl::ArgumentHolderImpl() {
@@ -909,90 +898,44 @@ void ArgpCompiler::CompileArgumentIndexes(ArgpIndexesInfo* out) {
   });
 }
 
-class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
- public:
-  InitializerImpl(ArgumentImpl* impl, CallbackInfo* cb_info)
-      : impl_(impl), cb_info_(cb_info) {}
-
-  void SetRequired(bool required) override { impl_->is_required_ = required; }
-  void SetHelpDoc(std::string help_doc) override {
-    impl_->help_doc_ = std::move(help_doc);
-  }
-  void SetMetaVar(std::string meta_var) override {
-    impl_->names_info_->meta_var = std::move(meta_var);
-  }
-  void SetDest(std::unique_ptr<DestInfo> info) override {
-    DCHECK(info);
-    cb_info_->dest_info_ = std::move(info);
-  }
-  void SetType(std::unique_ptr<TypeInfo> info) override {
-    DCHECK(info);
-    cb_info_->type_info_ = std::move(info);
-  }
-  void SetAction(std::unique_ptr<ActionInfo> info) override {
-    DCHECK(info);
-    cb_info_->action_info_ = std::move(info);
-  }
-  void SetConstValue(std::unique_ptr<Any> value) override {
-    DCHECK(value);
-    cb_info_->const_value_ = std::move(value);
-  }
-  void SetDefaultValue(std::unique_ptr<Any> value) override {
-    DCHECK(value);
-    cb_info_->default_value_ = std::move(value);
-  }
-  ~InitializerImpl() override { impl_->Initialize(); }
-
- private:
-  ArgumentImpl* impl_;
-  CallbackInfo* cb_info_;
-};
-
-// class ArgumentImpl::Factory : public ArgumentInitializer {
+// class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
 //  public:
-//   Factory(ArgumentImpl* impl, CallbackInfo* cb_info)
+//   InitializerImpl(ArgumentImpl* impl, CallbackInfo* cb_info)
 //       : impl_(impl), cb_info_(cb_info) {}
 
-  // void SetRequired(bool required) override { impl_->is_required_ = required; }
-  // void SetHelpDoc(std::string help_doc) override {
-  //   impl_->help_doc_ = std::move(help_doc);
-  // }
-  // void SetMetaVar(std::string meta_var) override {
-  //   impl_->names_info_->meta_var = std::move(meta_var);
-  // }
-  // void SetDest(std::unique_ptr<DestInfo> info) override {
-  //   DCHECK(info);
-  //   cb_info_->dest_info_ = std::move(info);
-  // }
-  // void SetType(std::unique_ptr<TypeInfo> info) override {
-  //   DCHECK(info);
-  //   cb_info_->type_info_ = std::move(info);
-  // }
-  // void SetAction(std::unique_ptr<ActionInfo> info) override {
-  //   DCHECK(info);
-  //   cb_info_->action_info_ = std::move(info);
-  // }
-  // void SetConstValue(std::unique_ptr<Any> value) override {
-  //   DCHECK(value);
-  //   cb_info_->const_value_ = std::move(value);
-  // }
-  // void SetDefaultValue(std::unique_ptr<Any> value) override {
-  //   DCHECK(value);
-  //   cb_info_->default_value_ = std::move(value);
-  // }
-  // // ~InitializerImpl() override { impl_->Initialize(); }
+//   void SetRequired(bool required) override { impl_->is_required_ = required; }
+//   void SetHelpDoc(std::string help_doc) override {
+//     impl_->help_doc_ = std::move(help_doc);
+//   }
+//   void SetMetaVar(std::string meta_var) override {
+//     impl_->names_info_->meta_var = std::move(meta_var);
+//   }
+//   void SetDest(std::unique_ptr<DestInfo> info) override {
+//     DCHECK(info);
+//     cb_info_->dest_info_ = std::move(info);
+//   }
+//   void SetType(std::unique_ptr<TypeInfo> info) override {
+//     DCHECK(info);
+//     cb_info_->type_info_ = std::move(info);
+//   }
+//   void SetAction(std::unique_ptr<ActionInfo> info) override {
+//     DCHECK(info);
+//     cb_info_->action_info_ = std::move(info);
+//   }
+//   void SetConstValue(std::unique_ptr<Any> value) override {
+//     DCHECK(value);
+//     cb_info_->const_value_ = std::move(value);
+//   }
+//   void SetDefaultValue(std::unique_ptr<Any> value) override {
+//     DCHECK(value);
+//     cb_info_->default_value_ = std::move(value);
+//   }
+//   ~InitializerImpl() override { impl_->Initialize(); }
 
 //  private:
 //   ArgumentImpl* impl_;
 //   CallbackInfo* cb_info_;
 // };
-
-
-std::unique_ptr<ArgumentInitializer> ArgumentImpl::CreateInitializer() {
-  DCHECK(!callback_info_);
-  callback_info_.reset(new CallbackInfo);
-  return std::make_unique<InitializerImpl>(this, callback_info_.get());
-}
 
 void AddArgumentHelper::add_argument(Names names,
                                      Dest dest,
@@ -1016,10 +959,6 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
       header_.push_back(':');
   }
 
-  Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
-    ++members_;
-    return holder_->AddArgumentToGroup(std::move(names), this);
-  }
   void AddArgument(std::unique_ptr<Argument> arg) override {
     ++members_;
     holder_->AddArgumentToGroup(std::move(arg), this);

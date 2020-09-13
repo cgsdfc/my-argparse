@@ -659,21 +659,6 @@ struct TypeInfo {
       : type_code(Types::kParse), ops(std::move(ops)) {}
 };
 
-class ArgumentInitializer {
- public:
-  virtual ~ArgumentInitializer() {}
-
-  virtual void SetRequired(bool required) = 0;
-  virtual void SetHelpDoc(std::string help_doc) = 0;
-  virtual void SetMetaVar(std::string meta_var) = 0;
-
-  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
-  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
-  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
-  virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
-};
-
 enum class HelpFormatPolicy {
   kDefault,           // add nothing.
   kTypeHint,          // add (type: <type-hint>) to help doc.
@@ -690,7 +675,6 @@ class Argument {
   // init logic. This validates various aspects of an arg and prepares it for
   // running callbacks. This initialization process can only happen once for an
   // arg.
-  virtual std::unique_ptr<ArgumentInitializer> CreateInitializer() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
   virtual const char* GetDoc() = 0;
   virtual bool IsRequired() = 0;
@@ -804,7 +788,6 @@ class ArgumentGroup {
   // Visit each arg.
   virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
   // Add an arg to this group.
-  virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual int GetArgumentCount() = 0;
 };
@@ -831,10 +814,10 @@ class ArgumentHolder {
   virtual ~ArgumentHolder() {}
 
   // Helper method to add arg to default group.
-  Argument* AddArgument(std::unique_ptr<NamesInfo> names) {
-    auto* group = names->is_option ? GetDefaultOptionGroup()
-                                   : GetDefaultPositionalGroup();
-    return group->AddArgument(std::move(names));
+  void AddArgument(std::unique_ptr<Argument> arg) {
+    auto* group =
+        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
+    return group->AddArgument(std::move(arg));
   }
 };
 
@@ -1123,12 +1106,9 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
  public:
-  ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
-
   explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
       : names_info_(std::move(names)) {}
 
-  std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
   ArgumentGroup* GetGroup() override { return group_; }
   const NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required(); }
@@ -1204,9 +1184,7 @@ class ArgumentImpl : public Argument {
   void Initialize() override;
 
  private:
-  class InitializerImpl;
   class CallbackInfo;
-  class Factory;
 
   // Called by InitializerImpl.
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
@@ -1572,7 +1550,6 @@ class AddArgumentHelper {
   virtual ~AddArgumentHelper() {}
 
  private:
-  virtual Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) = 0;
   virtual void AddArgumentImpl(std::unique_ptr<Argument> arg) {}
 };
 
@@ -1581,9 +1558,6 @@ class ArgumentGroupProxy : public AddArgumentHelper {
   ArgumentGroupProxy(ArgumentGroup* group) : group_(group) {}
 
  private:
-  Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
-    return group_->AddArgument(std::move(names));
-  }
   void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
     return group_->AddArgument(std::move(arg));
   }
@@ -1633,9 +1607,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
  private:
   // Add an arg to a specific group.
-  Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
-                               ArgumentGroup* group);
-
   void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
 
   enum GroupID {
@@ -1888,8 +1859,8 @@ class SubParser : public AddArgumentGroupHelper {
   explicit SubParser(SubCommand* sub) : sub_(sub) {}
 
  private:
-  Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
-    return sub_->GetHolder()->AddArgument(std::move(names));
+  void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
+    return sub_->GetHolder()->AddArgument(std::move(arg));
   }
   ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return sub_->GetHolder()->AddArgumentGroup(header);
@@ -1965,8 +1936,8 @@ class ArgumentParser : public MainParserHelper {
     DCHECK(out);
     return controller_->ParseKnownArgs(args, out);
   }
-  Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
-    return controller_->GetMainHolder()->AddArgument(std::move(names));
+  void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
+    return controller_->GetMainHolder()->AddArgument(std::move(arg));
   }
   ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return controller_->GetMainHolder()->AddArgumentGroup(header);
