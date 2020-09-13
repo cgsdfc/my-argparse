@@ -807,8 +807,8 @@ class ArgumentHolder {
   // Notify outside some event.
   class Listener {
    public:
-    virtual void OnAddArgument(Argument* arg) = 0;
-    virtual void OnAddArgumentGroup(ArgumentGroup* group) = 0;
+    virtual void OnAddArgument(Argument* arg) {}
+    virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
     virtual ~Listener() {}
   };
 
@@ -830,15 +830,6 @@ class ArgumentHolder {
   }
 };
 
-class SubCommand {
- public:
-  virtual ~SubCommand() {}
-  virtual ArgumentHolder* GetHolder() = 0;
-  virtual const char* GetName() = 0;
-  virtual const char* GetHelpDoc() = 0;
-  virtual void ForEachAlias(std::function<void(const char*)> callback) {}
-};
-
 struct SubCommandInfo {
   std::string name;
   std::string help_doc;
@@ -855,18 +846,43 @@ struct SubCommandInfo {
   }
 };
 
+class SubCommand {
+ public:
+  virtual ~SubCommand() {}
+  virtual ArgumentHolder* GetHolder() = 0;
+  virtual SubCommandInfo* GetInfo() = 0;
+  // virtual const char* GetName() = 0;
+  // virtual const char* GetHelpDoc() = 0;
+  virtual void ForEachAlias(std::function<void(const char*)> callback) {}
+};
+
+// The basic information of this group.
+struct SubCommandGroupInfo {};
+
+// A group of SubCommands, which can have things like description...
+class SubCommandGroup {
+ public:
+  virtual ~SubCommandGroup() {}
+  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
+  virtual SubCommandGroupInfo* GetInfo() = 0;
+};
+
 // Like ArgumentHolder, but holds subcommands.
 class SubCommandHolder {
  public:
   class Listener {
    public:
     virtual ~Listener() {}
-    virtual void OnAddSubCommand(SubCommand* sub) = 0;
+    virtual void OnAddSubCommandGroup(SubCommandGroup* group) {}
+    virtual void OnAddSubCommand(SubCommand* sub) {}
   };
 
   virtual ~SubCommandHolder() {}
+  virtual SubCommandGroup* AddSubCommandGroup(
+      std::unique_ptr<SubCommandGroupInfo> info) = 0;
   virtual void ForEachSubCommand(std::function<void(SubCommand*)> callback) = 0;
-  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
+  virtual void ForEachSubCommandGroup(
+      std::function<void(SubCommandGroup*)> callback) = 0;
   virtual void SetListener(std::unique_ptr<Listener> listener) = 0;
 };
 
@@ -912,7 +928,6 @@ class ArgumentController {
                               std::vector<std::string>* rest) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
   virtual SubCommandHolder* GetSubCommandHolder() = 0;
-  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
   virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
   static std::unique_ptr<ArgumentController> Create();
 };
@@ -1491,7 +1506,8 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
  private:
   // Add an arg to a specific group.
-  Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
+  Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
+                               ArgumentGroup* group);
 
   enum GroupID {
     kOptionGroup = 0,
@@ -1601,7 +1617,6 @@ class ArgumentControllerImpl : public ArgumentController {
     return GetParser()->ParseKnownArgs(args, rest);
   }
 
-  // TODO: this should always create a new subcommandholder, given the input..
   SubCommandHolder* GetSubCommandHolder() override {
     return subcmd_holder_.get();
   }
@@ -1638,6 +1653,7 @@ class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
   void OnAddArgument(Argument*) override { MarkDirty(); }
   void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
   void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
+  void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
 
   ArgumentControllerImpl* impl_;
 };
@@ -1738,9 +1754,9 @@ struct Options {
   std::unique_ptr<OptionsInfo> info;
 };
 
-class SubCommandProxy : public AddArgumentGroupHelper {
+class SubParser : public AddArgumentGroupHelper {
  public:
-  explicit SubCommandProxy(SubCommand* sub) : sub_(sub) {}
+  explicit SubParser(SubCommand* sub) : sub_(sub) {}
 
  private:
   Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
@@ -1752,21 +1768,22 @@ class SubCommandProxy : public AddArgumentGroupHelper {
   SubCommand* sub_;
 };
 
-class SubCommandHolderProxy {
+class SubParserGroup {
  public:
-  explicit SubCommandHolderProxy(SubCommandHolder* holder) : holder_(holder) {}
+  explicit SubParserGroup(SubCommandGroup* group) : group_(group) {}
 
-  SubCommandProxy add_parser(const char* name,
-                             const char* help = {},
-                             std::vector<std::string> aliases = {}) {
+  // TODO: More precise signature.
+  SubParser add_parser(const char* name,
+                       const char* help = {},
+                       std::vector<std::string> aliases = {}) {
     auto info =
         std::make_unique<SubCommandInfo>(name, help, std::move(aliases));
-    auto* sub = holder_->AddSubCommand(std::move(info));
-    return SubCommandProxy(sub);
+    auto* sub = group_->AddSubCommand(std::move(info));
+    return SubParser(sub);
   }
 
  private:
-  SubCommandHolder* holder_;
+  SubCommandGroup* group_;
 };
 
 // Interface of ArgumentParser.
@@ -1787,13 +1804,15 @@ class MainParserHelper : public AddArgumentGroupHelper {
                         std::vector<std::string>* out) {
     return ParseArgsImpl(args, out);
   }
-  SubCommandHolderProxy add_subparsers() {
-    return SubCommandHolderProxy(AddSubParsersImpl());
+  // TODO: More precise signature.
+  SubParserGroup add_subparsers() {
+    return SubParserGroup(AddSubParsersImpl(nullptr));
   }
 
  private:
   virtual bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) = 0;
-  virtual SubCommandHolder* AddSubParsersImpl() = 0;
+  virtual SubCommandGroup* AddSubParsersImpl(
+      std::unique_ptr<SubCommandGroupInfo> info) = 0;
 };
 
 class ArgumentParser : public MainParserHelper {
@@ -1823,8 +1842,10 @@ class ArgumentParser : public MainParserHelper {
   ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return controller_->GetMainHolder()->AddArgumentGroup(header);
   }
-  SubCommandHolder* AddSubParsersImpl() override {
-    return controller_->GetSubCommandHolder();
+  SubCommandGroup* AddSubParsersImpl(
+      std::unique_ptr<SubCommandGroupInfo> info) override {
+    return controller_->GetSubCommandHolder()->AddSubCommandGroup(
+        std::move(info));
   }
 
   std::unique_ptr<ArgumentController> controller_;
