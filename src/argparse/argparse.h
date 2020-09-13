@@ -707,6 +707,16 @@ class Argument {
     
   // }
 
+  virtual void SetRequired(bool required) = 0;
+  virtual void SetHelpDoc(std::string help_doc) = 0;
+  virtual void SetMetaVar(std::string meta_var) = 0;
+
+  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
+  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
+  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
+  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
+  virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
+
   virtual ~Argument() {}
 };
 
@@ -1149,6 +1159,34 @@ class ArgumentImpl : public Argument {
     return long_names().empty() ? nullptr : long_names()[0].c_str();
   }
 
+  void SetRequired(bool required) override { is_required_ = required; }
+  void SetHelpDoc(std::string help_doc) override {
+    help_doc_ = std::move(help_doc);
+  }
+  void SetMetaVar(std::string meta_var) override {
+    names_info_->meta_var = std::move(meta_var);
+  }
+  void SetDest(std::unique_ptr<DestInfo> info) override {
+    DCHECK(info);
+    // cb_info_->dest_info_ = std::move(info);
+  }
+  void SetType(std::unique_ptr<TypeInfo> info) override {
+    DCHECK(info);
+    // cb_info_->type_info_ = std::move(info);
+  }
+  void SetAction(std::unique_ptr<ActionInfo> info) override {
+    DCHECK(info);
+    // cb_info_->action_info_ = std::move(info);
+  }
+  void SetConstValue(std::unique_ptr<Any> value) override {
+    DCHECK(value);
+    // cb_info_->const_value_ = std::move(value);
+  }
+  void SetDefaultValue(std::unique_ptr<Any> value) override {
+    DCHECK(value);
+    // cb_info_->default_value_ = std::move(value);
+  }
+ 
   CallbackRunner* GetCallbackRunner() override;
 
   void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
@@ -1160,6 +1198,7 @@ class ArgumentImpl : public Argument {
  private:
   class InitializerImpl;
   class CallbackInfo;
+  class Factory;
 
   // Called by InitializerImpl.
   void Initialize();
@@ -1212,10 +1251,10 @@ class SubCommandImpl : public SubCommand {
   SubCommandInfo* GetInfo() override { return info_.get(); }
 
   explicit SubCommandImpl(SubCommandGroup* group,
-                          std::unique_ptr<SubCommandInfo> info)
-      : group_(group),
-        info_(std::move(info)),
-        holder_(new ArgumentHolderImpl()) {}
+                          std::unique_ptr<SubCommandInfo> info);
+      // : group_(group),
+      //   info_(std::move(info)),
+      //   holder_(new ArgumentHolderImpl()) {}
 
  private:
   SubCommandGroup* group_;
