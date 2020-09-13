@@ -463,7 +463,10 @@ Argument* ArgumentHolderImpl::AddArgumentToGroup(
     ArgumentGroup* group) {
   // First check if this arg will conflict with existing ones.
   CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
-  return &arguments_.emplace_back(std::move(names), group);
+  Argument* arg = &arguments_.emplace_back(std::move(names), group);
+  if (listener_)
+    listener_->OnAddArgument(arg);
+  return arg;
 }
 
 ArgumentHolderImpl::ArgumentHolderImpl() {
@@ -986,6 +989,8 @@ ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
     const char* header) {
   auto* group = new GroupImpl(this, header);
   groups_.emplace_back(group);
+  if (listener_)
+    listener_->OnAddArgumentGroup(group);
   return group;
 }
 

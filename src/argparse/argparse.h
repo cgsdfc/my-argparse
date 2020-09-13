@@ -910,10 +910,6 @@ class ArgumentController {
   // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args,
                               std::vector<std::string>* rest) = 0;
-  // Add arg to main holder.
-  // virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
-  // Add group to main holder.
-  // virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
   virtual SubCommandHolder* GetSubCommandHolder() = 0;
   virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
@@ -1489,6 +1485,10 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   int GetArgumentCount() override { return arguments_.size(); }
 
+  void SetListener(std::unique_ptr<Listener> listener) override {
+    listener_ = std::move(listener);
+  }
+
  private:
   // Add an arg to a specific group.
   Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
@@ -1502,6 +1502,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   bool CheckNamesConflict(const NamesInfo& names);
 
+  std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
   std::list<ArgumentImpl> arguments_;
   std::vector<std::unique_ptr<ArgumentGroup>> groups_;
@@ -1591,16 +1592,6 @@ class ArgumentControllerImpl : public ArgumentController {
 
   ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
 
-  // Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
-  //   SetDirty(true);
-  //   return GetMainHolder()->AddArgument(std::move(names));
-  // }
-
-  // ArgumentGroup* AddArgumentGroup(const char* header) override {
-  //   SetDirty(true);
-  //   return GetMainHolder()->AddArgumentGroup(header);
-  // }
-
   void SetOptions(std::unique_ptr<OptionsInfo> info) override {
     SetDirty(true);
     options_info_ = std::move(info);
@@ -1614,12 +1605,6 @@ class ArgumentControllerImpl : public ArgumentController {
   SubCommandHolder* GetSubCommandHolder() override {
     return subcmd_holder_.get();
   }
-
-  // TODO: use listener pattern.
-  // SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) override {
-  //   SetDirty(true);
-  //   return GetSubCommandHolder()->AddSubCommand(std::move(info));
-  // }
 
  private:
   // Listen to events of argumentholder and subcommand holder.
