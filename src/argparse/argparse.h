@@ -853,7 +853,7 @@ class SubCommand {
   virtual SubCommandInfo* GetInfo() = 0;
   // virtual const char* GetName() = 0;
   // virtual const char* GetHelpDoc() = 0;
-  virtual void ForEachAlias(std::function<void(const char*)> callback) {}
+  // virtual void ForEachAlias(std::function<void(const char*)> callback) {}
 };
 
 // The basic information of this group.
@@ -1204,6 +1204,67 @@ class ArgumentImpl::CallbackInfo : public CallbackRunner {
   std::unique_ptr<NumArgsInfo> num_args_;
   std::unique_ptr<Any> const_value_;
   std::unique_ptr<Any> default_value_;
+};
+
+class SubCommandImpl : public SubCommand {
+ public:
+  ArgumentHolder* GetHolder() override { return holder_.get(); }
+  SubCommandInfo* GetInfo() override { return info_.get(); }
+
+  explicit SubCommandImpl(SubCommandGroup* group,
+                          std::unique_ptr<SubCommandInfo> info)
+      : group_(group),
+        info_(std::move(info)),
+        holder_(new ArgumentHolderImpl()) {}
+
+ private:
+  SubCommandGroup* group_;
+  // Option given by user.
+  std::unique_ptr<SubCommandInfo> info_;
+  std::unique_ptr<ArgumentHolder> holder_;
+};
+
+class SubCommandHolderImpl : public SubCommandHolder {
+ public:
+  void ForEachSubCommand(std::function<void(SubCommand*)> callback) override {
+    for (auto& sub : subcmds_)
+      callback(sub.get());
+  }
+
+  SubCommandGroup* AddSubCommandGroup(
+      std::unique_ptr<SubCommandGroupInfo> info) override {
+        
+      }
+
+  void SetListener(std::unique_ptr<Listener> listener) override {
+    listener_ = std::move(listener);
+  }
+
+ private:
+  class GroupImpl;
+
+  SubCommand* AddSubCommandToGroup(SubCommandGroup* group,
+                                   std::unique_ptr<SubCommandInfo> info) {
+    auto* sub = new SubCommandImpl(group, std::move(info));
+    if (listener_)
+      listener_->OnAddSubCommand(sub);
+    subcmds_.emplace_back(sub);
+    return sub;
+  }
+
+  std::unique_ptr<Listener> listener_;
+  std::vector<std::unique_ptr<SubCommand>> subcmds_;
+  std::vector<std::unique_ptr<SubCommandGroup>> groups_;
+};
+
+class SubCommandHolderImpl::GroupImpl : public SubCommandGroup {
+ public:
+  SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) override {
+    return impl_->AddSubCommandToGroup(this, std::move(info));
+  }
+
+ private:
+  SubCommandHolderImpl* impl_;
 };
 
 template <typename T>
