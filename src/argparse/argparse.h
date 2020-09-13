@@ -1210,8 +1210,6 @@ class ArgumentImpl::CallbackInfo : public CallbackRunner {
   void FormatDefaultValue(std::ostream& os) const;
 
  private:
-  friend class ArgumentImpl::InitializerImpl;
-
   void RunCallback(std::unique_ptr<Delegate> delegate) override;
   void InitAction();
   void InitType();
