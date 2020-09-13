@@ -458,15 +458,22 @@ char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
   }
 }
 
+void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
+                                            ArgumentGroup* group) {
+  // First check if this arg will conflict with existing ones.
+  CHECK_USER(CheckNamesConflict(*arg->GetNamesInfo()),
+             "Names conflict with existing names!");
+  arg->SetGroup(group);
+  arg->Initialize();
+  if (listener_)
+    listener_->OnAddArgument(arg.get());
+  arguments_.push_back(std::move(arg));
+}
+
 Argument* ArgumentHolderImpl::AddArgumentToGroup(
     std::unique_ptr<NamesInfo> names,
     ArgumentGroup* group) {
-  // First check if this arg will conflict with existing ones.
-  CHECK_USER(CheckNamesConflict(*names), "Names conflict with existing names!");
-  Argument* arg = &arguments_.emplace_back(std::move(names), group);
-  if (listener_)
-    listener_->OnAddArgument(arg);
-  return arg;
+
 }
 
 ArgumentHolderImpl::ArgumentHolderImpl() {
@@ -1014,6 +1021,10 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
   Argument* AddArgument(std::unique_ptr<NamesInfo> names) override {
     ++members_;
     return holder_->AddArgumentToGroup(std::move(names), this);
+  }
+  void AddArgument(std::unique_ptr<Argument> arg) override {
+    ++members_;
+    holder_->AddArgumentToGroup(std::move(arg), this);
   }
   const char* GetHeader() override { return header_.c_str(); }
 

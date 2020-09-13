@@ -699,13 +699,6 @@ class Argument {
   virtual bool Before(const Argument* that) const = 0;
   virtual const NamesInfo* GetNamesInfo() = 0;
   bool IsOption() { return GetNamesInfo()->is_option; }
-  // const char* GetMetaVar() {
-  //   const auto& mv = GetNamesInfo()->meta_var;
-  //   return mv.empty() ? nullptr : mv.c_str();
-  // }
-  // const char * GetName() {
-    
-  // }
 
   virtual void SetRequired(bool required) = 0;
   virtual void SetHelpDoc(std::string help_doc) = 0;
@@ -716,7 +709,11 @@ class Argument {
   virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
+  virtual void SetGroup(ArgumentGroup* group) = 0;
 
+  virtual void Initialize() = 0;
+
+  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
   virtual ~Argument() {}
 };
 
@@ -808,6 +805,7 @@ class ArgumentGroup {
   virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
   // Add an arg to this group.
   virtual Argument* AddArgument(std::unique_ptr<NamesInfo> names) = 0;
+  virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual int GetArgumentCount() = 0;
 };
 
@@ -1127,6 +1125,9 @@ class ArgumentImpl : public Argument {
  public:
   ArgumentImpl(std::unique_ptr<NamesInfo> names, ArgumentGroup* group);
 
+  explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
+      : names_info_(std::move(names)) {}
+
   std::unique_ptr<ArgumentInitializer> CreateInitializer() override;
   ArgumentGroup* GetGroup() override { return group_; }
   const NamesInfo* GetNamesInfo() override { return names_info_.get(); }
@@ -1186,7 +1187,12 @@ class ArgumentImpl : public Argument {
     DCHECK(value);
     // cb_info_->default_value_ = std::move(value);
   }
- 
+
+  void SetGroup(ArgumentGroup* group) override {
+    DCHECK(group);
+    group_ = group;
+  }
+
   CallbackRunner* GetCallbackRunner() override;
 
   void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
@@ -1195,21 +1201,28 @@ class ArgumentImpl : public Argument {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
+  void Initialize() override;
+
  private:
   class InitializerImpl;
   class CallbackInfo;
   class Factory;
 
   // Called by InitializerImpl.
-  void Initialize();
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
   std::unique_ptr<NamesInfo> names_info_;
-  ArgumentGroup* group_;
+  ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
   bool is_required_ = false;
   std::unique_ptr<CallbackInfo> callback_info_;
 };
+
+inline std::unique_ptr<Argument> Argument::Create(
+    std::unique_ptr<NamesInfo> info) {
+  DCHECK(info);
+  return std::make_unique<ArgumentImpl>(std::move(info));
+}
 
 // Callback relative things are put into this class.
 class ArgumentImpl::CallbackInfo : public CallbackRunner {
@@ -1537,6 +1550,62 @@ class ArgumentBuilder {
   std::unique_ptr<ArgumentInitializer> init_;
 };
 
+class AddArgumentHelper;
+
+class argument {
+ public:
+  explicit argument(Names names) {
+    DCHECK(names.info);
+    arg_ = Argument::Create(std::move(names.info));
+  }
+
+  argument& dest(Dest d) {
+    if (d.info)
+      arg_->SetDest(std::move(d.info));
+    return *this;
+  }
+  argument& action(Action a) {
+    if (a.info)
+      arg_->SetAction(std::move(a.info));
+    return *this;
+  }
+  argument& type(Type t) {
+    if (t.info)
+      arg_->SetType(std::move(t.info));
+    return *this;
+  }
+  argument& const_value(AnyValue val) {
+    arg_->SetConstValue(std::move(val.data));
+    return *this;
+  }
+  argument& default_value(AnyValue val) {
+    arg_->SetDefaultValue(std::move(val.data));
+    return *this;
+  }
+  argument& help(const char* h) {
+    if (h)
+      arg_->SetHelpDoc(h);
+    return *this;
+  }
+  argument& required(bool b) {
+    arg_->SetRequired(b);
+    return *this;
+  }
+  argument& meta_var(const char* v) {
+    if (v)
+      arg_->SetMetaVar(v);
+    return *this;
+  }
+
+ private:
+  friend class AddArgumentHelper;
+  std::unique_ptr<Argument> ReleaseArgument() {
+    DCHECK(arg_);
+    return std::move(arg_);
+  }
+  std::unique_ptr<Argument> arg_;
+};
+
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
@@ -1546,10 +1615,12 @@ class AddArgumentHelper {
                                Type type = {},
                                Action action = {});
 
+  void add(argument& arg) { AddArgumentImpl(arg.ReleaseArgument()); }
   virtual ~AddArgumentHelper() {}
 
  private:
   virtual Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) = 0;
+  virtual void AddArgumentImpl(std::unique_ptr<Argument> arg) {}
 };
 
 class ArgumentGroupProxy : public AddArgumentHelper {
@@ -1559,6 +1630,9 @@ class ArgumentGroupProxy : public AddArgumentHelper {
  private:
   Argument* AddArgumentImpl(std::unique_ptr<NamesInfo> names) override {
     return group_->AddArgument(std::move(names));
+  }
+  void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
+    return group_->AddArgument(std::move(arg));
   }
 
   ArgumentGroup* group_;
@@ -1583,8 +1657,8 @@ class ArgumentHolderImpl : public ArgumentHolder {
   ArgumentGroup* AddArgumentGroup(const char* header) override;
 
   void ForEachArgument(std::function<void(Argument*)> callback) override {
-    for (ArgumentImpl& arg : arguments_)
-      callback(&arg);
+    for (auto& arg : arguments_)
+      callback(arg.get());
   }
   void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
     for (auto& group : groups_)
@@ -1609,6 +1683,8 @@ class ArgumentHolderImpl : public ArgumentHolder {
   Argument* AddArgumentToGroup(std::unique_ptr<NamesInfo> names,
                                ArgumentGroup* group);
 
+  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
+
   enum GroupID {
     kOptionGroup = 0,
     kPositionalGroup = 1,
@@ -1620,7 +1696,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
-  std::list<ArgumentImpl> arguments_;
+  std::vector<std::unique_ptr<Argument>> arguments_;
   std::vector<std::unique_ptr<ArgumentGroup>> groups_;
   // Conflicts checking.
   std::set<std::string> name_set_;

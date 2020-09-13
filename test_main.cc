@@ -18,9 +18,17 @@ struct NoMovable {
   NoMovable() {}
 };
 
+namespace ap = argparse;
+
 int main(int argc, char const* argv[]) {
   ArgumentParser parser;
-  NoMovable v{};
-  
-  NoMovable b(std::move_if_noexcept(v));
+
+  std::string output;
+  parser.add(ap::argument("output")
+                 .dest(&output)
+                 .const_value(std::string("path"))
+                 .type([](const std::string& in) -> std::string { return ""; })
+                 .action("store_const")
+                 .help("output to this file")
+                 .meta_var("OUT"));
 }
