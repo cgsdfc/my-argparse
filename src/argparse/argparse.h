@@ -729,43 +729,43 @@ class ArgArray {
   char** argv_;
 };
 
-// TODO: change this..
-class ArgpParser {
- public:
-  class Delegate {
-   public:
-    virtual Argument* FindOptionalArgument(int key) = 0;
-    virtual Argument* FindPositionalArgument(int index) = 0;
-    virtual std::size_t PositionalArgumentCount() = 0;
-    virtual void CompileToArgpOptions(std::vector<argp_option>* options) = 0;
-    virtual void GenerateArgsDoc(std::string* args_doc) = 0;
-    virtual ~Delegate() {}
-  };
+// // TODO: change this..
+// class ArgpParser {
+//  public:
+//   class Delegate {
+//    public:
+//     virtual Argument* FindOptionalArgument(int key) = 0;
+//     virtual Argument* FindPositionalArgument(int index) = 0;
+//     virtual std::size_t PositionalArgumentCount() = 0;
+//     virtual void CompileToArgpOptions(std::vector<argp_option>* options) = 0;
+//     virtual void GenerateArgsDoc(std::string* args_doc) = 0;
+//     virtual ~Delegate() {}
+//   };
 
-  struct Options {
-    int flags = 0;
-    const char* program_version = {};
-    const char* description = {};
-    const char* after_doc = {};
-    const char* domain = {};
-    const char* email = {};
-    ProgramVersionCallback program_version_callback;
-    HelpFilterCallback help_filter;
-  };
+//   struct Options {
+//     int flags = 0;
+//     const char* program_version = {};
+//     const char* description = {};
+//     const char* after_doc = {};
+//     const char* domain = {};
+//     const char* email = {};
+//     ProgramVersionCallback program_version_callback;
+//     HelpFilterCallback help_filter;
+//   };
 
-  // Initialize from a few options (user's options).
-  virtual void Init(const Options& options) = 0;
-  // Parse args, exit on errors.
-  virtual void ParseArgs(ArgArray args) = 0;
-  // Parse args, collect unknown args into rest, don't exit, report error via
-  // Status.
-  virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
-    ParseArgs(args);
-    return true;
-  }
-  virtual ~ArgpParser() {}
-  static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
-};
+//   // Initialize from a few options (user's options).
+//   virtual void Init(const Options& options) = 0;
+//   // Parse args, exit on errors.
+//   virtual void ParseArgs(ArgArray args) = 0;
+//   // Parse args, collect unknown args into rest, don't exit, report error via
+//   // Status.
+//   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
+//     ParseArgs(args);
+//     return true;
+//   }
+//   virtual ~ArgpParser() {}
+//   static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
+// };
 
 class ArgumentGroup {
  public:
@@ -1597,17 +1597,51 @@ class ArgumentHolderImpl : public ArgumentHolder {
   std::set<std::string> name_set_;
 };
 
+struct ArgpIndexesInfo {
+  std::map<int, Argument*> optionals;
+  std::vector<Argument*> positionals;
+};
+
+// Compile Arguments to argp data and various things needed by the parser.
+class ArgpCompiler {
+ public:
+  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) { Initialize(); }
+
+  void CompileOptions(std::vector<argp_option>* out);
+  void CompileUsage(std::string* out);
+  void CompileArgumentIndexes(ArgpIndexesInfo* out);
+
+ private:
+  void Initialize();
+  void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
+  void CompileArgument(Argument* arg, std::vector<argp_option>* out);
+  void CompileUsageFor(Argument* arg, std::ostream& os);
+  int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
+  int FindArgument(Argument* a) { return argument_to_id_[a]; }
+  void InitGroup(ArgumentGroup* group);
+  void InitArgument(Argument* arg);
+
+  static constexpr unsigned kFirstArgumentKey = 128;
+
+  ArgumentHolder* holder_;
+  int next_arg_key_ = kFirstArgumentKey;
+  int next_group_id_ = 1;
+  HelpFormatPolicy policy_;
+  std::map<Argument*, int> argument_to_id_;
+  std::map<ArgumentGroup*, int> group_to_id_;
+};
+
 // This handles the argp_parser_t function and provide a bunch of context during
 // the parsing.
-class ArgpParserImpl : public ArgpParser {
+class ArgpParserImpl : public Parser {
  public:
   // When this is constructed, Delegate must have been added options.
-  explicit ArgpParserImpl(ArgpParser::Delegate* delegate);
+  // explicit ArgpParserImpl(ArgpParser::Delegate* delegate);
 
-  void Init(const Options& options) override;
+  // void Init(const Options& options) override;
   // If any error happened, just exit the program. No need to check for return
   // value.
-  void ParseArgs(ArgArray args) override;
+  // void ParseArgs(ArgArray args) override;
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override;
 
  private:
@@ -1638,7 +1672,6 @@ class ArgpParserImpl : public ArgpParser {
 
   int parser_flags_ = 0;
   unsigned positional_count_ = 0;
-  ArgpParser::Delegate* delegate_;
   argp argp_ = {};
   std::string program_doc_;
   std::string args_doc_;
@@ -1674,7 +1707,8 @@ class ArgpParserImpl::Context : public CallbackRunner::Delegate {
 
 class ArgumentControllerImpl : public ArgumentController {
  public:
-  explicit ArgumentControllerImpl(std::unique_ptr<ParserFactory> parser_factory);
+  explicit ArgumentControllerImpl(
+      std::unique_ptr<ParserFactory> parser_factory);
 
   ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
   SubCommandHolder* GetSubCommandHolder() override {
@@ -1723,40 +1757,6 @@ class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
   ArgumentControllerImpl* impl_;
 };
 
-struct ArgpIndexesInfo {
-  std::map<int, Argument*> optionals;
-  std::vector<Argument*> positionals;
-};
-
-// Compile Arguments to argp data and various things needed by the parser.
-class ArgpCompiler {
- public:
-  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) { Initialize(); }
-
-  void CompileOptions(std::vector<argp_option>* out);
-  void CompileUsage(std::string* out);
-  void CompileArgumentIndexes(ArgpIndexesInfo* out);
-
- private:
-  void Initialize();
-  void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
-  void CompileArgument(Argument* arg, std::vector<argp_option>* out);
-  void CompileUsageFor(Argument* arg, std::ostream& os);
-  int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
-  int FindArgument(Argument* a) { return argument_to_id_[a]; }
-  void InitGroup(ArgumentGroup* group);
-  void InitArgument(Argument* arg);
-
-  static constexpr unsigned kFirstArgumentKey = 128;
-
-  ArgumentHolder* holder_;
-  int next_arg_key_ = kFirstArgumentKey;
-  int next_group_id_ = 1;
-  HelpFormatPolicy policy_;
-  std::map<Argument*, int> argument_to_id_;
-  std::map<ArgumentGroup*, int> group_to_id_;
-};
-
 // struct ArgpData {
 //   int parser_flags = 0;
 //   argp argp_info = {};
@@ -1764,11 +1764,6 @@ class ArgpCompiler {
 //   std::string args_doc;
 //   std::vector<argp_option> argp_options;
 // };
-
-class ParserImpl {
- public:
- private:
-};
 
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
 // passed to argp_parse().

@@ -312,137 +312,137 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   help_doc_.append(os.str());
 // }
 
-std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
-  return std::make_unique<ArgpParserImpl>(delegate);
-}
+// std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
+//   return std::make_unique<ArgpParserImpl>(delegate);
+// }
 
-ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
-    : delegate_(delegate) {
-  argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
-  positional_count_ = delegate_->PositionalArgumentCount();
-  delegate_->CompileToArgpOptions(&argp_options_);
-  argp_.options = argp_options_.data();
-  delegate_->GenerateArgsDoc(&args_doc_);
-  argp_.args_doc = args_doc_.c_str();
-}
+// ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
+//     : delegate_(delegate) {
+//   argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
+//   positional_count_ = delegate_->PositionalArgumentCount();
+//   delegate_->CompileToArgpOptions(&argp_options_);
+//   argp_.options = argp_options_.data();
+//   delegate_->GenerateArgsDoc(&args_doc_);
+//   argp_.args_doc = args_doc_.c_str();
+// }
 
-void ArgpParserImpl::RunCallback(Argument* arg, char* value, ArgpState state) {
-  arg->GetCallbackRunner()->RunCallback(
-      std::make_unique<Context>(arg, value, state));
-}
+// void ArgpParserImpl::RunCallback(Argument* arg, char* value, ArgpState state) {
+//   arg->GetCallbackRunner()->RunCallback(
+//       std::make_unique<Context>(arg, value, state));
+// }
 
-void ArgpParserImpl::Init(const Options& options) {
-  if (options.program_version)
-    argp_program_version = options.program_version;
-  if (options.program_version_callback) {
-    argp_program_version_hook = options.program_version_callback;
-  }
-  if (options.email)
-    argp_program_bug_address = options.email;
-  if (options.help_filter) {
-    argp_.help_filter = &ArgpHelpFilterCallbackImpl;
-    help_filter_ = options.help_filter;
-  }
+// void ArgpParserImpl::Init(const Options& options) {
+//   if (options.program_version)
+//     argp_program_version = options.program_version;
+//   if (options.program_version_callback) {
+//     argp_program_version_hook = options.program_version_callback;
+//   }
+//   if (options.email)
+//     argp_program_bug_address = options.email;
+//   if (options.help_filter) {
+//     argp_.help_filter = &ArgpHelpFilterCallbackImpl;
+//     help_filter_ = options.help_filter;
+//   }
 
-  // TODO: may check domain?
-  set_argp_domain(options.domain);
-  AddFlags(options.flags);
+//   // TODO: may check domain?
+//   set_argp_domain(options.domain);
+//   AddFlags(options.flags);
 
-  // Generate the program doc.
-  if (options.description) {
-    program_doc_ = options.description;
-  }
-  if (options.after_doc) {
-    program_doc_.append({'\v'});
-    program_doc_.append(options.after_doc);
-  }
+//   // Generate the program doc.
+//   if (options.description) {
+//     program_doc_ = options.description;
+//   }
+//   if (options.after_doc) {
+//     program_doc_.append({'\v'});
+//     program_doc_.append(options.after_doc);
+//   }
 
-  if (!program_doc_.empty())
-    set_doc(program_doc_.c_str());
-}
+//   if (!program_doc_.empty())
+//     set_doc(program_doc_.c_str());
+// }
 
-void ArgpParserImpl::ParseArgs(ArgArray args) {
-  argp_parse(&argp_, args.argc(), args.argv(), parser_flags_, nullptr, this);
-}
+// void ArgpParserImpl::ParseArgs(ArgArray args) {
+//   argp_parse(&argp_, args.argc(), args.argv(), parser_flags_, nullptr, this);
+// }
 
-bool ArgpParserImpl::ParseKnownArgs(ArgArray args,
-                                    std::vector<std::string>* rest) {
-  int arg_index;
-  error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
-                             &arg_index, this);
-  if (!error)
-    return true;
-  for (int i = arg_index; i < args.argc(); ++i) {
-    rest->emplace_back(args[i]);
-  }
-  return false;
-}
+// bool ArgpParserImpl::ParseKnownArgs(ArgArray args,
+//                                     std::vector<std::string>* rest) {
+//   int arg_index;
+//   error_t error = argp_parse(&argp_, args.argc(), args.argv(), parser_flags_,
+//                              &arg_index, this);
+//   if (!error)
+//     return true;
+//   for (int i = arg_index; i < args.argc(); ++i) {
+//     rest->emplace_back(args[i]);
+//   }
+//   return false;
+// }
 
-error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
-  // Positional argument.
-  if (key == ARGP_KEY_ARG) {
-    const int arg_num = state->arg_num;
-    if (Argument* argument = delegate_->FindPositionalArgument(arg_num)) {
-      RunCallback(argument, arg, state);
-      return 0;
-    }
-    // Too many arguments.
-    if (state->arg_num >= positional_count())
-      state.ErrorF("Too many positional arguments. Expected %d, got %d",
-                   (int)positional_count(), (int)state->arg_num);
-    return ARGP_ERR_UNKNOWN;
-  }
+// error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
+//   // Positional argument.
+//   if (key == ARGP_KEY_ARG) {
+//     const int arg_num = state->arg_num;
+//     if (Argument* argument = delegate_->FindPositionalArgument(arg_num)) {
+//       RunCallback(argument, arg, state);
+//       return 0;
+//     }
+//     // Too many arguments.
+//     if (state->arg_num >= positional_count())
+//       state.ErrorF("Too many positional arguments. Expected %d, got %d",
+//                    (int)positional_count(), (int)state->arg_num);
+//     return ARGP_ERR_UNKNOWN;
+//   }
 
-  // Next most frequent handling is options.
-  if ((key & kSpecialKeyMask) == 0) {
-    // This isn't a special key, but rather an option.
-    Argument* argument = delegate_->FindOptionalArgument(key);
-    if (!argument)
-      return ARGP_ERR_UNKNOWN;
-    RunCallback(argument, arg, state);
-    return 0;
-  }
+//   // Next most frequent handling is options.
+//   if ((key & kSpecialKeyMask) == 0) {
+//     // This isn't a special key, but rather an option.
+//     Argument* argument = delegate_->FindOptionalArgument(key);
+//     if (!argument)
+//       return ARGP_ERR_UNKNOWN;
+//     RunCallback(argument, arg, state);
+//     return 0;
+//   }
 
-  // No more commandline args, do some post-processing.
-  if (key == ARGP_KEY_END) {
-    // No enough args.
-    if (state->arg_num < positional_count())
-      state.ErrorF("Not enough positional arguments. Expected %d, got %d",
-                   (int)positional_count(), (int)state->arg_num);
-  }
+//   // No more commandline args, do some post-processing.
+//   if (key == ARGP_KEY_END) {
+//     // No enough args.
+//     if (state->arg_num < positional_count())
+//       state.ErrorF("Not enough positional arguments. Expected %d, got %d",
+//                    (int)positional_count(), (int)state->arg_num);
+//   }
 
-  // Remaining args (not parsed). Collect them or turn it into an error.
-  if (key == ARGP_KEY_ARGS) {
-    return 0;
-  }
+//   // Remaining args (not parsed). Collect them or turn it into an error.
+//   if (key == ARGP_KEY_ARGS) {
+//     return 0;
+//   }
 
-  return 0;
-}
+//   return 0;
+// }
 
-char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
-                                                 const char* text,
-                                                 void* input) {
-  if (!input || !text)
-    return (char*)text;
-  auto* self = reinterpret_cast<ArgpParserImpl*>(input);
-  DCHECK2(self->help_filter_,
-          "should only be called if user install help filter!");
-  auto* arg = self->delegate_->FindOptionalArgument(key);
-  DCHECK2(arg, "argp calls us with unknown key!");
+// char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
+//                                                  const char* text,
+//                                                  void* input) {
+//   if (!input || !text)
+//     return (char*)text;
+//   auto* self = reinterpret_cast<ArgpParserImpl*>(input);
+//   DCHECK2(self->help_filter_,
+//           "should only be called if user install help filter!");
+//   auto* arg = self->delegate_->FindOptionalArgument(key);
+//   DCHECK2(arg, "argp calls us with unknown key!");
 
-  std::string repl(text);
-  HelpFilterResult result = std::invoke(self->help_filter_, *arg, &repl);
-  switch (result) {
-    case HelpFilterResult::kKeep:
-      return const_cast<char*>(text);
-    case HelpFilterResult::kDrop:
-      return nullptr;
-    case HelpFilterResult::kReplace: {
-      char* s = (char*)std::malloc(1 + repl.size());
-      return std::strcpy(s, repl.c_str());
-    }
-  }
-}
+//   std::string repl(text);
+//   HelpFilterResult result = std::invoke(self->help_filter_, *arg, &repl);
+//   switch (result) {
+//     case HelpFilterResult::kKeep:
+//       return const_cast<char*>(text);
+//     case HelpFilterResult::kDrop:
+//       return nullptr;
+//     case HelpFilterResult::kReplace: {
+//       char* s = (char*)std::malloc(1 + repl.size());
+//       return std::strcpy(s, repl.c_str());
+//     }
+//   }
+// }
 
 void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
                                             ArgumentGroup* group) {
