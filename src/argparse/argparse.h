@@ -887,6 +887,9 @@ class ParserFactory {
   virtual ~ParserFactory() {}
   virtual std::unique_ptr<Parser> CreateParser(
       std::unique_ptr<Delegate> delegate) = 0;
+
+  using Callback = std::unique_ptr<ParserFactory> (*)();
+  static void RegisterCallback(Callback callback);
 };
 
 // Combination of Holder and Parser. ArgumentParser should be impl'ed in terms

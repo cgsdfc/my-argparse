@@ -970,6 +970,14 @@ ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
   return group;
 }
 
+static ParserFactory::Callback g_parser_factory_callback;
+
+void ParserFactory::RegisterCallback(Callback callback) {
+  if (!g_parser_factory_callback) {
+    g_parser_factory_callback = callback;
+  }
+}
+
 std::unique_ptr<ArgumentHolder> ArgumentHolder::Create() {
   return std::make_unique<ArgumentHolderImpl>();
 }
@@ -977,8 +985,8 @@ std::unique_ptr<SubCommandHolder> SubCommandHolder::Create() {
   return std::make_unique<SubCommandHolderImpl>();
 }
 std::unique_ptr<ArgumentController> ArgumentController::Create() {
-  // TODO: factory..
-  return std::make_unique<ArgumentControllerImpl>(nullptr);
+  DCHECK(g_parser_factory_callback);
+  return std::make_unique<ArgumentControllerImpl>(g_parser_factory_callback());
 }
 
 ArgumentControllerImpl::ArgumentControllerImpl(
