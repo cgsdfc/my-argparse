@@ -667,27 +667,20 @@ enum class HelpFormatPolicy {
 
 class Argument {
  public:
-  // The initialization process of an Argument is:
-  // 1. contructor is called, names and is_option is determined.
-  // 2. ArgumentInitializer is created and its methods are called.
-  // Different properties of an arg are set.
-  // 3. ~ArgumentInitializer() is called, which in turn calls ArgumentImpl's
-  // init logic. This validates various aspects of an arg and prepares it for
-  // running callbacks. This initialization process can only happen once for an
-  // arg.
-  virtual CallbackRunner* GetCallbackRunner() = 0;
-  virtual const char* GetDoc() = 0;
   virtual bool IsRequired() = 0;
-  virtual ArgumentGroup* GetGroup() = 0;
-
-  virtual bool Before(const Argument* that) const = 0;
-  virtual const NamesInfo* GetNamesInfo() = 0;
+  virtual const char* GetHelpDoc() = 0;
+  const char* GetMetaVar() { return GetNamesInfo()->meta_var.c_str(); }
   bool IsOption() { return GetNamesInfo()->is_option; }
+  virtual ArgumentGroup* GetGroup() = 0;
+  virtual const NamesInfo* GetNamesInfo() = 0;
+  // If a typehint exists, return true and set out.
+  virtual bool GetTypeHint(std::string* out) = 0;
+  // If a default-value exists, return true and set out.
+  virtual bool FormatDefaultValue(std::string* out) = 0;
 
   virtual void SetRequired(bool required) = 0;
   virtual void SetHelpDoc(std::string help_doc) = 0;
   virtual void SetMetaVar(std::string meta_var) = 0;
-
   virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
   virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
   virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
@@ -696,9 +689,11 @@ class Argument {
   virtual void SetGroup(ArgumentGroup* group) = 0;
 
   virtual void Initialize() = 0;
+  virtual CallbackRunner* GetCallbackRunner() = 0;
+  virtual bool Before(const Argument* that) const = 0;
 
-  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
   virtual ~Argument() {}
+  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
 };
 
 // Return value of help filter function.
@@ -1116,7 +1111,7 @@ class ArgumentImpl : public Argument {
   bool is_required() const { return is_required_; }
 
   const std::string& help_doc() const { return help_doc_; }
-  const char* GetDoc() override { return doc(); }
+  const char* GetHelpDoc() override { return doc(); }
   const char* doc() const {
     return help_doc_.empty() ? nullptr : help_doc_.c_str();
   }
@@ -1173,9 +1168,12 @@ class ArgumentImpl : public Argument {
     group_ = group;
   }
 
+  bool GetTypeHint(std::string* out) override;
+  bool FormatDefaultValue(std::string* out) override;
+
   CallbackRunner* GetCallbackRunner() override;
 
-  void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
+  // void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
 
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));

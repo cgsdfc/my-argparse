@@ -31,4 +31,7 @@ int main(int argc, char const* argv[]) {
                  .action("store_const")
                  .help("output to this file")
                  .meta_var("OUT"));
+
+  int input;
+  parser.add_argument("input", &input, "input");
 }

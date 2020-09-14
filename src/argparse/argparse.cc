@@ -291,7 +291,6 @@ void ArgumentImpl::CallbackInfo::Initialize() {
 void ArgumentImpl::Initialize() {
   DCHECK(callback_info_);
   callback_info_->Initialize();
-  // ProcessHelpFormatPolicy(policy);
 }
 
 void ArgumentImpl::CallbackInfo::FormatTypeHint(std::ostream& os) const {
@@ -308,18 +307,24 @@ void ArgumentImpl::CallbackInfo::FormatDefaultValue(std::ostream& os) const {
   }
 }
 
-void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
-  if (policy == HelpFormatPolicy::kDefault)
-    return;
-  std::ostringstream os;
-  os << "  ";
-  if (policy == HelpFormatPolicy::kTypeHint) {
-    callback_info_->FormatTypeHint(os);
-  } else if (policy == HelpFormatPolicy::kDefaultValueHint) {
-    callback_info_->FormatDefaultValue(os);
-  }
-  help_doc_.append(os.str());
+bool ArgumentImpl::GetTypeHint(std::string* out) {
+
 }
+
+bool ArgumentImpl::FormatDefaultValue(std::string* out) {}
+
+// void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
+//   if (policy == HelpFormatPolicy::kDefault)
+//     return;
+//   std::ostringstream os;
+//   os << "  ";
+//   if (policy == HelpFormatPolicy::kTypeHint) {
+//     callback_info_->FormatTypeHint(os);
+//   } else if (policy == HelpFormatPolicy::kDefaultValueHint) {
+//     callback_info_->FormatDefaultValue(os);
+//   }
+//   help_doc_.append(os.str());
+// }
 
 std::unique_ptr<ArgpParser> ArgpParser::Create(Delegate* delegate) {
   return std::make_unique<ArgpParserImpl>(delegate);
@@ -776,7 +781,7 @@ void ArgpCompiler::CompileGroup(ArgumentGroup* group,
 void ArgpCompiler::CompileArgument(Argument* arg,
                                    std::vector<argp_option>* out) {
   argp_option opt{};
-  opt.doc = arg->GetDoc();
+  opt.doc = arg->GetHelpDoc();
   opt.group = FindGroup(arg->GetGroup());
   // opt.name = name();
 
