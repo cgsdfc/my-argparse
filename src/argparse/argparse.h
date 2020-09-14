@@ -767,15 +767,6 @@ class ArgpParser {
   static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
 };
 
-template <typename T>
-class PointerNullIterator {
- public:
-  using value_type = T*;
-  // Return the next value, or null if no next.
-  virtual value_type Next() = 0;
-  virtual ~PointerNullIterator() {}
-};
-
 class ArgumentGroup {
  public:
   virtual ~ArgumentGroup() {}
@@ -787,7 +778,6 @@ class ArgumentGroup {
   virtual int GetArgumentCount() = 0;
 };
 
-// TODO: add lookup methods and iterate methods...
 class ArgumentHolder {
  public:
   // Notify outside some event.
@@ -799,21 +789,13 @@ class ArgumentHolder {
   };
 
   virtual void SetListener(std::unique_ptr<Listener> listener) {}
-
-  virtual ArgumentGroup* GetDefaultOptionGroup() = 0;
-  virtual ArgumentGroup* GetDefaultPositionalGroup() = 0;
   virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
   virtual int GetArgumentCount() = 0;
+  // method to add arg to default group.
+  virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual ~ArgumentHolder() {}
-
-  // Helper method to add arg to default group.
-  void AddArgument(std::unique_ptr<Argument> arg) {
-    auto* group =
-        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
-    return group->AddArgument(std::move(arg));
-  }
 };
 
 struct SubCommandInfo {
@@ -1117,10 +1099,6 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   }
 
   const std::string& meta_var() const { return names_info_->meta_var; }
-  const char* arg() const {
-    DCHECK(!meta_var().empty());
-    return meta_var().c_str();
-  }
 
   // TODO: split the long_names, short_names from Names into name, key and
   // alias.
@@ -1243,9 +1221,7 @@ class SubCommandHolderImpl : public SubCommandHolder {
   }
 
   SubCommandGroup* AddSubCommandGroup(
-      std::unique_ptr<SubCommandGroupInfo> info) override {
-        
-      }
+      std::unique_ptr<SubCommandGroupInfo> info) override {}
 
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
@@ -1564,6 +1540,12 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   ArgumentGroup* AddArgumentGroup(const char* header) override;
 
+  void AddArgument(std::unique_ptr<Argument> arg) override {
+    auto* group =
+        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
+    return group->AddArgument(std::move(arg));
+  }
+
   void ForEachArgument(std::function<void(Argument*)> callback) override {
     for (auto& arg : arguments_)
       callback(arg.get());
@@ -1573,13 +1555,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
       callback(group.get());
   }
 
-  ArgumentGroup* GetDefaultOptionGroup() override {
-    return groups_[kOptionGroup].get();
-  }
-  ArgumentGroup* GetDefaultPositionalGroup() override {
-    return groups_[kPositionalGroup].get();
-  }
-
   int GetArgumentCount() override { return arguments_.size(); }
 
   void SetListener(std::unique_ptr<Listener> listener) override {
@@ -1587,15 +1562,21 @@ class ArgumentHolderImpl : public ArgumentHolder {
   }
 
  private:
-  // Add an arg to a specific group.
-  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
-
   enum GroupID {
     kOptionGroup = 0,
     kPositionalGroup = 1,
   };
 
   class GroupImpl;
+
+  // Add an arg to a specific group.
+  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
+  ArgumentGroup* GetDefaultOptionGroup() const {
+    return groups_[kOptionGroup].get();
+  }
+  ArgumentGroup* GetDefaultPositionalGroup() const {
+    return groups_[kPositionalGroup].get();
+  }
 
   bool CheckNamesConflict(const NamesInfo& names);
 
