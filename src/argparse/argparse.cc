@@ -483,10 +483,6 @@ bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
   return true;
 }
 
-std::unique_ptr<ArgumentController> ArgumentController::Create() {
-  return nullptr;
-}
-
 // void ArgumentParser::parse_args(int argc, const char** argv) {
 //   controller_->ParseKnownArgs(ArgArray(argc, argv), nullptr);
 //   // auto* parser = holder_->GetParser();
@@ -972,6 +968,26 @@ ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
   if (listener_)
     listener_->OnAddArgumentGroup(group);
   return group;
+}
+
+std::unique_ptr<ArgumentHolder> ArgumentHolder::Create() {
+  return std::make_unique<ArgumentHolderImpl>();
+}
+std::unique_ptr<SubCommandHolder> SubCommandHolder::Create() {
+  return std::make_unique<SubCommandHolderImpl>();
+}
+std::unique_ptr<ArgumentController> ArgumentController::Create() {
+  // TODO: factory..
+  return std::make_unique<ArgumentControllerImpl>(nullptr);
+}
+
+ArgumentControllerImpl::ArgumentControllerImpl(
+    std::unique_ptr<ParserFactory> parser_factory)
+    : parser_factory_(std::move(parser_factory)),
+      main_holder_(ArgumentHolder::Create()),
+      subcmd_holder_(SubCommandHolder::Create()) {
+  main_holder_->SetListener(std::make_unique<ListenerImpl>(this));
+  subcmd_holder_->SetListener(std::make_unique<ListenerImpl>(this));
 }
 
 }  // namespace argparse
