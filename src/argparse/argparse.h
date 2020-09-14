@@ -1099,7 +1099,7 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 }
 
 // Holds all meta-info about an argument.
-class ArgumentImpl : public Argument {
+class ArgumentImpl : public Argument, public CallbackRunner {
  public:
   explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
       : names_info_(std::move(names)) {}
@@ -1144,23 +1144,23 @@ class ArgumentImpl : public Argument {
   }
   void SetDest(std::unique_ptr<DestInfo> info) override {
     DCHECK(info);
-    // cb_info_->dest_info_ = std::move(info);
+    dest_info_ = std::move(info);
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
     DCHECK(info);
-    // cb_info_->type_info_ = std::move(info);
+    type_info_ = std::move(info);
   }
   void SetAction(std::unique_ptr<ActionInfo> info) override {
     DCHECK(info);
-    // cb_info_->action_info_ = std::move(info);
+    action_info_ = std::move(info);
   }
   void SetConstValue(std::unique_ptr<Any> value) override {
     DCHECK(value);
-    // cb_info_->const_value_ = std::move(value);
+    const_value_ = std::move(value);
   }
   void SetDefaultValue(std::unique_ptr<Any> value) override {
     DCHECK(value);
-    // cb_info_->default_value_ = std::move(value);
+    default_value_ = std::move(value);
   }
 
   void SetGroup(ArgumentGroup* group) override {
@@ -1173,39 +1173,11 @@ class ArgumentImpl : public Argument {
 
   CallbackRunner* GetCallbackRunner() override;
 
-  // void ProcessHelpFormatPolicy(HelpFormatPolicy policy);
-
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
   void Initialize() override;
-
- private:
-  class CallbackInfo;
-
-  // Called by InitializerImpl.
-  static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
-
-  std::unique_ptr<NamesInfo> names_info_;
-  ArgumentGroup* group_ = nullptr;
-  std::string help_doc_;
-  bool is_required_ = false;
-  std::unique_ptr<CallbackInfo> callback_info_;
-};
-
-inline std::unique_ptr<Argument> Argument::Create(
-    std::unique_ptr<NamesInfo> info) {
-  DCHECK(info);
-  return std::make_unique<ArgumentImpl>(std::move(info));
-}
-
-// Callback relative things are put into this class.
-class ArgumentImpl::CallbackInfo : public CallbackRunner {
- public:
-  void Initialize();
-  void FormatTypeHint(std::ostream& os) const;
-  void FormatDefaultValue(std::ostream& os) const;
 
  private:
   void RunCallback(std::unique_ptr<Delegate> delegate) override;
@@ -1224,6 +1196,13 @@ class ArgumentImpl::CallbackInfo : public CallbackRunner {
     return dest_info_->dest_ptr;
   }
 
+  static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
+
+  std::unique_ptr<NamesInfo> names_info_;
+  ArgumentGroup* group_ = nullptr;
+  std::string help_doc_;
+  bool is_required_ = false;
+
   std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfo> action_info_;
   std::unique_ptr<TypeInfo> type_info_;
@@ -1231,6 +1210,12 @@ class ArgumentImpl::CallbackInfo : public CallbackRunner {
   std::unique_ptr<Any> const_value_;
   std::unique_ptr<Any> default_value_;
 };
+
+inline std::unique_ptr<Argument> Argument::Create(
+    std::unique_ptr<NamesInfo> info) {
+  DCHECK(info);
+  return std::make_unique<ArgumentImpl>(std::move(info));
+}
 
 class SubCommandImpl : public SubCommand {
  public:

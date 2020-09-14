@@ -130,7 +130,7 @@ static bool ActionNeedsTypeCallback(Actions in) {
          in == Actions::kCustom;
 }
 
-const char* TypesToString(Types in) {
+static const char* TypesToString(Types in) {
   switch (in) {
     case Types::kOpen:
       return "Open";
@@ -143,7 +143,7 @@ const char* TypesToString(Types in) {
   }
 }
 
-const char* ActionsToString(Actions in) {
+static const char* ActionsToString(Actions in) {
   switch (in) {
     case Actions::kAppend:
       return "Append";
@@ -168,7 +168,7 @@ const char* ActionsToString(Actions in) {
   }
 }
 
-void ArgumentImpl::CallbackInfo::InitAction() {
+void ArgumentImpl::InitAction() {
   if (!action_info_) {
     action_info_ = std::make_unique<ActionInfo>();
   }
@@ -215,7 +215,7 @@ void ArgumentImpl::CallbackInfo::InitAction() {
   }
 }
 
-void ArgumentImpl::CallbackInfo::InitType() {
+void ArgumentImpl::InitType() {
   if (!type_info_) {
     type_info_ = std::make_unique<TypeInfo>();
   }
@@ -261,7 +261,7 @@ void ArgumentImpl::CallbackInfo::InitType() {
              type_ops->GetTypeName());
 }
 
-void ArgumentImpl::CallbackInfo::InitDefaultValue() {
+void ArgumentImpl::InitDefaultValue() {
   switch (action_info_->action_code) {
     case Actions::kStoreFalse:
       default_value_ = MakeAny(true);
@@ -276,42 +276,28 @@ void ArgumentImpl::CallbackInfo::InitDefaultValue() {
   }
 }
 
-void ArgumentImpl::CallbackInfo::Initialize() {
+void ArgumentImpl::Initialize() {
   InitAction();
   InitType();
   InitDefaultValue();
-  // TODO: Do some type checking..
-  // if (dest_info_ && action_info_->ops) {
-  //   CHECK_USER(
-  //       dest_info_->ops->GetTypeInfo() == action_info_->ops->GetTypeInfo(),
-  //       "Type of dest should match type of action");
-  // }
-}
-
-void ArgumentImpl::Initialize() {
-  DCHECK(callback_info_);
-  callback_info_->Initialize();
-}
-
-void ArgumentImpl::CallbackInfo::FormatTypeHint(std::ostream& os) const {
-  if (type_info_->ops) {
-    os << "(type: " << type_info_->ops->GetTypeHint() << ")";
-  }
-}
-
-void ArgumentImpl::CallbackInfo::FormatDefaultValue(std::ostream& os) const {
-  // The type of default value is always the type of dest.
-  // the type of dest is reflected by action_ops.
-  if (default_value_ && dest_info_) {
-    os << "(default: " << dest_info_->ops->FormatValue(*default_value_) << ")";
-  }
 }
 
 bool ArgumentImpl::GetTypeHint(std::string* out) {
-
+  // The type of default value is always the type of dest.
+  if (default_value_ && dest_info_) {
+    *out = dest_info_->ops->FormatValue(*default_value_);
+    return true;
+  }
+  return false;
 }
 
-bool ArgumentImpl::FormatDefaultValue(std::string* out) {}
+bool ArgumentImpl::FormatDefaultValue(std::string* out) {
+  if (type_info_->ops) {
+    *out = type_info_->ops->GetTypeHint();
+    return true;
+  }
+  return false;
+}
 
 // void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
 //   if (policy == HelpFormatPolicy::kDefault)
@@ -555,7 +541,7 @@ Actions StringToActions(const std::string& str) {
   return iter->second;
 }
 
-void ArgumentImpl::CallbackInfo::RunAction(std::unique_ptr<Any> data,
+void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
                                            CallbackRunner::Delegate* delegate) {
   auto* ops = action_info_->ops.get();
   switch (action_info_->action_code) {
@@ -589,11 +575,12 @@ void ArgumentImpl::CallbackInfo::RunAction(std::unique_ptr<Any> data,
 }
 
 CallbackRunner* ArgumentImpl::GetCallbackRunner() {
-  DCHECK(callback_info_);
-  return callback_info_.get();
+  return this;
+  // DCHECK(callback_info_);
+  // return callback_info_.get();
 }
 
-void ArgumentImpl::CallbackInfo::RunType(const std::string& in,
+void ArgumentImpl::RunType(const std::string& in,
                                          OpsResult* out) {
   auto* ops = type_info_->ops.get();
   switch (type_info_->type_code) {
@@ -613,7 +600,7 @@ void ArgumentImpl::CallbackInfo::RunType(const std::string& in,
   }
 }
 
-void ArgumentImpl::CallbackInfo::RunCallback(
+void ArgumentImpl::RunCallback(
     std::unique_ptr<CallbackRunner::Delegate> delegate) {
   std::string in;
   OpsResult result;
