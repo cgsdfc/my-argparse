@@ -6,7 +6,7 @@
 
 namespace argparse {
 
-ArgpParserImpl::Context::Context(const Argument* argument,
+GNUArgpParser::Context::Context(const Argument* argument,
                                  const char* value,
                                  ArgpState state)
     : has_value_(bool(value)), arg_(argument), state_(state) {
@@ -318,7 +318,7 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 
 // ArgpParserImpl::ArgpParserImpl(ArgpParser::Delegate* delegate)
 //     : delegate_(delegate) {
-//   argp_.parser = &ArgpParserImpl::ArgpParserCallbackImpl;
+//   argp_.parser = &ArgpParserImpl::ParserCallbackImpl;
 //   positional_count_ = delegate_->PositionalArgumentCount();
 //   delegate_->CompileToArgpOptions(&argp_options_);
 //   argp_.options = argp_options_.data();
@@ -340,7 +340,7 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   if (options.email)
 //     argp_program_bug_address = options.email;
 //   if (options.help_filter) {
-//     argp_.help_filter = &ArgpHelpFilterCallbackImpl;
+//     argp_.help_filter = &HelpFilterCallbackImpl;
 //     help_filter_ = options.help_filter;
 //   }
 
@@ -378,48 +378,48 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   return false;
 // }
 
-// error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
-//   // Positional argument.
-//   if (key == ARGP_KEY_ARG) {
-//     const int arg_num = state->arg_num;
-//     if (Argument* argument = delegate_->FindPositionalArgument(arg_num)) {
-//       RunCallback(argument, arg, state);
-//       return 0;
-//     }
-//     // Too many arguments.
-//     if (state->arg_num >= positional_count())
-//       state.ErrorF("Too many positional arguments. Expected %d, got %d",
-//                    (int)positional_count(), (int)state->arg_num);
-//     return ARGP_ERR_UNKNOWN;
-//   }
+error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
+  // Positional argument.
+  if (key == ARGP_KEY_ARG) {
+    const int arg_num = state->arg_num;
+    if (Argument* argument = context_->FindPositionalArgument(arg_num)) {
+      RunCallback(argument, arg, state);
+      return 0;
+    }
+    // Too many arguments.
+    if (state->arg_num >= positional_count())
+      state.ErrorF("Too many positional arguments. Expected %d, got %d",
+                   (int)positional_count(), (int)state->arg_num);
+    return ARGP_ERR_UNKNOWN;
+  }
 
-//   // Next most frequent handling is options.
-//   if ((key & kSpecialKeyMask) == 0) {
-//     // This isn't a special key, but rather an option.
-//     Argument* argument = delegate_->FindOptionalArgument(key);
-//     if (!argument)
-//       return ARGP_ERR_UNKNOWN;
-//     RunCallback(argument, arg, state);
-//     return 0;
-//   }
+  // Next most frequent handling is options.
+  if ((key & kSpecialKeyMask) == 0) {
+    // This isn't a special key, but rather an option.
+    Argument* argument = delegate_->FindOptionalArgument(key);
+    if (!argument)
+      return ARGP_ERR_UNKNOWN;
+    RunCallback(argument, arg, state);
+    return 0;
+  }
 
-//   // No more commandline args, do some post-processing.
-//   if (key == ARGP_KEY_END) {
-//     // No enough args.
-//     if (state->arg_num < positional_count())
-//       state.ErrorF("Not enough positional arguments. Expected %d, got %d",
-//                    (int)positional_count(), (int)state->arg_num);
-//   }
+  // No more commandline args, do some post-processing.
+  if (key == ARGP_KEY_END) {
+    // No enough args.
+    if (state->arg_num < positional_count())
+      state.ErrorF("Not enough positional arguments. Expected %d, got %d",
+                   (int)positional_count(), (int)state->arg_num);
+  }
 
-//   // Remaining args (not parsed). Collect them or turn it into an error.
-//   if (key == ARGP_KEY_ARGS) {
-//     return 0;
-//   }
+  // Remaining args (not parsed). Collect them or turn it into an error.
+  if (key == ARGP_KEY_ARGS) {
+    return 0;
+  }
 
-//   return 0;
-// }
+  return 0;
+}
 
-// char* ArgpParserImpl::ArgpHelpFilterCallbackImpl(int key,
+// char* ArgpParserImpl::HelpFilterCallbackImpl(int key,
 //                                                  const char* text,
 //                                                  void* input) {
 //   if (!input || !text)
