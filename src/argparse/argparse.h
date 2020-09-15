@@ -255,11 +255,16 @@ const char* TypeName();
 
 template <typename T, typename SFINAE = void>
 struct has_insert_operator : std::false_type {};
-
 template <typename T>
 struct has_insert_operator<T,
                            std::void_t<decltype(std::declval<std::ostream&>()
                                                 << std::declval<const T&>())>>
+    : std::true_type {};
+
+template <typename T, typename SFINAE = void>
+struct has_prefix_plus_plus : std::false_type {};
+template <typename T>
+struct has_prefix_plus_plus<T, std::void_t<decltype(++std::declval<T&>())>>
     : std::true_type {};
 
 template <typename T>
@@ -373,6 +378,7 @@ enum class Actions {
   kStoreFalse,
   kAppend,
   kAppendConst,
+  kCount,
   kPrintHelp,
   kPrintUsage,
   kCustom,
@@ -390,6 +396,7 @@ enum class OpsKind {
   kStoreConst,
   kAppend,
   kAppendConst,
+  kCount,
   kParse,
   kOpen,
 };
@@ -462,6 +469,9 @@ struct IsAppendConstSupported<T, true>
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kAppendConst, T> : IsAppendConstSupported<T> {};
+
+template <typename T>
+struct IsOpsSupported<OpsKind::kCount, T> : std::is_integral<T> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kParse, T>
@@ -537,11 +547,13 @@ struct OpsResult {
 // A handle to the function table.
 class Operations {
  public:
+  // For actions:
   virtual void Store(DestPtr dest, std::unique_ptr<Any> data) = 0;
   virtual void StoreConst(DestPtr dest, const Any& data) = 0;
   virtual void Append(DestPtr dest, std::unique_ptr<Any> data) = 0;
   virtual void AppendConst(DestPtr dest, const Any& data) = 0;
-
+  virtual void Count(DestPtr dest) = 0;
+  // For types:
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
@@ -981,6 +993,14 @@ struct OpsImpl<OpsKind::kAppendConst, T, true> {
 };
 
 template <typename T>
+struct OpsImpl<OpsKind::kCount, T, true> {
+  static void Run(DestPtr dest) {
+    auto* ptr = dest.load_ptr<T>();
+    ++(*ptr);
+  }
+};
+
+template <typename T>
 struct OpsImpl<OpsKind::kParse, T, true> {
   static void Run(const std::string& in, OpsResult* out) {
     Result<T> result;
@@ -1034,6 +1054,9 @@ class OperationsImpl : public Operations {
   }
   void AppendConst(DestPtr dest, const Any& data) override {
     OpsImpl<OpsKind::kAppendConst, T>::Run(dest, data);
+  }
+  void Count(DestPtr dest) override {
+    OpsImpl<OpsKind::kCount, T>::Run(dest);
   }
   void Parse(const std::string& in, OpsResult* out) override {
     OpsImpl<OpsKind::kParse, T>::Run(in, out);

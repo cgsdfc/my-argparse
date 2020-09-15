@@ -165,6 +165,8 @@ static const char* ActionsToString(Actions in) {
       return "StoreFalse";
     case Actions::kStoreTrue:
       return "StoreTrue";
+    case Actions::kCount:
+      return "Count";
   }
 }
 
@@ -378,45 +380,45 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   return false;
 // }
 
-error_t ArgpParserImpl::DoParse(int key, char* arg, ArgpState state) {
+error_t GNUArgpParser::DoParse(int key, char* arg, ArgpState state) {
   // Positional argument.
-  if (key == ARGP_KEY_ARG) {
-    const int arg_num = state->arg_num;
-    if (Argument* argument = context_->FindPositionalArgument(arg_num)) {
-      RunCallback(argument, arg, state);
-      return 0;
-    }
-    // Too many arguments.
-    if (state->arg_num >= positional_count())
-      state.ErrorF("Too many positional arguments. Expected %d, got %d",
-                   (int)positional_count(), (int)state->arg_num);
-    return ARGP_ERR_UNKNOWN;
-  }
+  // if (key == ARGP_KEY_ARG) {
+  //   const int arg_num = state->arg_num;
+  //   if (Argument* argument = context_->FindPositionalArgument(arg_num)) {
+  //     RunCallback(argument, arg, state);
+  //     return 0;
+  //   }
+  //   // Too many arguments.
+  //   if (state->arg_num >= positional_count())
+  //     state.ErrorF("Too many positional arguments. Expected %d, got %d",
+  //                  (int)positional_count(), (int)state->arg_num);
+  //   return ARGP_ERR_UNKNOWN;
+  // }
 
-  // Next most frequent handling is options.
-  if ((key & kSpecialKeyMask) == 0) {
-    // This isn't a special key, but rather an option.
-    Argument* argument = delegate_->FindOptionalArgument(key);
-    if (!argument)
-      return ARGP_ERR_UNKNOWN;
-    RunCallback(argument, arg, state);
-    return 0;
-  }
+  // // Next most frequent handling is options.
+  // if ((key & kSpecialKeyMask) == 0) {
+  //   // This isn't a special key, but rather an option.
+  //   Argument* argument = delegate_->FindOptionalArgument(key);
+  //   if (!argument)
+  //     return ARGP_ERR_UNKNOWN;
+  //   RunCallback(argument, arg, state);
+  //   return 0;
+  // }
 
-  // No more commandline args, do some post-processing.
-  if (key == ARGP_KEY_END) {
-    // No enough args.
-    if (state->arg_num < positional_count())
-      state.ErrorF("Not enough positional arguments. Expected %d, got %d",
-                   (int)positional_count(), (int)state->arg_num);
-  }
+  // // No more commandline args, do some post-processing.
+  // if (key == ARGP_KEY_END) {
+  //   // No enough args.
+  //   if (state->arg_num < positional_count())
+  //     state.ErrorF("Not enough positional arguments. Expected %d, got %d",
+  //                  (int)positional_count(), (int)state->arg_num);
+  // }
 
-  // Remaining args (not parsed). Collect them or turn it into an error.
-  if (key == ARGP_KEY_ARGS) {
-    return 0;
-  }
+  // // Remaining args (not parsed). Collect them or turn it into an error.
+  // if (key == ARGP_KEY_ARGS) {
+  //   return 0;
+  // }
 
-  return 0;
+  // return 0;
 }
 
 // char* ArgpParserImpl::HelpFilterCallbackImpl(int key,
@@ -461,17 +463,6 @@ ArgumentHolderImpl::ArgumentHolderImpl() {
   AddArgumentGroup("positional arguments");
 }
 
-// Argument* ArgumentHolderImpl::FindOptionalArgument(int key) {
-//   auto iter = optional_arguments_.find(key);
-//   return iter == optional_arguments_.end() ? nullptr : iter->second;
-// }
-
-// Argument* ArgumentHolderImpl::FindPositionalArgument(int index) {
-//   return (0 <= index && index < positional_arguments_.size())
-//              ? positional_arguments_[index]
-//              : nullptr;
-// }
-
 bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
   for (auto&& long_name : names.long_names)
     if (!name_set_.insert(long_name).second)
@@ -482,13 +473,6 @@ bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
       return false;
   return true;
 }
-
-// void ArgumentParser::parse_args(int argc, const char** argv) {
-//   controller_->ParseKnownArgs(ArgArray(argc, argv), nullptr);
-//   // auto* parser = holder_->GetParser();
-//   // // parser->Init(user_options_.options);
-//   // return parser->ParseArgs(ArgArray(argc, argv));
-// }
 
 bool IsValidPositionalName(const char* name, std::size_t len) {
   if (!name || !len || !std::isalpha(name[0]))
@@ -528,6 +512,7 @@ Actions StringToActions(const std::string& str) {
       {"store_false", Actions::kStoreFalse},
       {"append", Actions::kAppend},
       {"append_const", Actions::kAppendConst},
+      {"count", Actions::kCount},
       {"print_help", Actions::kPrintHelp},
       {"print_usage", Actions::kPrintUsage},
   };
@@ -537,6 +522,7 @@ Actions StringToActions(const std::string& str) {
   return iter->second;
 }
 
+// TODO: extract action-related logic into one class, say ActionHelper.
 void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
                                            CallbackRunner::Delegate* delegate) {
   auto* ops = action_info_->ops.get();
@@ -566,6 +552,9 @@ void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
     case Actions::kCustom:
       DCHECK(action_info_->callback);
       action_info_->callback->Run(dest_ptr(), std::move(data));
+      break;
+    case Actions::kCount:
+      ops->Count(dest_ptr());
       break;
   }
 }

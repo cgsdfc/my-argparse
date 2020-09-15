@@ -21,17 +21,18 @@ struct NoMovable {
 namespace ap = argparse;
 
 int main(int argc, char const* argv[]) {
-  ArgumentParser parser;
+  // ArgumentParser parser;
+  std::cout << IsOpsSupported<OpsKind::kCount, double>{};
 
-  std::string output;
-  parser.add(ap::argument("output")
-                 .dest(&output)
-                 .const_value(std::string("path"))
-                 .type([](const std::string& in) -> std::string { return ""; })
-                 .action("store_const")
-                 .help("output to this file")
-                 .meta_var("OUT"));
+  // std::string output;
+  // parser.add(ap::argument("output")
+  //                .dest(&output)
+  //                .const_value(std::string("path"))
+  //                .type([](const std::string& in) -> std::string { return ""; })
+  //                .action("store_const")
+  //                .help("output to this file")
+  //                .meta_var("OUT"));
 
-  int input;
-  parser.add_argument("input", &input, "input");
+  // int input;
+  // parser.add_argument("input", &input, "input");
 }
