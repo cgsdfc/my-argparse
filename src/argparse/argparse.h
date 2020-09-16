@@ -9,6 +9,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <numeric>
 #include <set>
 #include <sstream>
 #include <stdexcept>  // to define ArgumentError.
@@ -33,24 +34,6 @@ namespace argparse {
 
 class Argument;
 class ArgumentGroup;
-
-// TODO: move this argp stuff down down down..
-using ::argp;
-using ::argp_error;
-using ::argp_failure;
-using ::argp_help;
-using ::argp_parse;
-using ::argp_parser_t;
-using ::argp_program_bug_address;
-using ::argp_program_version;
-using ::argp_program_version_hook;
-using ::argp_state;
-using ::argp_state_help;
-using ::argp_usage;
-using ::error_t;
-using ::program_invocation_name;
-using ::program_invocation_short_name;
-using std::FILE;
 
 struct SourceLocation {
   int line;
@@ -139,35 +122,6 @@ class Result {
   };
   struct EmptyType {};
   std::variant<EmptyType, std::string, T> data_;
-};
-
-// TODO: Don't need this wrapper.
-// Wrapper of argp_state.
-class ArgpState {
- public:
-  ArgpState(argp_state* state) : state_(state) {}
-  void PrintHelp(FILE* file, unsigned flags) {
-    argp_state_help(state_, file, flags);
-  }
-  void PrintUsage() { argp_usage(state_); }
-
-  template <typename... Args>
-  void ErrorF(const char* fmt, Args... args) {
-    return argp_error(state_, fmt, args...);
-  }
-  void Error(const std::string& msg) { return ErrorF("%s", msg.c_str()); }
-
-  template <typename... Args>
-  void FailureF(int status, int errnum, const char* fmt, Args... args) {
-    return argp_failure(state_, status, errnum, fmt, args...);
-  }
-  void Failure(int status, int errnum, const std::string& msg) {
-    return FailureF(status, errnum, "%s", msg.c_str());
-  }
-  argp_state* operator->() { return state_; }
-
- private:
-  argp_state* state_;
 };
 
 // Throw this exception will cause an error msg to be printed (via what()).
@@ -295,6 +249,12 @@ struct DefaultFormatTraits<bool, void> {
   static std::string Run(bool in) { return in ? "true" : "false"; }
 };
 
+template <>
+struct DefaultFormatTraits<char, void> {
+  // For char, this is 'c'.
+  static std::string Run(char in) { return std::string{'\'', in, '\''}; }
+};
+
 #if ARGPARSE_USE_FMTLIB
 template <typename T>
 struct FmtlibFormatTraits {
@@ -370,7 +330,7 @@ struct is_callback
 
 }  // namespace detail
 
-enum class Actions {
+enum class ActionKind {
   kNoAction,
   kStore,
   kStoreConst,
@@ -384,7 +344,7 @@ enum class Actions {
   kCustom,
 };
 
-enum class Types {
+enum class TypeKind {
   kNothing,
   kParse,
   kOpen,
@@ -404,7 +364,7 @@ enum class OpsKind {
 inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
 
 // File open mode.
-enum Mode {
+enum OpenMode {
   kModeNoMode = 0x0,
   kModeRead = 1,
   kModeWrite = 2,
@@ -413,11 +373,11 @@ enum Mode {
   kModeBinary = 16,
 };
 
-Mode CharsToMode(const char* str);
-std::string ModeToChars(Mode mode);
+OpenMode CharsToMode(const char* str);
+std::string ModeToChars(OpenMode mode);
 
-Mode StreamModeToMode(std::ios_base::openmode stream_mode);
-std::ios_base::openmode ModeToStreamMode(Mode m);
+OpenMode StreamModeToMode(std::ios_base::openmode stream_mode);
+std::ios_base::openmode ModeToStreamMode(OpenMode m);
 
 // This traits indicates whether T supports append operation and if it does,
 // tells us how to do the append.
@@ -555,7 +515,7 @@ class Operations {
   virtual void Count(DestPtr dest) = 0;
   // For types:
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
-  virtual void Open(const std::string& in, Mode, OpsResult* out) = 0;
+  virtual void Open(const std::string& in, OpenMode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
   virtual const char* GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
@@ -668,28 +628,28 @@ struct DestInfo {
 };
 
 struct ActionInfo {
-  Actions action_code = Actions::kNoAction;
+  ActionKind action_code = ActionKind::kNoAction;
   std::unique_ptr<ActionCallback> callback;
   std::unique_ptr<Operations> ops;
 
   ActionInfo() = default;
-  explicit ActionInfo(Actions a) : action_code(a) {}
+  explicit ActionInfo(ActionKind a) : action_code(a) {}
   explicit ActionInfo(std::unique_ptr<ActionCallback> cb)
-      : action_code(Actions::kCustom), callback(std::move(cb)) {}
+      : action_code(ActionKind::kCustom), callback(std::move(cb)) {}
 };
 
 struct TypeInfo {
-  Types type_code = Types::kNothing;
+  TypeKind type_code = TypeKind::kNothing;
   std::unique_ptr<Operations> ops;
   std::unique_ptr<TypeCallback> callback;
-  Mode mode = kModeNoMode;
+  OpenMode mode = kModeNoMode;
 
   TypeInfo() = default;
-  explicit TypeInfo(Mode m) : type_code(Types::kOpen), mode(m) {}
+  explicit TypeInfo(OpenMode m) : type_code(TypeKind::kOpen), mode(m) {}
   explicit TypeInfo(std::unique_ptr<TypeCallback> cb)
-      : type_code(Types::kCustom), callback(std::move(cb)) {}
+      : type_code(TypeKind::kCustom), callback(std::move(cb)) {}
   explicit TypeInfo(std::unique_ptr<Operations> ops)
-      : type_code(Types::kParse), ops(std::move(ops)) {}
+      : type_code(TypeKind::kParse), ops(std::move(ops)) {}
 };
 
 enum class HelpFormatPolicy {
@@ -1033,7 +993,7 @@ struct OpsImpl<OpsKind::kParse, T, true> {
 
 template <typename T>
 struct OpsImpl<OpsKind::kOpen, T, true> {
-  static void Run(const std::string& in, Mode mode, OpsResult* out) {
+  static void Run(const std::string& in, OpenMode mode, OpsResult* out) {
     Result<T> result;
     OpenTraits<T>::Run(in, mode, &result);
     ConvertResults(&result, out);
@@ -1083,7 +1043,7 @@ class OperationsImpl : public Operations {
   void Parse(const std::string& in, OpsResult* out) override {
     OpsImpl<OpsKind::kParse, T>::Run(in, out);
   }
-  void Open(const std::string& in, Mode mode, OpsResult* out) override {
+  void Open(const std::string& in, OpenMode mode, OpsResult* out) override {
     OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {
@@ -1399,10 +1359,10 @@ class FileType {
   explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
   explicit FileType(std::ios_base::openmode mode)
       : mode_(StreamModeToMode(mode)) {}
-  Mode mode() const { return mode_; }
+  OpenMode mode() const { return mode_; }
 
  private:
-  Mode mode_;
+  OpenMode mode_;
 };
 
 struct Type {
@@ -1428,7 +1388,7 @@ struct Type {
       : info(new TypeInfo(CreateTypeCallback(std::forward<Callback>(cb)))) {}
 };
 
-Actions StringToActions(const std::string& str);
+ActionKind StringToActions(const std::string& str);
 
 struct Action {
   std::unique_ptr<ActionInfo> info;
@@ -1659,6 +1619,52 @@ class ArgumentHolderImpl : public ArgumentHolder {
   // Conflicts checking.
   std::set<std::string> name_set_;
 };
+
+using ::argp;
+using ::argp_error;
+using ::argp_failure;
+using ::argp_help;
+using ::argp_parse;
+using ::argp_parser_t;
+using ::argp_program_bug_address;
+using ::argp_program_version;
+using ::argp_program_version_hook;
+using ::argp_state;
+using ::argp_state_help;
+using ::argp_usage;
+using ::error_t;
+using ::program_invocation_name;
+using ::program_invocation_short_name;
+
+// TODO: Don't need this wrapper.
+// Wrapper of argp_state.
+class ArgpState {
+ public:
+  ArgpState(argp_state* state) : state_(state) {}
+  void PrintHelp(FILE* file, unsigned flags) {
+    argp_state_help(state_, file, flags);
+  }
+  void PrintUsage() { argp_usage(state_); }
+
+  template <typename... Args>
+  void ErrorF(const char* fmt, Args... args) {
+    return argp_error(state_, fmt, args...);
+  }
+  void Error(const std::string& msg) { return ErrorF("%s", msg.c_str()); }
+
+  template <typename... Args>
+  void FailureF(int status, int errnum, const char* fmt, Args... args) {
+    return argp_failure(state_, status, errnum, fmt, args...);
+  }
+  void Failure(int status, int errnum, const std::string& msg) {
+    return FailureF(status, errnum, "%s", msg.c_str());
+  }
+  argp_state* operator->() { return state_; }
+
+ private:
+  argp_state* state_;
+};
+
 
 // All the data elements needs by argp.
 // Created by Compiler and kept alive by Parser.
@@ -2137,12 +2143,12 @@ struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
 };
 
 struct CFileOpenTraits {
-  static void Run(const std::string& in, Mode mode, Result<FILE*>* out);
+  static void Run(const std::string& in, OpenMode mode, Result<FILE*>* out);
 };
 
 template <typename T>
 struct StreamOpenTraits {
-  static void Run(const std::string& in, Mode mode, Result<T>* out) {
+  static void Run(const std::string& in, OpenMode mode, Result<T>* out) {
     auto ios_mode = ModeToStreamMode(mode);
     T stream(in, ios_mode);
     if (stream.is_open())

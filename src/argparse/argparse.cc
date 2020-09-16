@@ -89,83 +89,83 @@ bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
   return std::strcmp(a->name(), b->name()) < 0;
 }
 
-static OpsKind TypesToOpsKind(Types in) {
+static OpsKind TypesToOpsKind(TypeKind in) {
   switch (in) {
-    case Types::kOpen:
+    case TypeKind::kOpen:
       return OpsKind::kOpen;
-    case Types::kParse:
+    case TypeKind::kParse:
       return OpsKind::kParse;
     default:
       DCHECK2(false, "No corresponding OpsKind");
   }
 }
 
-static OpsKind ActionsToOpsKind(Actions in) {
+static OpsKind ActionsToOpsKind(ActionKind in) {
   switch (in) {
-    case Actions::kAppend:
+    case ActionKind::kAppend:
       return OpsKind::kAppend;
-    case Actions::kAppendConst:
+    case ActionKind::kAppendConst:
       return OpsKind::kAppendConst;
-    case Actions::kStore:
+    case ActionKind::kStore:
       return OpsKind::kStore;
-    case Actions::kStoreConst:
+    case ActionKind::kStoreConst:
       return OpsKind::kStoreConst;
     default:
       DCHECK2(false, "No corresponding OpsKind");
   }
 }
 
-static bool ActionNeedsConstValue(Actions in) {
-  return in == Actions::kStoreConst || in == Actions::kAppendConst;
+static bool ActionNeedsConstValue(ActionKind in) {
+  return in == ActionKind::kStoreConst || in == ActionKind::kAppendConst;
 }
 
-static bool ActionNeedsDest(Actions in) {
+static bool ActionNeedsDest(ActionKind in) {
   // These actions don't need a dest.
-  return !(in == Actions::kPrintHelp || in == Actions::kPrintUsage ||
-           in == Actions::kNoAction);
+  return !(in == ActionKind::kPrintHelp || in == ActionKind::kPrintUsage ||
+           in == ActionKind::kNoAction);
 }
 
-static bool ActionNeedsTypeCallback(Actions in) {
-  return in == Actions::kAppend || in == Actions::kStore ||
-         in == Actions::kCustom;
+static bool ActionNeedsTypeCallback(ActionKind in) {
+  return in == ActionKind::kAppend || in == ActionKind::kStore ||
+         in == ActionKind::kCustom;
 }
 
-static const char* TypesToString(Types in) {
+static const char* TypesToString(TypeKind in) {
   switch (in) {
-    case Types::kOpen:
+    case TypeKind::kOpen:
       return "Open";
-    case Types::kParse:
+    case TypeKind::kParse:
       return "Parse";
-    case Types::kCustom:
+    case TypeKind::kCustom:
       return "Custom";
-    case Types::kNothing:
+    case TypeKind::kNothing:
       return "Nothing";
   }
 }
 
-static const char* ActionsToString(Actions in) {
+static const char* ActionsToString(ActionKind in) {
   switch (in) {
-    case Actions::kAppend:
+    case ActionKind::kAppend:
       return "Append";
-    case Actions::kAppendConst:
+    case ActionKind::kAppendConst:
       return "AppendConst";
-    case Actions::kCustom:
+    case ActionKind::kCustom:
       return "Custom";
-    case Actions::kNoAction:
+    case ActionKind::kNoAction:
       return "NoAction";
-    case Actions::kPrintHelp:
+    case ActionKind::kPrintHelp:
       return "PrintHelp";
-    case Actions::kPrintUsage:
+    case ActionKind::kPrintUsage:
       return "PrintUsage";
-    case Actions::kStore:
+    case ActionKind::kStore:
       return "Store";
-    case Actions::kStoreConst:
+    case ActionKind::kStoreConst:
       return "StoreConst";
-    case Actions::kStoreFalse:
+    case ActionKind::kStoreFalse:
       return "StoreFalse";
-    case Actions::kStoreTrue:
+    case ActionKind::kStoreTrue:
       return "StoreTrue";
-    case Actions::kCount:
+    case ActionKind::kCount:
       return "Count";
   }
 }
@@ -175,14 +175,14 @@ void ArgumentImpl::InitAction() {
     action_info_ = std::make_unique<ActionInfo>();
   }
 
-  if (action_info_->action_code == Actions::kCustom) {
+  if (action_info_->action_code == ActionKind::kCustom) {
     DCHECK(action_info_->callback);
     return;
   }
 
-  if (action_info_->action_code == Actions::kNoAction) {
+  if (action_info_->action_code == ActionKind::kNoAction) {
     // If there is a dest, but no explicit action given, default is store.
-    action_info_->action_code = Actions::kStore;
+    action_info_->action_code = ActionKind::kStore;
   }
 
   auto action_code = action_info_->action_code;
@@ -222,7 +222,7 @@ void ArgumentImpl::InitType() {
     type_info_ = std::make_unique<TypeInfo>();
   }
 
-  if (type_info_->type_code == Types::kCustom) {
+  if (type_info_->type_code == TypeKind::kCustom) {
     DCHECK(type_info_->callback);
     type_info_->ops.reset();
     return;
@@ -230,27 +230,27 @@ void ArgumentImpl::InitType() {
 
   if (!ActionNeedsTypeCallback(action_info_->action_code)) {
     // Some action, like print usage, store const.., don't need a type..
-    type_info_->type_code = Types::kNothing;
+    type_info_->type_code = TypeKind::kNothing;
     type_info_->ops.reset();
     return;
   }
 
   // Figure out type_code_.
-  if (type_info_->type_code == Types::kNothing) {
+  if (type_info_->type_code == TypeKind::kNothing) {
     // The action needs a type, but is not explicitly set, so default is kParse.
     // So if your dest is a filetype, but type is not FileType, it will be an
     // error.
-    type_info_->type_code = Types::kParse;
+    type_info_->type_code = TypeKind::kParse;
   }
 
   auto type_code = type_info_->type_code;
   // If type_code is open, mode shouldn't be no mode.
-  DCHECK(type_code != Types::kOpen || type_info_->mode != kModeNoMode);
+  DCHECK(type_code != TypeKind::kOpen || type_info_->mode != kModeNoMode);
 
   // Create type_ops_.
   if (!type_info_->ops) {
     auto* ops_factory = dest_info_->ops_factory.get();
-    type_info_->ops = action_info_->action_code == Actions::kAppend
+    type_info_->ops = action_info_->action_code == ActionKind::kAppend
                           ? ops_factory->CreateValueTypeOps()
                           : ops_factory->Create();
   }
@@ -265,11 +265,11 @@ void ArgumentImpl::InitType() {
 
 void ArgumentImpl::InitDefaultValue() {
   switch (action_info_->action_code) {
-    case Actions::kStoreFalse:
+    case ActionKind::kStoreFalse:
       default_value_ = MakeAny(true);
       const_value_ = MakeAny(false);
       break;
-    case Actions::kStoreTrue:
+    case ActionKind::kStoreTrue:
       default_value_ = MakeAny(false);
       const_value_ = MakeAny(true);
       break;
@@ -504,17 +504,17 @@ bool IsValidOptionName(const char* name, std::size_t len) {
   return true;
 }
 
-Actions StringToActions(const std::string& str) {
-  static const std::map<std::string, Actions> kStringToActions{
-      {"store", Actions::kStore},
-      {"store_const", Actions::kStoreConst},
-      {"store_true", Actions::kStoreTrue},
-      {"store_false", Actions::kStoreFalse},
-      {"append", Actions::kAppend},
-      {"append_const", Actions::kAppendConst},
-      {"count", Actions::kCount},
-      {"print_help", Actions::kPrintHelp},
-      {"print_usage", Actions::kPrintUsage},
+ActionKind StringToActions(const std::string& str) {
+  static const std::map<std::string, ActionKind> kStringToActions{
+      {"store", ActionKind::kStore},
+      {"store_const", ActionKind::kStoreConst},
+      {"store_true", ActionKind::kStoreTrue},
+      {"store_false", ActionKind::kStoreFalse},
+      {"append", ActionKind::kAppend},
+      {"append_const", ActionKind::kAppendConst},
+      {"count", ActionKind::kCount},
+      {"print_help", ActionKind::kPrintHelp},
+      {"print_usage", ActionKind::kPrintUsage},
   };
   auto iter = kStringToActions.find(str);
   CHECK_USER(iter != kStringToActions.end(),
@@ -527,33 +527,33 @@ void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
                                            CallbackRunner::Delegate* delegate) {
   auto* ops = action_info_->ops.get();
   switch (action_info_->action_code) {
-    case Actions::kNoAction:
+    case ActionKind::kNoAction:
       break;
-    case Actions::kStore:
+    case ActionKind::kStore:
       ops->Store(dest_ptr(), std::move(data));
       break;
-    case Actions::kStoreConst:
-    case Actions::kStoreTrue:
-    case Actions::kStoreFalse:
+    case ActionKind::kStoreConst:
+    case ActionKind::kStoreTrue:
+    case ActionKind::kStoreFalse:
       ops->StoreConst(dest_ptr(), const_value());
       break;
-    case Actions::kAppend:
+    case ActionKind::kAppend:
       ops->Append(dest_ptr(), std::move(data));
       break;
-    case Actions::kAppendConst:
+    case ActionKind::kAppendConst:
       ops->AppendConst(dest_ptr(), const_value());
       break;
-    case Actions::kPrintHelp:
+    case ActionKind::kPrintHelp:
       delegate->OnPrintHelp();
       break;
-    case Actions::kPrintUsage:
+    case ActionKind::kPrintUsage:
       delegate->OnPrintUsage();
       break;
-    case Actions::kCustom:
+    case ActionKind::kCustom:
       DCHECK(action_info_->callback);
       action_info_->callback->Run(dest_ptr(), std::move(data));
       break;
-    case Actions::kCount:
+    case ActionKind::kCount:
       ops->Count(dest_ptr());
       break;
   }
@@ -569,16 +569,16 @@ void ArgumentImpl::RunType(const std::string& in,
                                          OpsResult* out) {
   auto* ops = type_info_->ops.get();
   switch (type_info_->type_code) {
-    case Types::kNothing:
+    case TypeKind::kNothing:
       break;
-    case Types::kParse:
+    case TypeKind::kParse:
       ops->Parse(in, out);
       break;
-    case Types::kOpen:
+    case TypeKind::kOpen:
       DCHECK(type_info_->mode != kModeNoMode);
       ops->Open(in, type_info_->mode, out);
       break;
-    case Types::kCustom:
+    case TypeKind::kCustom:
       DCHECK(type_info_->callback);
       type_info_->callback->Run(in, out);
       break;
@@ -598,7 +598,7 @@ void ArgumentImpl::RunCallback(
   RunAction(std::move(result.value), delegate.get());
 }
 
-std::string ModeToChars(Mode mode) {
+std::string ModeToChars(OpenMode mode) {
   std::string m;
   if (mode & kModeRead)
     m.append("r");
@@ -612,7 +612,7 @@ std::string ModeToChars(Mode mode) {
 }
 
 void CFileOpenTraits::Run(const std::string& in,
-                          Mode mode,
+                          OpenMode mode,
                           Result<FILE*>* out) {
   auto mode_str = ModeToChars(mode);
   auto* file = std::fopen(in.c_str(), mode_str.c_str());
@@ -625,7 +625,7 @@ void CFileOpenTraits::Run(const std::string& in,
   out->set_error(kDefaultOpenFailureMsg);
 }
 
-std::ios_base::openmode ModeToStreamMode(Mode m) {
+std::ios_base::openmode ModeToStreamMode(OpenMode m) {
   std::ios_base::openmode out;
   if (m & kModeRead)
     out |= std::ios_base::in;
@@ -640,7 +640,7 @@ std::ios_base::openmode ModeToStreamMode(Mode m) {
   return out;
 }
 
-Mode StreamModeToMode(std::ios_base::openmode stream_mode) {
+OpenMode StreamModeToMode(std::ios_base::openmode stream_mode) {
   int m = kModeNoMode;
   if (stream_mode & std::ios_base::in)
     m |= kModeRead;
@@ -652,10 +652,10 @@ Mode StreamModeToMode(std::ios_base::openmode stream_mode) {
     m |= kModeTruncate;
   if (stream_mode & std::ios_base::binary)
     m |= kModeBinary;
-  return static_cast<Mode>(m);
+  return static_cast<OpenMode>(m);
 }
 
-Mode CharsToMode(const char* str) {
+OpenMode CharsToMode(const char* str) {
   DCHECK(str);
   int m;
   for (; *str; ++str) {
@@ -683,7 +683,7 @@ Mode CharsToMode(const char* str) {
         break;
     }
   }
-  return static_cast<Mode>(m);
+  return static_cast<OpenMode>(m);
 }
 
 const char* OpsToString(OpsKind ops) {
