@@ -40,6 +40,9 @@ struct SourceLocation {
   const char* filename;
 };
 
+// When an meaningless type is needed.
+struct NoneType {};
+
 // TODO: replace with CHECK(), CHECK_F, DCHECK(), DCHECK_F()
 void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...);
 
@@ -109,7 +112,7 @@ class Result {
   }
   // Goes back to empty state.
   void reset() {
-    data_.template emplace<kEmptyIndex>(EmptyType{});
+    data_.template emplace<kEmptyIndex>(NoneType{});
     DCHECK(empty());
   }
 
@@ -120,8 +123,7 @@ class Result {
     kErrorMsgIndex,
     kValueIndex,
   };
-  struct EmptyType {};
-  std::variant<EmptyType, std::string, T> data_;
+  std::variant<NoneType, std::string, T> data_;
 };
 
 // Throw this exception will cause an error msg to be printed (via what()).
@@ -182,6 +184,98 @@ template <typename T>
 T AnyCast(const Any& any) {
   return AnyImpl<T>::FromAny(any).value();
 }
+
+namespace detail {
+// clang-format off
+
+// Copied from pybind11.
+/// Strip the class from a method type
+template <typename T> struct remove_class { };
+template <typename C, typename R, typename... A> struct remove_class<R (C::*)(A...)> { typedef R type(A...); };
+template <typename C, typename R, typename... A> struct remove_class<R (C::*)(A...) const> { typedef R type(A...); };
+
+template <typename F> struct strip_function_object {
+    using type = typename remove_class<decltype(&F::operator())>::type;
+};
+
+// Extracts the function signature from a function, function pointer or lambda.
+template <typename Func, typename F = std::remove_reference_t<Func>>
+using function_signature_t = std::conditional_t<
+    std::is_function<F>::value,
+    F,
+    typename std::conditional_t<
+        std::is_pointer<F>::value || std::is_member_pointer<F>::value,
+        std::remove_pointer<F>,
+        strip_function_object<F>
+    >::type
+>;
+// clang-format on
+
+template <typename T>
+struct is_function_pointer : std::is_function<std::remove_pointer_t<T>> {};
+
+template <typename T, typename SFINAE = void>
+struct is_functor : std::false_type {};
+
+// Note: this will fail on auto lambda and overloaded operator().
+// But you should not use these as input to callback.
+template <typename T>
+struct is_functor<T, std::void_t<decltype(&T::operator())>> : std::true_type {};
+
+template <typename Func, typename F = std::decay_t<Func>>
+struct is_callback
+    : std::bool_constant<is_function_pointer<F>{} || is_functor<F>{}> {};
+
+}  // namespace detail
+
+enum class ActionKind {
+  kNoAction,
+  kStore,
+  kStoreConst,
+  kStoreTrue,
+  kStoreFalse,
+  kAppend,
+  kAppendConst,
+  kCount,
+  kPrintHelp,
+  kPrintUsage,
+  kCustom,
+};
+
+enum class TypeKind {
+  kNothing,
+  kParse,
+  kOpen,
+  kCustom,
+};
+
+enum class OpsKind {
+  kStore,
+  kStoreConst,
+  kAppend,
+  kAppendConst,
+  kCount,
+  kParse,
+  kOpen,
+};
+
+inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
+
+// File open mode. This is not enum class since we do & | on it.
+enum OpenMode {
+  kModeNoMode = 0x0,
+  kModeRead = 1,
+  kModeWrite = 2,
+  kModeAppend = 4,
+  kModeTruncate = 8,
+  kModeBinary = 16,
+};
+
+OpenMode CharsToMode(const char* str);
+std::string ModeToChars(OpenMode mode);
+
+OpenMode StreamModeToMode(std::ios_base::openmode stream_mode);
+std::ios_base::openmode ModeToStreamMode(OpenMode m);
 
 // The default impl for the types we know (bulitin-types like int).
 // This traits shouldn't be overriden by users.
@@ -287,103 +381,13 @@ std::string Format(const T& in) {
   return FormatTraits<T>::Run(in);
 }
 
-namespace detail {
-// clang-format off
-
-// Copied from pybind11.
-/// Strip the class from a method type
-template <typename T> struct remove_class { };
-template <typename C, typename R, typename... A> struct remove_class<R (C::*)(A...)> { typedef R type(A...); };
-template <typename C, typename R, typename... A> struct remove_class<R (C::*)(A...) const> { typedef R type(A...); };
-
-template <typename F> struct strip_function_object {
-    using type = typename remove_class<decltype(&F::operator())>::type;
-};
-
-// Extracts the function signature from a function, function pointer or lambda.
-template <typename Func, typename F = std::remove_reference_t<Func>>
-using function_signature_t = std::conditional_t<
-    std::is_function<F>::value,
-    F,
-    typename std::conditional_t<
-        std::is_pointer<F>::value || std::is_member_pointer<F>::value,
-        std::remove_pointer<F>,
-        strip_function_object<F>
-    >::type
->;
-// clang-format on
-
-template <typename T>
-struct is_function_pointer : std::is_function<std::remove_pointer_t<T>> {};
-
-template <typename T, typename SFINAE = void>
-struct is_functor : std::false_type {};
-
-// Note: this will fail on auto lambda and overloaded operator().
-// But you should not use these as input to callback.
-template <typename T>
-struct is_functor<T, std::void_t<decltype(&T::operator())>> : std::true_type {};
-
-template <typename Func, typename F = std::decay_t<Func>>
-struct is_callback
-    : std::bool_constant<is_function_pointer<F>{} || is_functor<F>{}> {};
-
-}  // namespace detail
-
-enum class ActionKind {
-  kNoAction,
-  kStore,
-  kStoreConst,
-  kStoreTrue,
-  kStoreFalse,
-  kAppend,
-  kAppendConst,
-  kCount,
-  kPrintHelp,
-  kPrintUsage,
-  kCustom,
-};
-
-enum class TypeKind {
-  kNothing,
-  kParse,
-  kOpen,
-  kCustom,
-};
-
-enum class OpsKind {
-  kStore,
-  kStoreConst,
-  kAppend,
-  kAppendConst,
-  kCount,
-  kParse,
-  kOpen,
-};
-
-inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
-
-// File open mode.
-enum OpenMode {
-  kModeNoMode = 0x0,
-  kModeRead = 1,
-  kModeWrite = 2,
-  kModeAppend = 4,
-  kModeTruncate = 8,
-  kModeBinary = 16,
-};
-
-OpenMode CharsToMode(const char* str);
-std::string ModeToChars(OpenMode mode);
-
-OpenMode StreamModeToMode(std::ios_base::openmode stream_mode);
-std::ios_base::openmode ModeToStreamMode(OpenMode m);
-
 // This traits indicates whether T supports append operation and if it does,
 // tells us how to do the append.
+// For user's types, specialize AppendTraits<>, and if your type is
+// standard-compatible, inherits from DefaultAppendTraits<>.
 template <typename T>
 struct AppendTraits {
-  static constexpr void* Run = nullptr;
+  static constexpr bool Run = false;
 };
 
 // Extracted the bool value from AppendTraits.
@@ -393,9 +397,6 @@ using IsAppendSupported = std::bool_constant<bool(AppendTraits<T>::Run)>;
 // Get the value-type for a appendable, only use it when IsAppendSupported<T>.
 template <typename T>
 using ValueTypeOf = typename AppendTraits<T>::ValueType;
-
-// For user's types, specialize AppendTraits<>, and if your type is
-// standard-compatible, inherits from DefaultAppendTraits<>.
 
 constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
 
@@ -440,7 +441,255 @@ struct IsOpsSupported<OpsKind::kParse, T>
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>
     : std::bool_constant<bool(OpenTraits<T>::Run)> {};
+// wstring is not supported now.
 
+template <>
+struct DefaultParseTraits<std::string> {
+  static void Run(const std::string& in, Result<std::string>* out) {
+    *out = in;
+  }
+};
+// char is an unquoted single character.
+template <>
+struct DefaultParseTraits<char> {
+  static void Run(const std::string& in, Result<char>* out) {
+    if (in.size() != 1)
+      return out->set_error("char must be exactly one character");
+    if (!std::isprint(in[0]))
+      return out->set_error("char must be printable");
+    *out = in[0];
+  }
+};
+template <>
+struct DefaultParseTraits<bool> {
+  static void Run(const std::string& in, Result<bool>* out) {
+    static const std::map<std::string, bool> kStringToBools{
+        {"true", true},   {"True", true},   {"1", true},
+        {"false", false}, {"False", false}, {"0", false},
+    };
+    auto iter = kStringToBools.find(in);
+    if (iter == kStringToBools.end())
+      return out->set_error("not a valid bool value");
+    *out = iter->second;
+  }
+};
+
+// For std::stof,stod,stold.
+template <typename T, T (*func)(const std::string&, std::size_t*)>
+using stl_floating_point_parser_t =
+    std::integral_constant<decltype(func), func>;
+
+// For std::stoi,stol,stoll,etc.
+template <typename T, T (*func)(const std::string&, std::size_t*, int)>
+using stl_integral_parser_t = std::integral_constant<decltype(func), func>;
+
+template <typename T>
+struct stl_number_parser : std::false_type {};
+
+template <>
+struct stl_number_parser<float>
+    : stl_floating_point_parser_t<float, std::stof> {};
+template <>
+struct stl_number_parser<double>
+    : stl_floating_point_parser_t<double, std::stod> {};
+template <>
+struct stl_number_parser<long double>
+    : stl_floating_point_parser_t<long double, std::stold> {};
+
+template <>
+struct stl_number_parser<int> : stl_integral_parser_t<int, std::stoi> {};
+template <>
+struct stl_number_parser<long> : stl_integral_parser_t<long, std::stol> {};
+template <>
+struct stl_number_parser<long long>
+    : stl_integral_parser_t<long long, std::stoll> {};
+
+template <>
+struct stl_number_parser<unsigned long>
+    : stl_integral_parser_t<unsigned long, std::stoul> {};
+template <>
+struct stl_number_parser<unsigned long long>
+    : stl_integral_parser_t<unsigned long long, std::stoull> {};
+
+template <typename T>
+using has_stl_number_parser_t =
+    std::bool_constant<bool(stl_number_parser<T>{})>;
+
+template <typename T, typename stl_number_parser<T>::value_type func>
+T StlParseNumberImpl(const std::string& in, std::false_type) {
+  return func(in, nullptr, 0);
+}
+template <typename T, typename stl_number_parser<T>::value_type func>
+T StlParseNumberImpl(const std::string& in, std::true_type) {
+  return func(in, nullptr);
+}
+template <typename T>
+T StlParseNumber(const std::string& in) {
+  static_assert(has_stl_number_parser_t<T>{});
+  return StlParseNumberImpl<T, stl_number_parser<T>{}>(
+      in, std::is_floating_point<T>{});
+}
+
+template <typename T>
+struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
+  static void Run(const std::string& in, Result<T>* out) {
+    try {
+      *out = StlParseNumber<T>(in);
+    } catch (std::invalid_argument&) {
+      out->set_error("invalid numeric format");
+    } catch (std::out_of_range&) {
+      out->set_error("numeric value out of range");
+    }
+  }
+};
+
+struct CFileOpenTraits {
+  static void Run(const std::string& in, OpenMode mode, Result<FILE*>* out);
+};
+
+template <typename T>
+struct StreamOpenTraits {
+  static void Run(const std::string& in, OpenMode mode, Result<T>* out) {
+    auto ios_mode = ModeToStreamMode(mode);
+    T stream(in, ios_mode);
+    if (stream.is_open())
+      return out->set_value(std::move(stream));
+    out->set_error(kDefaultOpenFailureMsg);
+  }
+};
+
+template <>
+struct OpenTraits<FILE*> : CFileOpenTraits {};
+template <>
+struct OpenTraits<std::fstream> : StreamOpenTraits<std::fstream> {};
+template <>
+struct OpenTraits<std::ifstream> : StreamOpenTraits<std::ifstream> {};
+template <>
+struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
+
+// For STL-compatible T, by default use the push_back() method of T.
+template <typename T>
+struct DefaultAppendTraits {
+  using ValueType = typename T::value_type;
+  static void Run(T* obj, ValueType item) { obj->push_back(item); }
+};
+
+// Specialized for STL containers.
+// std::string is not considered appendable, if you need that, use
+// std::vector<char>
+template <typename T>
+struct AppendTraits<std::vector<T>> : DefaultAppendTraits<std::vector<T>> {};
+template <typename T>
+struct AppendTraits<std::list<T>> : DefaultAppendTraits<std::list<T>> {};
+template <typename T>
+struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
+
+// Default is the rules impl'ed by us:
+// 1. fall back to TypeName() -- demanged name of T.
+// 2. MetaTypeHint, for file, string and list[T], general types..
+template <typename T, typename SFINAE = void>
+struct DefaultTypeHint {
+  static std::string Run() { return TypeName<T>(); }
+};
+
+// TypeHint() is always supported..
+template <typename T>
+struct TypeHintTraits : DefaultTypeHint<T> {};
+
+// The purpose of MetaTypes is to provide a mechanism to summerize types as
+// metatype so that they can have the same typehint. For example, different
+// types of file object, like C FILE* and C++ streams, can all have the same
+// metatype -- file. And different types of integers can all be summerized as
+// 'int'. Our policy is to:
+// 1. If T is specialized, use TypeHintTraits<T>.
+// 2. If T's metatype is not unknown, use MetaTypeHint.
+// 3. fall back to demangle.
+// Note: number such as float, double and int, long use their own typename as
+// metatype, since it will confuse user if not.
+// As user, you can:
+// 1. Be pleasant with the default setting for your type, such std::string and
+// bool.
+// 2. Want to use a metatype, tell us by MetaTypeOf<T>.
+// 3. Want a completey new type hint, tell us by TypeHintTraits<T>.
+enum class MetaTypes {
+  kString,
+  kFile,
+  kList,
+  kNumber,
+  kBool,
+  kChar,
+  kUnknown,
+};
+
+template <MetaTypes M>
+using MetaTypeContant = std::integral_constant<MetaTypes, M>;
+
+template <typename T, typename SFINAE = void>
+struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
+
+// String.
+template <>
+struct MetaTypeOf<std::string, void> : MetaTypeContant<MetaTypes::kString> {};
+
+// Bool.
+template <>
+struct MetaTypeOf<bool, void> : MetaTypeContant<MetaTypes::kBool> {};
+
+// Char.
+template <>
+struct MetaTypeOf<char, void> : MetaTypeContant<MetaTypes::kChar> {};
+
+// File.
+template <typename T>
+struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kOpen, T>{}>>
+    : MetaTypeContant<MetaTypes::kFile> {};
+
+// List.
+template <typename T>
+struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kAppend, T>{}>>
+    : MetaTypeContant<MetaTypes::kList> {};
+
+// Number.
+template <typename T>
+struct MetaTypeOf<T, std::enable_if_t<has_stl_number_parser_t<T>{}>>
+    : MetaTypeContant<MetaTypes::kNumber> {};
+
+// If you get unhappy with this default handling, for example,
+// you want number to be "number", you can specialize this.
+template <typename T, MetaTypes M = MetaTypeOf<T>{}>
+struct MetaTypeHint {
+  static std::string Run() {
+    switch (M) {
+      case MetaTypes::kFile:
+        return "file";
+      case MetaTypes::kString:
+        return "string";
+      case MetaTypes::kBool:
+        return "bool";
+      case MetaTypes::kChar:
+        return "char";
+      case MetaTypes::kNumber:
+        return TypeName<T>();
+      default:
+        // List
+        DCHECK(false);
+    }
+  }
+};
+
+template <typename T>
+struct MetaTypeHint<T, MetaTypes::kList> {
+  static std::string Run() {
+    return "list[" + TypeHint<ValueTypeOf<T>>() + "]";
+  }
+};
+
+template <typename T>
+struct DefaultTypeHint<T,
+                       std::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
+    : MetaTypeHint<T> {};
+
+// This is a type-erased type-safe void* wrapper.
 class DestPtr {
  public:
   template <typename T>
@@ -463,7 +712,6 @@ class DestPtr {
     DCHECK(type_ == typeid(T));
     return reinterpret_cast<T*>(ptr_);
   }
-
   template <typename T>
   void load_ptr(T** ptr_out) const {
     *ptr_out = load_ptr<T>();
@@ -493,7 +741,6 @@ class DestPtr {
   void* ptr() const { return ptr_; }
 
  private:
-  struct NoneType {};
   std::type_index type_ = typeid(NoneType);
   void* ptr_ = nullptr;
 };
@@ -579,6 +826,7 @@ class CallbackRunner {
   virtual ~CallbackRunner() {}
 };
 
+// TODO: make these info class abstract.
 struct NamesInfo {
   bool is_option = false;
   std::vector<std::string> long_names;
@@ -652,6 +900,7 @@ struct TypeInfo {
       : type_code(TypeKind::kParse), ops(std::move(ops)) {}
 };
 
+// Control whether some extra info appear in the help doc.
 enum class HelpFormatPolicy {
   kDefault,           // add nothing.
   kTypeHint,          // add (type: <type-hint>) to help doc.
@@ -700,6 +949,8 @@ enum class HelpFilterResult {
 using HelpFilterCallback =
     std::function<HelpFilterResult(const Argument&, std::string* text)>;
 
+// XXX: this depends on argp and is not general.
+// In fact, people only need to pass in a std::string.
 using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
 
 class ArgArray {
@@ -723,49 +974,12 @@ class ArgArray {
   char** argv_;
 };
 
-// // TODO: change this..
-// class ArgpParser {
-//  public:
-//   class Delegate {
-//    public:
-//     virtual Argument* FindOptionalArgument(int key) = 0;
-//     virtual Argument* FindPositionalArgument(int index) = 0;
-//     virtual std::size_t PositionalArgumentCount() = 0;
-//     virtual void CompileToArgpOptions(std::vector<argp_option>* options) = 0;
-//     virtual void GenerateArgsDoc(std::string* args_doc) = 0;
-//     virtual ~Delegate() {}
-//   };
-
-//   struct Options {
-//     int flags = 0;
-//     const char* program_version = {};
-//     const char* description = {};
-//     const char* after_doc = {};
-//     const char* domain = {};
-//     const char* email = {};
-//     ProgramVersionCallback program_version_callback;
-//     HelpFilterCallback help_filter;
-//   };
-
-//   // Initialize from a few options (user's options).
-//   virtual void Init(const Options& options) = 0;
-//   // Parse args, exit on errors.
-//   virtual void ParseArgs(ArgArray args) = 0;
-//   // Parse args, collect unknown args into rest, don't exit, report error via
-//   // Status.
-//   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) {
-//     ParseArgs(args);
-//     return true;
-//   }
-//   virtual ~ArgpParser() {}
-//   static std::unique_ptr<ArgpParser> Create(Delegate* delegate);
-// };
-
 class ArgumentGroup {
  public:
   virtual ~ArgumentGroup() {}
   virtual const char* GetHeader() = 0;
   // Visit each arg.
+  // TODO: impl this.
   virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
   // Add an arg to this group.
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
@@ -850,8 +1064,11 @@ class SubCommandHolder {
   static std::unique_ptr<SubCommandHolder> Create();
 };
 
+// Main options passed to the parser.
 struct OptionsInfo {
   int flags = 0;
+  // TODO: may change some of these to std::string to allow dynamic generated
+  // content.
   const char* program_version = {};
   const char* description = {};
   const char* after_doc = {};
@@ -901,7 +1118,9 @@ class ArgumentController {
   static std::unique_ptr<ArgumentController> Create();
 };
 
-// End of interfaces. Begin of Impls.
+////////////////////////////////////////
+// End of interfaces. Begin of Impls. //
+////////////////////////////////////////
 
 template <typename T>
 void ConvertResults(Result<T>* in, OpsResult* out) {
@@ -913,17 +1132,15 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
   }
 }
 
-template <OpsKind Ops, typename T, bool Supported = IsOpsSupported<Ops, T>{}>
-struct OpsImpl;
-
 const char* OpsToString(OpsKind ops);
-
 const char* TypeNameImpl(const std::type_info& type);
-
 template <typename T>
 const char* TypeName() {
   return TypeNameImpl(typeid(T));
 }
+
+template <OpsKind Ops, typename T, bool Supported = IsOpsSupported<Ops, T>{}>
+struct OpsImpl;
 
 template <OpsKind Ops, typename T>
 struct OpsImpl<Ops, T, false> {
@@ -1010,18 +1227,6 @@ bool OpsIsSupportedImpl(OpsKind ops, std::index_sequence<OpsIndices...>) {
   return kArray[index];
 }
 
-// Default is the rules impl'ed by us:
-// 1. fall back to TypeName() -- demanged name of T.
-// 2. MetaTypeHint, for file, string and list[T], general types..
-template <typename T, typename SFINAE = void>
-struct DefaultTypeHint {
-  static std::string Run() { return TypeName<T>(); }
-};
-
-// TypeHint() is always supported..
-template <typename T>
-struct TypeHintTraits : DefaultTypeHint<T> {};
-
 template <typename T>
 class OperationsImpl : public Operations {
  public:
@@ -1037,9 +1242,7 @@ class OperationsImpl : public Operations {
   void AppendConst(DestPtr dest, const Any& data) override {
     OpsImpl<OpsKind::kAppendConst, T>::Run(dest, data);
   }
-  void Count(DestPtr dest) override {
-    OpsImpl<OpsKind::kCount, T>::Run(dest);
-  }
+  void Count(DestPtr dest) override { OpsImpl<OpsKind::kCount, T>::Run(dest); }
   void Parse(const std::string& in, OpsResult* out) override {
     OpsImpl<OpsKind::kParse, T>::Run(in, out);
   }
@@ -1212,6 +1415,112 @@ inline std::unique_ptr<Argument> Argument::Create(
   return std::make_unique<ArgumentImpl>(std::move(info));
 }
 
+class ArgumentHolderImpl : public ArgumentHolder {
+ public:
+  ArgumentHolderImpl();
+
+  ArgumentGroup* AddArgumentGroup(const char* header) override;
+
+  void AddArgument(std::unique_ptr<Argument> arg) override {
+    auto* group =
+        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
+    return group->AddArgument(std::move(arg));
+  }
+
+  void ForEachArgument(std::function<void(Argument*)> callback) override {
+    for (auto& arg : arguments_)
+      callback(arg.get());
+  }
+  void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
+    for (auto& group : groups_)
+      callback(group.get());
+  }
+
+  int GetArgumentCount() override { return arguments_.size(); }
+
+  void SetListener(std::unique_ptr<Listener> listener) override {
+    listener_ = std::move(listener);
+  }
+
+ private:
+  enum GroupID {
+    kOptionGroup = 0,
+    kPositionalGroup = 1,
+  };
+
+  class GroupImpl;
+
+  // Add an arg to a specific group.
+  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
+  ArgumentGroup* GetDefaultOptionGroup() const {
+    return groups_[kOptionGroup].get();
+  }
+  ArgumentGroup* GetDefaultPositionalGroup() const {
+    return groups_[kPositionalGroup].get();
+  }
+
+  bool CheckNamesConflict(const NamesInfo& names);
+
+  std::unique_ptr<Listener> listener_;
+  // Hold the storage of all args.
+  std::vector<std::unique_ptr<Argument>> arguments_;
+  std::vector<std::unique_ptr<ArgumentGroup>> groups_;
+  // Conflicts checking.
+  std::set<std::string> name_set_;
+};
+
+class ArgumentControllerImpl : public ArgumentController {
+ public:
+  explicit ArgumentControllerImpl(
+      std::unique_ptr<ParserFactory> parser_factory);
+
+  ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
+  SubCommandHolder* GetSubCommandHolder() override {
+    return subcmd_holder_.get();
+  }
+
+  void SetOptions(std::unique_ptr<OptionsInfo> info) override {
+    SetDirty(true);
+    options_info_ = std::move(info);
+  }
+
+ private:
+  // Listen to events of argumentholder and subcommand holder.
+  class ListenerImpl;
+
+  void SetDirty(bool dirty) { dirty_ = dirty; }
+  bool dirty() const { return dirty_; }
+  Parser* GetParser() override {
+    if (dirty() || !parser_) {
+      SetDirty(false);
+      parser_ = parser_factory_->CreateParser(nullptr);
+    }
+    return parser_.get();
+  }
+
+  bool dirty_ = false;
+  std::unique_ptr<ParserFactory> parser_factory_;
+  std::unique_ptr<Parser> parser_;
+  std::unique_ptr<OptionsInfo> options_info_;
+  std::unique_ptr<ArgumentHolder> main_holder_;
+  std::unique_ptr<SubCommandHolder> subcmd_holder_;
+};
+
+class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
+                                             public SubCommandHolder::Listener {
+ public:
+  explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
+
+ private:
+  void MarkDirty() { impl_->SetDirty(true); }
+  void OnAddArgument(Argument*) override { MarkDirty(); }
+  void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
+  void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
+  void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
+
+  ArgumentControllerImpl* impl_;
+};
+
 class SubCommandImpl : public SubCommand {
  public:
   ArgumentHolder* GetHolder() override { return holder_.get(); }
@@ -1219,9 +1528,9 @@ class SubCommandImpl : public SubCommand {
 
   explicit SubCommandImpl(SubCommandGroup* group,
                           std::unique_ptr<SubCommandInfo> info);
-      // : group_(group),
-      //   info_(std::move(info)),
-      //   holder_(new ArgumentHolderImpl()) {}
+  // : group_(group),
+  //   info_(std::move(info)),
+  //   holder_(new ArgumentHolderImpl()) {}
 
  private:
   SubCommandGroup* group_;
@@ -1466,6 +1775,249 @@ struct Names {
   Names(std::initializer_list<const char*> names);
 };
 
+using ::argp;
+using ::argp_error;
+using ::argp_failure;
+using ::argp_help;
+using ::argp_parse;
+using ::argp_parser_t;
+using ::argp_program_bug_address;
+using ::argp_program_version;
+using ::argp_program_version_hook;
+using ::argp_state;
+using ::argp_state_help;
+using ::argp_usage;
+using ::error_t;
+using ::program_invocation_name;
+using ::program_invocation_short_name;
+
+// TODO: Don't need this wrapper.
+// Wrapper of argp_state.
+class ArgpState {
+ public:
+  ArgpState(argp_state* state) : state_(state) {}
+  void PrintHelp(FILE* file, unsigned flags) {
+    argp_state_help(state_, file, flags);
+  }
+  void PrintUsage() { argp_usage(state_); }
+
+  template <typename... Args>
+  void ErrorF(const char* fmt, Args... args) {
+    return argp_error(state_, fmt, args...);
+  }
+  void Error(const std::string& msg) { return ErrorF("%s", msg.c_str()); }
+
+  template <typename... Args>
+  void FailureF(int status, int errnum, const char* fmt, Args... args) {
+    return argp_failure(state_, status, errnum, fmt, args...);
+  }
+  void Failure(int status, int errnum, const std::string& msg) {
+    return FailureF(status, errnum, "%s", msg.c_str());
+  }
+  argp_state* operator->() { return state_; }
+
+ private:
+  argp_state* state_;
+};
+
+// All the data elements needs by argp.
+// Created by Compiler and kept alive by Parser.
+class GNUArgpContext {
+ public:
+  using ParserCallback = argp_parser_t;
+  virtual ~GNUArgpContext() {}
+  virtual void SetParserCallback(ParserCallback cb) = 0;
+  virtual int GetParseFlags() = 0;
+  virtual Argument* FindOption(int key) = 0;
+  virtual Argument* FindPositional(int pos) = 0;
+  virtual argp* GetArgpStruct() = 0;
+};
+
+// Fast lookup of arguments based on their key or position.
+// This is generated by Compiler mostly by looking at the Arguments and Options.
+class ArgpIndexesInfo {
+ public:
+  Argument* FindOption(int key) const;
+  Argument* FindPositional(int pos) const;
+
+  std::map<int, Argument*> optionals;
+  std::vector<Argument*> positionals;
+};
+
+class GNUArgpCompiler {
+ public:
+  virtual ~GNUArgpCompiler() {}
+  virtual std::unique_ptr<GNUArgpContext> Compile(
+      std::unique_ptr<ParserFactory::Delegate> delegate) = 0;
+};
+
+// Compile Arguments to argp data and various things needed by the parser.
+class ArgpCompiler {
+ public:
+  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) { Initialize(); }
+
+  void CompileOptions(std::vector<argp_option>* out);
+  void CompileUsage(std::string* out);
+  void CompileArgumentIndexes(ArgpIndexesInfo* out);
+
+ private:
+  void Initialize();
+  void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
+  void CompileArgument(Argument* arg, std::vector<argp_option>* out);
+  void CompileUsageFor(Argument* arg, std::ostream& os);
+  int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
+  int FindArgument(Argument* a) { return argument_to_id_[a]; }
+  void InitGroup(ArgumentGroup* group);
+  void InitArgument(Argument* arg);
+
+  static constexpr unsigned kFirstArgumentKey = 128;
+
+  ArgumentHolder* holder_;
+  int next_arg_key_ = kFirstArgumentKey;
+  int next_group_id_ = 1;
+  HelpFormatPolicy policy_;
+  std::map<Argument*, int> argument_to_id_;
+  std::map<ArgumentGroup*, int> group_to_id_;
+};
+
+// This class focuses on parsing (efficiently).. Any other things are handled by
+// Compiler..
+class GNUArgpParser : public Parser {
+ public:
+  explicit GNUArgpParser(std::unique_ptr<GNUArgpContext> context)
+      : context_(std::move(context)) {
+    context_->SetParserCallback(&ParserCallbackImpl);
+  }
+
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override {
+    int flags = context_->GetParseFlags();
+    if (rest)
+      flags |= ARGP_NO_EXIT;
+    int arg_index = 0;
+    auto err = argp_parse(context_->GetArgpStruct(), args.argc(), args.argv(),
+                          flags, &arg_index, this);
+    if (rest) {
+      for (int i = arg_index; i < args.argc(); ++i)
+        rest->push_back(args[i]);
+      return !err;
+    }
+    // Should not get here...
+    return true;
+  }
+
+ private:
+  // This is an internal class to communicate data/state between user's
+  // callback.
+  class Context;
+  void RunCallback(Argument* arg, char* value, ArgpState state);
+
+  error_t DoParse(int key, char* arg, ArgpState state);
+
+  static error_t ParserCallbackImpl(int key, char* arg, argp_state* state) {
+    auto* self = reinterpret_cast<GNUArgpParser*>(state->input);
+    return self->DoParse(key, arg, state);
+  }
+
+  static char* HelpFilterCallbackImpl(int key, const char* text, void* input);
+
+  // unsigned positional_count() const { return positional_count_; }
+
+  static constexpr unsigned kSpecialKeyMask = 0x1000000;
+
+  // std::unique_ptr<ArgpIndexesInfo> index_info_;
+  std::unique_ptr<GNUArgpContext> context_;
+  // int parser_flags_ = 0;
+  // unsigned positional_count_ = 0;
+  // argp argp_ = {};
+  // std::string program_doc_;
+  // std::string args_doc_;
+  // std::vector<argp_option> argp_options_;
+  // HelpFilterCallback help_filter_;
+};
+
+class GNUArgpParser::Context : public CallbackRunner::Delegate {
+ public:
+  Context(const Argument* argument, const char* value, ArgpState state);
+
+  void OnCallbackError(const std::string& errmsg) override {
+    return state_.ErrorF("error parsing argument: %s", errmsg.c_str());
+  }
+
+  void OnPrintUsage() override { return state_.PrintUsage(); }
+  void OnPrintHelp() override { return state_.PrintHelp(stderr, help_flags_); }
+  bool GetValue(std::string* out) override {
+    if (has_value_) {
+      *out = value_;
+      return true;
+    }
+    return false;
+  }
+
+ private:
+  const bool has_value_;
+  const Argument* arg_;
+  ArgpState state_;
+  std::string value_;
+  int help_flags_ = 0;
+};
+
+// struct ArgpData {
+//   int parser_flags = 0;
+//   argp argp_info = {};
+//   std::string program_doc;
+//   std::string args_doc;
+//   std::vector<argp_option> argp_options;
+// };
+
+// Public flags user can use. These are corresponding to the ARGP_XXX flags
+// passed to argp_parse().
+enum Flags {
+  kNoFlags = 0,            // The default.
+  kNoHelp = ARGP_NO_HELP,  // Don't produce --help.
+  kLongOnly = ARGP_LONG_ONLY,
+  kNoExit = ARGP_NO_EXIT,
+};
+
+// Options to ArgumentParser constructor.
+struct Options {
+  // Only the most common options are listed in this list.
+  Options() : info(new OptionsInfo) {}
+  Options& version(const char* v) {
+    info->program_version = v;
+    return *this;
+  }
+  Options& version(ProgramVersionCallback callback) {
+    info->program_version_callback = callback;
+    return *this;
+  }
+  Options& description(const char* d) {
+    info->description = d;
+    return *this;
+  }
+  Options& after_doc(const char* a) {
+    info->after_doc = a;
+    return *this;
+  }
+  Options& domain(const char* d) {
+    info->domain = d;
+    return *this;
+  }
+  Options& email(const char* b) {
+    info->email = b;
+    return *this;
+  }
+  Options& flags(Flags f) {
+    info->flags |= f;
+    return *this;
+  }
+  Options& help_filter(HelpFilterCallback cb) {
+    info->help_filter = std::move(cb);
+    return *this;
+  }
+
+  std::unique_ptr<OptionsInfo> info;
+};
+
 class AddArgumentHelper;
 
 class argument {
@@ -1566,358 +2118,6 @@ class AddArgumentGroupHelper : public AddArgumentHelper {
   virtual ArgumentGroup* AddArgumentGroupImpl(const char* header) = 0;
 };
 
-class ArgumentHolderImpl : public ArgumentHolder {
- public:
-  ArgumentHolderImpl();
-
-  ArgumentGroup* AddArgumentGroup(const char* header) override;
-
-  void AddArgument(std::unique_ptr<Argument> arg) override {
-    auto* group =
-        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
-    return group->AddArgument(std::move(arg));
-  }
-
-  void ForEachArgument(std::function<void(Argument*)> callback) override {
-    for (auto& arg : arguments_)
-      callback(arg.get());
-  }
-  void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
-    for (auto& group : groups_)
-      callback(group.get());
-  }
-
-  int GetArgumentCount() override { return arguments_.size(); }
-
-  void SetListener(std::unique_ptr<Listener> listener) override {
-    listener_ = std::move(listener);
-  }
-
- private:
-  enum GroupID {
-    kOptionGroup = 0,
-    kPositionalGroup = 1,
-  };
-
-  class GroupImpl;
-
-  // Add an arg to a specific group.
-  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
-  ArgumentGroup* GetDefaultOptionGroup() const {
-    return groups_[kOptionGroup].get();
-  }
-  ArgumentGroup* GetDefaultPositionalGroup() const {
-    return groups_[kPositionalGroup].get();
-  }
-
-  bool CheckNamesConflict(const NamesInfo& names);
-
-  std::unique_ptr<Listener> listener_;
-  // Hold the storage of all args.
-  std::vector<std::unique_ptr<Argument>> arguments_;
-  std::vector<std::unique_ptr<ArgumentGroup>> groups_;
-  // Conflicts checking.
-  std::set<std::string> name_set_;
-};
-
-using ::argp;
-using ::argp_error;
-using ::argp_failure;
-using ::argp_help;
-using ::argp_parse;
-using ::argp_parser_t;
-using ::argp_program_bug_address;
-using ::argp_program_version;
-using ::argp_program_version_hook;
-using ::argp_state;
-using ::argp_state_help;
-using ::argp_usage;
-using ::error_t;
-using ::program_invocation_name;
-using ::program_invocation_short_name;
-
-// TODO: Don't need this wrapper.
-// Wrapper of argp_state.
-class ArgpState {
- public:
-  ArgpState(argp_state* state) : state_(state) {}
-  void PrintHelp(FILE* file, unsigned flags) {
-    argp_state_help(state_, file, flags);
-  }
-  void PrintUsage() { argp_usage(state_); }
-
-  template <typename... Args>
-  void ErrorF(const char* fmt, Args... args) {
-    return argp_error(state_, fmt, args...);
-  }
-  void Error(const std::string& msg) { return ErrorF("%s", msg.c_str()); }
-
-  template <typename... Args>
-  void FailureF(int status, int errnum, const char* fmt, Args... args) {
-    return argp_failure(state_, status, errnum, fmt, args...);
-  }
-  void Failure(int status, int errnum, const std::string& msg) {
-    return FailureF(status, errnum, "%s", msg.c_str());
-  }
-  argp_state* operator->() { return state_; }
-
- private:
-  argp_state* state_;
-};
-
-
-// All the data elements needs by argp.
-// Created by Compiler and kept alive by Parser.
-class GNUArgpContext {
- public:
-  using ParserCallback = argp_parser_t;
-  virtual ~GNUArgpContext() {}
-  virtual void SetParserCallback(ParserCallback cb) = 0;
-  virtual int GetParseFlags() = 0;
-  virtual Argument* FindOption(int key) = 0;
-  virtual Argument* FindPositional(int pos) = 0;
-  virtual argp* GetArgpStruct() = 0;
-};
-
-// Fast lookup of arguments based on their key or position.
-// This is generated by Compiler mostly by looking at the Arguments and Options.
-class ArgpIndexesInfo {
- public:
-  Argument* FindOption(int key) const;
-  Argument* FindPositional(int pos) const;
-
-  std::map<int, Argument*> optionals;
-  std::vector<Argument*> positionals;
-};
-
-class GNUArgpCompiler {
- public:
-  virtual ~GNUArgpCompiler() {}
-  virtual std::unique_ptr<GNUArgpContext> Compile(
-      std::unique_ptr<ParserFactory::Delegate> delegate) = 0;
-};
-
-// Compile Arguments to argp data and various things needed by the parser.
-class ArgpCompiler {
- public:
-  ArgpCompiler(ArgumentHolder* holder) : holder_(holder) { Initialize(); }
-
-  void CompileOptions(std::vector<argp_option>* out);
-  void CompileUsage(std::string* out);
-  void CompileArgumentIndexes(ArgpIndexesInfo* out);
-
- private:
-  void Initialize();
-  void CompileGroup(ArgumentGroup* group, std::vector<argp_option>* out);
-  void CompileArgument(Argument* arg, std::vector<argp_option>* out);
-  void CompileUsageFor(Argument* arg, std::ostream& os);
-  int FindGroup(ArgumentGroup* g) { return group_to_id_[g]; }
-  int FindArgument(Argument* a) { return argument_to_id_[a]; }
-  void InitGroup(ArgumentGroup* group);
-  void InitArgument(Argument* arg);
-
-  static constexpr unsigned kFirstArgumentKey = 128;
-
-  ArgumentHolder* holder_;
-  int next_arg_key_ = kFirstArgumentKey;
-  int next_group_id_ = 1;
-  HelpFormatPolicy policy_;
-  std::map<Argument*, int> argument_to_id_;
-  std::map<ArgumentGroup*, int> group_to_id_;
-};
-
-// This class focuses on parsing (efficiently).. Any other things are handled by
-// Compiler..
-class GNUArgpParser : public Parser {
- public:
-  explicit GNUArgpParser(std::unique_ptr<GNUArgpContext> context)
-      : context_(std::move(context)) {
-    context_->SetParserCallback(&ParserCallbackImpl);
-  }
-
-  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* rest) override {
-    int flags = context_->GetParseFlags();
-    if (rest)
-      flags |= ARGP_NO_EXIT;
-    int arg_index = 0;
-    auto err = argp_parse(context_->GetArgpStruct(), args.argc(), args.argv(),
-                          flags, &arg_index, this);
-    if (rest) {
-      for (int i = arg_index; i < args.argc(); ++i)
-        rest->push_back(args[i]);
-      return !err;
-    }
-    // Should not get here...
-    return true;
-  }
-
- private:
-  // This is an internal class to communicate data/state between user's
-  // callback.
-  class Context;
-  void RunCallback(Argument* arg, char* value, ArgpState state);
-
-  error_t DoParse(int key, char* arg, ArgpState state);
-
-  static error_t ParserCallbackImpl(int key, char* arg, argp_state* state) {
-    auto* self = reinterpret_cast<GNUArgpParser*>(state->input);
-    return self->DoParse(key, arg, state);
-  }
-
-  static char* HelpFilterCallbackImpl(int key,
-                                          const char* text,
-                                          void* input);
-
-  // unsigned positional_count() const { return positional_count_; }
-
-  static constexpr unsigned kSpecialKeyMask = 0x1000000;
-
-  // std::unique_ptr<ArgpIndexesInfo> index_info_;
-  std::unique_ptr<GNUArgpContext> context_;
-  // int parser_flags_ = 0;
-  // unsigned positional_count_ = 0;
-  // argp argp_ = {};
-  // std::string program_doc_;
-  // std::string args_doc_;
-  // std::vector<argp_option> argp_options_;
-  // HelpFilterCallback help_filter_;
-};
-
-class GNUArgpParser::Context : public CallbackRunner::Delegate {
- public:
-  Context(const Argument* argument, const char* value, ArgpState state);
-
-  void OnCallbackError(const std::string& errmsg) override {
-    return state_.ErrorF("error parsing argument: %s", errmsg.c_str());
-  }
-
-  void OnPrintUsage() override { return state_.PrintUsage(); }
-  void OnPrintHelp() override { return state_.PrintHelp(stderr, help_flags_); }
-  bool GetValue(std::string* out) override {
-    if (has_value_) {
-      *out = value_;
-      return true;
-    }
-    return false;
-  }
-
- private:
-  const bool has_value_;
-  const Argument* arg_;
-  ArgpState state_;
-  std::string value_;
-  int help_flags_ = 0;
-};
-
-class ArgumentControllerImpl : public ArgumentController {
- public:
-  explicit ArgumentControllerImpl(
-      std::unique_ptr<ParserFactory> parser_factory);
-
-  ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
-  SubCommandHolder* GetSubCommandHolder() override {
-    return subcmd_holder_.get();
-  }
-
-  void SetOptions(std::unique_ptr<OptionsInfo> info) override {
-    SetDirty(true);
-    options_info_ = std::move(info);
-  }
-
- private:
-  // Listen to events of argumentholder and subcommand holder.
-  class ListenerImpl;
-
-  void SetDirty(bool dirty) { dirty_ = dirty; }
-  bool dirty() const { return dirty_; }
-  Parser* GetParser() override {
-    if (dirty() || !parser_) {
-      SetDirty(false);
-      parser_ = parser_factory_->CreateParser(nullptr);
-    }
-    return parser_.get();
-  }
-
-  bool dirty_ = false;
-  std::unique_ptr<ParserFactory> parser_factory_;
-  std::unique_ptr<Parser> parser_;
-  std::unique_ptr<OptionsInfo> options_info_;
-  std::unique_ptr<ArgumentHolder> main_holder_;
-  std::unique_ptr<SubCommandHolder> subcmd_holder_;
-};
-
-class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
-                                             public SubCommandHolder::Listener {
- public:
-  explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
-
- private:
-  void MarkDirty() { impl_->SetDirty(true); }
-  void OnAddArgument(Argument*) override { MarkDirty(); }
-  void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
-  void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
-  void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
-
-  ArgumentControllerImpl* impl_;
-};
-
-// struct ArgpData {
-//   int parser_flags = 0;
-//   argp argp_info = {};
-//   std::string program_doc;
-//   std::string args_doc;
-//   std::vector<argp_option> argp_options;
-// };
-
-// Public flags user can use. These are corresponding to the ARGP_XXX flags
-// passed to argp_parse().
-enum Flags {
-  kNoFlags = 0,            // The default.
-  kNoHelp = ARGP_NO_HELP,  // Don't produce --help.
-  kLongOnly = ARGP_LONG_ONLY,
-  kNoExit = ARGP_NO_EXIT,
-};
-
-// Options to ArgumentParser constructor.
-struct Options {
-  // Only the most common options are listed in this list.
-  Options() : info(new OptionsInfo) {}
-  Options& version(const char* v) {
-    info->program_version = v;
-    return *this;
-  }
-  Options& version(ProgramVersionCallback callback) {
-    info->program_version_callback = callback;
-    return *this;
-  }
-  Options& description(const char* d) {
-    info->description = d;
-    return *this;
-  }
-  Options& after_doc(const char* a) {
-    info->after_doc = a;
-    return *this;
-  }
-  Options& domain(const char* d) {
-    info->domain = d;
-    return *this;
-  }
-  Options& email(const char* b) {
-    info->email = b;
-    return *this;
-  }
-  Options& flags(Flags f) {
-    info->flags |= f;
-    return *this;
-  }
-  Options& help_filter(HelpFilterCallback cb) {
-    info->help_filter = std::move(cb);
-    return *this;
-  }
-
-  std::unique_ptr<OptionsInfo> info;
-};
-
 class SubParser : public AddArgumentGroupHelper {
  public:
   explicit SubParser(SubCommand* sub) : sub_(sub) {}
@@ -1994,6 +2194,8 @@ class MainParserHelper : public AddArgumentGroupHelper {
                         std::vector<std::string>* out) {
     return ParseArgsImpl(args, out);
   }
+
+  SubParserGroup add(subparsers& sub) {}
   // TODO: More precise signature.
   SubParserGroup add_subparsers() {
     return SubParserGroup(AddSubParsersImpl(nullptr));
@@ -2014,13 +2216,6 @@ class ArgumentParser : public MainParserHelper {
       controller_->SetOptions(std::move(options.info));
   }
 
-  const char* program_name() const { return program_invocation_name; }
-  const char* program_short_name() const {
-    return program_invocation_short_name;
-  }
-  const char* program_version() const { return argp_program_version; }
-  const char* program_bug_address() const { return argp_program_bug_address; }
-
  private:
   bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) override {
     DCHECK(out);
@@ -2040,244 +2235,5 @@ class ArgumentParser : public MainParserHelper {
 
   std::unique_ptr<ArgumentController> controller_;
 };
-
-// wstring is not supported now.
-template <>
-struct DefaultParseTraits<std::string> {
-  static void Run(const std::string& in, Result<std::string>* out) {
-    *out = in;
-  }
-};
-// char is an unquoted single character.
-template <>
-struct DefaultParseTraits<char> {
-  static void Run(const std::string& in, Result<char>* out) {
-    if (in.size() != 1)
-      return out->set_error("char must be exactly one character");
-    if (!std::isprint(in[0]))
-      return out->set_error("char must be printable");
-    *out = in[0];
-  }
-};
-template <>
-struct DefaultParseTraits<bool> {
-  static void Run(const std::string& in, Result<bool>* out) {
-    static const std::map<std::string, bool> kStringToBools{
-        {"true", true},   {"True", true},   {"1", true},
-        {"false", false}, {"False", false}, {"0", false},
-    };
-    auto iter = kStringToBools.find(in);
-    if (iter == kStringToBools.end())
-      return out->set_error("not a valid bool value");
-    *out = iter->second;
-  }
-};
-
-// For std::stof,stod,stold.
-template <typename T, T (*func)(const std::string&, std::size_t*)>
-using stl_floating_point_parser_t =
-    std::integral_constant<decltype(func), func>;
-
-// For std::stoi,stol,stoll,etc.
-template <typename T, T (*func)(const std::string&, std::size_t*, int)>
-using stl_integral_parser_t = std::integral_constant<decltype(func), func>;
-
-template <typename T>
-struct stl_number_parser : std::false_type {};
-
-template <>
-struct stl_number_parser<float>
-    : stl_floating_point_parser_t<float, std::stof> {};
-template <>
-struct stl_number_parser<double>
-    : stl_floating_point_parser_t<double, std::stod> {};
-template <>
-struct stl_number_parser<long double>
-    : stl_floating_point_parser_t<long double, std::stold> {};
-
-template <>
-struct stl_number_parser<int> : stl_integral_parser_t<int, std::stoi> {};
-template <>
-struct stl_number_parser<long> : stl_integral_parser_t<long, std::stol> {};
-template <>
-struct stl_number_parser<long long>
-    : stl_integral_parser_t<long long, std::stoll> {};
-
-template <>
-struct stl_number_parser<unsigned long>
-    : stl_integral_parser_t<unsigned long, std::stoul> {};
-template <>
-struct stl_number_parser<unsigned long long>
-    : stl_integral_parser_t<unsigned long long, std::stoull> {};
-
-template <typename T>
-using has_stl_number_parser_t =
-    std::bool_constant<bool(stl_number_parser<T>{})>;
-
-template <typename T, typename stl_number_parser<T>::value_type func>
-T StlParseNumberImpl(const std::string& in, std::false_type) {
-  return func(in, nullptr, 0);
-}
-template <typename T, typename stl_number_parser<T>::value_type func>
-T StlParseNumberImpl(const std::string& in, std::true_type) {
-  return func(in, nullptr);
-}
-template <typename T>
-T StlParseNumber(const std::string& in) {
-  static_assert(has_stl_number_parser_t<T>{});
-  return StlParseNumberImpl<T, stl_number_parser<T>{}>(
-      in, std::is_floating_point<T>{});
-}
-
-template <typename T>
-struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
-  static void Run(const std::string& in, Result<T>* out) {
-    try {
-      *out = StlParseNumber<T>(in);
-    } catch (std::invalid_argument&) {
-      out->set_error("invalid numeric format");
-    } catch (std::out_of_range&) {
-      out->set_error("numeric value out of range");
-    }
-  }
-};
-
-struct CFileOpenTraits {
-  static void Run(const std::string& in, OpenMode mode, Result<FILE*>* out);
-};
-
-template <typename T>
-struct StreamOpenTraits {
-  static void Run(const std::string& in, OpenMode mode, Result<T>* out) {
-    auto ios_mode = ModeToStreamMode(mode);
-    T stream(in, ios_mode);
-    if (stream.is_open())
-      return out->set_value(std::move(stream));
-    out->set_error(kDefaultOpenFailureMsg);
-  }
-};
-
-template <>
-struct OpenTraits<FILE*> : CFileOpenTraits {};
-template <>
-struct OpenTraits<std::fstream> : StreamOpenTraits<std::fstream> {};
-template <>
-struct OpenTraits<std::ifstream> : StreamOpenTraits<std::ifstream> {};
-template <>
-struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
-
-// For STL-compatible T, default is:
-template <typename T>
-struct DefaultAppendTraits {
-  using ValueType = typename T::value_type;
-
-  static void Run(T* obj, ValueType item) {
-    // By default use the push_back() method of T.
-    obj->push_back(item);
-  }
-};
-
-// Specialized for STL containers.
-template <typename T>
-struct AppendTraits<std::vector<T>> : DefaultAppendTraits<std::vector<T>> {};
-template <typename T>
-struct AppendTraits<std::list<T>> : DefaultAppendTraits<std::list<T>> {};
-template <typename T>
-struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
-// std::string is not considered appendable, if you need that, use
-// std::vector<char>
-
-// The purpose of MetaTypes is to provide a mechanism to summerize types as
-// metatype so that they can have the same typehint. For example, different
-// types of file object, like C FILE* and C++ streams, can all have the same
-// metatype -- file. And different types of integers can all be summerized as
-// 'int'. Our policy is to:
-// 1. If T is specialized, use TypeHintTraits<T>.
-// 2. If T's metatype is not unknown, use MetaTypeHint.
-// 3. fall back to demangle.
-// Note: number such as float, double and int, long use their own typename as
-// metatype, since it will confuse user if not.
-// As user, you can:
-// 1. Be pleasant with the default setting for your type, such std::string and
-// bool.
-// 2. Want to use a metatype, tell us by MetaTypeOf<T>.
-// 3. Want a completey new type hint, tell us by TypeHintTraits<T>.
-enum class MetaTypes {
-  kString,
-  kFile,
-  kList,
-  kNumber,
-  kBool,
-  kChar,
-  kUnknown,
-};
-
-template <MetaTypes M>
-using MetaTypeContant = std::integral_constant<MetaTypes, M>;
-
-template <typename T, typename SFINAE = void>
-struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
-
-// String.
-template <>
-struct MetaTypeOf<std::string, void> : MetaTypeContant<MetaTypes::kString> {};
-
-// Bool.
-template <>
-struct MetaTypeOf<bool, void> : MetaTypeContant<MetaTypes::kBool> {};
-
-// Char.
-template <>
-struct MetaTypeOf<char, void> : MetaTypeContant<MetaTypes::kChar> {};
-
-// File.
-template <typename T>
-struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kOpen, T>{}>>
-    : MetaTypeContant<MetaTypes::kFile> {};
-
-// List.
-template <typename T>
-struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kAppend, T>{}>>
-    : MetaTypeContant<MetaTypes::kList> {};
-
-// Number.
-template <typename T>
-struct MetaTypeOf<T, std::enable_if_t<has_stl_number_parser_t<T>{}>>
-    : MetaTypeContant<MetaTypes::kNumber> {};
-
-// If you get unhappy with this default handling, for example,
-// you want number to be "number", you can specialize this.
-template <typename T, MetaTypes M = MetaTypeOf<T>{}>
-struct MetaTypeHint {
-  static std::string Run() {
-    switch (M) {
-      case MetaTypes::kFile:
-        return "file";
-      case MetaTypes::kString:
-        return "string";
-      case MetaTypes::kBool:
-        return "bool";
-      case MetaTypes::kChar:
-        return "char";
-      case MetaTypes::kNumber:
-        return TypeName<T>();
-      default:
-        // List
-        DCHECK(false);
-    }
-  }
-};
-
-template <typename T>
-struct MetaTypeHint<T, MetaTypes::kList> {
-  static std::string Run() {
-    return "list[" + TypeHint<ValueTypeOf<T>>() + "]";
-  }
-};
-
-template <typename T>
-struct DefaultTypeHint<T,
-                       std::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
-    : MetaTypeHint<T> {};
 
 }  // namespace argparse
