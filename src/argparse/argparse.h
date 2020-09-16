@@ -858,40 +858,83 @@ struct NamesInfoImpl {
   explicit NamesInfoImpl(std::vector<const char*> names);
 };
 
-struct NumArgsInfoImpl {
-  unsigned lower_bound;
-  unsigned upper_bound;
-  static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
+class NumArgsInfo {
+ public:
+  virtual ~NumArgsInfo() {}
+  // Run() checks if num is valid by returning bool.
+  // If invalid, error msg will be set.
+  virtual bool Run(unsigned num, std::string* errmsg) = 0;
+  static std::unique_ptr<NumArgsInfo> CreateFromFlag(char flag);
+  static std::unique_ptr<NumArgsInfo> CreateFromNum(int num);
+};
 
-  explicit NumArgsInfoImpl(int num) : lower_bound(num), upper_bound(num) {}
+class NumArgsInfoImpl : public NumArgsInfo {
+public:
+  explicit NumArgsInfoImpl(int num) : lower_bound_(num), upper_bound_(num) {}
   explicit NumArgsInfoImpl(char flag) {
     switch (flag) {
       case '+':
-        lower_bound = 1;
-        upper_bound = kMax;
+        lower_bound_ = 1;
+        upper_bound_ = kMax;
         break;
       case '?':
-        lower_bound = 0;
-        upper_bound = 1;
+        lower_bound_ = 0;
+        upper_bound_ = 1;
       case '*':
-        lower_bound = 0;
-        upper_bound = kMax;
+        lower_bound_ = 0;
+        upper_bound_ = kMax;
       default:
         ARGPARSE_DCHECK(false);
         break;
     }
   }
+
+  bool Run(unsigned num, std::string* errmsg) override { return false; }
+
+ private:
+  static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
+  unsigned lower_bound_;
+  unsigned upper_bound_;
 };
 
-struct DestInfoImpl {
-  DestPtr dest_ptr;
-  std::unique_ptr<OpsFactory> ops_factory;
-  std::unique_ptr<Operations> ops;
+inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
+  return std::make_unique<NumArgsInfoImpl>(flag);
+}
+inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
+  return std::make_unique<NumArgsInfoImpl>(num);
+}
 
+class DestInfo {
+ public:
+  virtual ~DestInfo() {}
+  // For action.
+  virtual DestPtr GetDestPtr() = 0;
+  // For default value formatting.
+  virtual std::string FormatValue(const Any& in) = 0;
+  // For providing default ops for type and action.
+  virtual OpsFactory* GetOpsFactory() = 0;
+
+  template <typename T>
+  static std::unique_ptr<DestInfo> CreateFromPtr(T* ptr);
+};
+
+class DestInfoImpl : public DestInfo {
+ public:
   DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
-      : dest_ptr(d), ops_factory(std::move(f)) {
-    ops = ops_factory->Create();
+      : dest_ptr_(d), ops_factory_(std::move(f)) {
+    ops_ = ops_factory_->Create();
   }
+
+  DestPtr GetDestPtr() override { return dest_ptr_; }
+  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
+  std::string FormatValue(const Any& in) override {
+    return ops_->FormatValue(in);
+  }
+
+ private:
+  DestPtr dest_ptr_;
+  std::unique_ptr<OpsFactory> ops_factory_;
+  std::unique_ptr<Operations> ops_;
 };
 
 struct ActionInfoImpl {
@@ -952,7 +995,7 @@ class Argument {
   virtual void SetRequired(bool required) = 0;
   virtual void SetHelpDoc(std::string help_doc) = 0;
   virtual void SetMetaVar(std::string meta_var) = 0;
-  virtual void SetDest(std::unique_ptr<DestInfoImpl> dest) = 0;
+  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
   virtual void SetType(std::unique_ptr<TypeInfoImpl> info) = 0;
   virtual void SetAction(std::unique_ptr<ActionInfoImpl> info) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
@@ -1320,8 +1363,15 @@ class OpsFactoryImpl : public OpsFactory {
 };
 
 template <typename T>
-std::unique_ptr<OpsFactory> CreateOperationsFactory() {
+std::unique_ptr<OpsFactory> CreateOpsFactory() {
   return std::make_unique<OpsFactoryImpl<T>>();
+}
+
+template <typename T>
+std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
+  ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
+  return std::make_unique<DestInfoImpl>(DestPtr(ptr),
+                                        CreateOpsFactory<T>());
 }
 
 // Holds all meta-info about an argument.
@@ -1364,7 +1414,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   void SetMetaVar(std::string meta_var) override {
     names_info_->meta_var = std::move(meta_var);
   }
-  void SetDest(std::unique_ptr<DestInfoImpl> info) override {
+  void SetDest(std::unique_ptr<DestInfo> info) override {
     ARGPARSE_DCHECK(info);
     dest_info_ = std::move(info);
   }
@@ -1420,7 +1470,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   }
   const DestPtr& dest_ptr() const {
     ARGPARSE_DCHECK(dest_info_);
-    return dest_info_->dest_ptr;
+    // return dest_info_->dest_ptr_;
   }
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
@@ -1430,7 +1480,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   std::string help_doc_;
   bool is_required_ = false;
 
-  std::unique_ptr<DestInfoImpl> dest_info_;
+  std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfoImpl> action_info_;
   std::unique_ptr<TypeInfoImpl> type_info_;
   std::unique_ptr<NumArgsInfoImpl> num_args_;
@@ -1752,14 +1802,10 @@ struct Action {
 };
 
 struct Dest {
-  std::unique_ptr<DestInfoImpl> info;
-
+  std::unique_ptr<DestInfo> info;
   Dest() = default;
   template <typename T>
-  Dest(T* ptr)
-      : info(new DestInfoImpl(DestPtr(ptr), CreateOperationsFactory<T>())) {
-    ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
-  }
+  Dest(T* ptr) : info(DestInfo::CreateFromPtr(ptr)) {}
 };
 
 struct AnyValue {

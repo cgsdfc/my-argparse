@@ -198,9 +198,9 @@ void ArgumentImpl::InitAction() {
   }
 
   // Ops of action is always created from dest's ops-factory.
-  ARGPARSE_DCHECK(dest_info_ && dest_info_->ops_factory);
-  ARGPARSE_DCHECK(!action_info_->ops);
-  action_info_->ops = dest_info_->ops_factory->Create();
+  // ARGPARSE_DCHECK(dest_info_ && dest_info_->ops_factory);
+  // ARGPARSE_DCHECK(!action_info_->ops);
+  // action_info_->ops = dest_info_->ops_factory->Create();
 
   // See if Ops supports this action.
   auto* action_ops = action_info_->ops.get();
@@ -250,10 +250,10 @@ void ArgumentImpl::InitType() {
 
   // Create type_ops_.
   if (!type_info_->ops) {
-    auto* ops_factory = dest_info_->ops_factory.get();
-    type_info_->ops = action_info_->action_code == ActionKind::kAppend
-                          ? ops_factory->CreateValueTypeOps()
-                          : ops_factory->Create();
+    // auto* ops_factory = dest_info_->ops_factory.get();
+    // type_info_->ops = action_info_->action_code == ActionKind::kAppend
+    //                       ? ops_factory->CreateValueTypeOps()
+    //                       : ops_factory->Create();
   }
 
   // See if type_code_ is supported.
@@ -288,7 +288,7 @@ void ArgumentImpl::Initialize() {
 bool ArgumentImpl::GetTypeHint(std::string* out) {
   // The type of default value is always the type of dest.
   if (default_value_ && dest_info_) {
-    *out = dest_info_->ops->FormatValue(*default_value_);
+    // *out = dest_info_->ops->FormatValue(*default_value_);
     return true;
   }
   return false;
