@@ -632,7 +632,28 @@ struct NamesInfo {
 };
 
 struct NumArgsInfo {
+  unsigned lower_bound;
+  unsigned upper_bound;
+  static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
 
+  explicit NumArgsInfo(int num) : lower_bound(num), upper_bound(num) {}
+  explicit NumArgsInfo(char flag) {
+    switch (flag) {
+      case '+':
+        lower_bound = 1;
+        upper_bound = kMax;
+        break;
+      case '?':
+        lower_bound = 0;
+        upper_bound = 1;
+      case '*':
+        lower_bound = 0;
+        upper_bound = kMax;
+      default:
+        DCHECK(false);
+        break;
+    }
+  }
 };
 
 struct DestInfo {
@@ -699,6 +720,7 @@ class Argument {
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
   virtual void SetGroup(ArgumentGroup* group) = 0;
+  virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
 
   virtual void Initialize() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
@@ -1176,6 +1198,11 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     group_ = group;
   }
 
+  void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
+    DCHECK(info);
+    num_args_ = std::move(info);
+  }
+
   bool GetTypeHint(std::string* out) override;
   bool FormatDefaultValue(std::string* out) override;
 
@@ -1444,6 +1471,12 @@ struct AnyValue {
   AnyValue(T&& val) : data(MakeAny(std::forward<T>(val))) {}
 };
 
+struct NumArgs {
+  std::unique_ptr<NumArgsInfo> info;
+  NumArgs(char flag) : info(new NumArgsInfo(flag)) {}
+  NumArgs(int num) : info(new NumArgsInfo(num)) {}
+};
+
 bool IsValidPositionalName(const char* name, std::size_t len);
 
 // A valid option name is long or short option name and not '--', '-'.
@@ -1517,6 +1550,10 @@ class argument {
   argument& meta_var(const char* v) {
     if (v)
       arg_->SetMetaVar(v);
+    return *this;
+  }
+  argument& num_args(NumArgs n) {
+    arg_->SetNumArgs(std::move(n.info));
     return *this;
   }
 
