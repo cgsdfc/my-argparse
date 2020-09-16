@@ -846,25 +846,25 @@ class CallbackRunner {
 };
 
 // TODO: make these info class abstract.
-struct NamesInfo {
+struct NamesInfoImpl {
   bool is_option = false;
   std::vector<std::string> long_names;
   std::vector<char> short_names;
   std::string meta_var;
 
   // Positional.
-  explicit NamesInfo(std::string name);
+  explicit NamesInfoImpl(std::string name);
   // Option.
-  explicit NamesInfo(std::vector<const char*> names);
+  explicit NamesInfoImpl(std::vector<const char*> names);
 };
 
-struct NumArgsInfo {
+struct NumArgsInfoImpl {
   unsigned lower_bound;
   unsigned upper_bound;
   static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
 
-  explicit NumArgsInfo(int num) : lower_bound(num), upper_bound(num) {}
-  explicit NumArgsInfo(char flag) {
+  explicit NumArgsInfoImpl(int num) : lower_bound(num), upper_bound(num) {}
+  explicit NumArgsInfoImpl(char flag) {
     switch (flag) {
       case '+':
         lower_bound = 1;
@@ -943,7 +943,7 @@ class Argument {
   const char* GetMetaVar() { return GetNamesInfo()->meta_var.c_str(); }
   bool IsOption() { return GetNamesInfo()->is_option; }
   virtual ArgumentGroup* GetGroup() = 0;
-  virtual const NamesInfo* GetNamesInfo() = 0;
+  virtual const NamesInfoImpl* GetNamesInfo() = 0;
   // If a typehint exists, return true and set out.
   virtual bool GetTypeHint(std::string* out) = 0;
   // If a default-value exists, return true and set out.
@@ -958,14 +958,14 @@ class Argument {
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
   virtual void SetGroup(ArgumentGroup* group) = 0;
-  virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
+  virtual void SetNumArgs(std::unique_ptr<NumArgsInfoImpl> info) = 0;
 
   virtual void Initialize() = 0;
   virtual CallbackRunner* GetCallbackRunner() = 0;
   virtual bool Before(const Argument* that) const = 0;
 
   virtual ~Argument() {}
-  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
+  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfoImpl> info);
 };
 
 // Return value of help filter function.
@@ -1327,11 +1327,11 @@ std::unique_ptr<OpsFactory> CreateOperationsFactory() {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument, public CallbackRunner {
  public:
-  explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
+  explicit ArgumentImpl(std::unique_ptr<NamesInfoImpl> names)
       : names_info_(std::move(names)) {}
 
   ArgumentGroup* GetGroup() override { return group_; }
-  const NamesInfo* GetNamesInfo() override { return names_info_.get(); }
+  const NamesInfoImpl* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required(); }
   bool is_option() const { return names_info_->is_option; }
   bool is_required() const { return is_required_; }
@@ -1390,7 +1390,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     group_ = group;
   }
 
-  void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
+  void SetNumArgs(std::unique_ptr<NumArgsInfoImpl> info) override {
     ARGPARSE_DCHECK(info);
     num_args_ = std::move(info);
   }
@@ -1425,7 +1425,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
-  std::unique_ptr<NamesInfo> names_info_;
+  std::unique_ptr<NamesInfoImpl> names_info_;
   ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
   bool is_required_ = false;
@@ -1433,13 +1433,13 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   std::unique_ptr<DestInfoImpl> dest_info_;
   std::unique_ptr<ActionInfoImpl> action_info_;
   std::unique_ptr<TypeInfoImpl> type_info_;
-  std::unique_ptr<NumArgsInfo> num_args_;
+  std::unique_ptr<NumArgsInfoImpl> num_args_;
   std::unique_ptr<Any> const_value_;
   std::unique_ptr<Any> default_value_;
 };
 
 inline std::unique_ptr<Argument> Argument::Create(
-    std::unique_ptr<NamesInfo> info) {
+    std::unique_ptr<NamesInfoImpl> info) {
   ARGPARSE_DCHECK(info);
   return std::make_unique<ArgumentImpl>(std::move(info));
 }
@@ -1488,7 +1488,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
     return groups_[kPositionalGroup].get();
   }
 
-  bool CheckNamesConflict(const NamesInfo& names);
+  bool CheckNamesConflict(const NamesInfoImpl& names);
 
   std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
@@ -1771,9 +1771,9 @@ struct AnyValue {
 };
 
 struct NumArgs {
-  std::unique_ptr<NumArgsInfo> info;
-  NumArgs(char flag) : info(new NumArgsInfo(flag)) {}
-  NumArgs(int num) : info(new NumArgsInfo(num)) {}
+  std::unique_ptr<NumArgsInfoImpl> info;
+  NumArgs(char flag) : info(new NumArgsInfoImpl(flag)) {}
+  NumArgs(int num) : info(new NumArgsInfoImpl(num)) {}
 };
 
 bool IsValidPositionalName(const char* name, std::size_t len);
@@ -1800,7 +1800,7 @@ inline std::string ToUpper(const std::string& in) {
 }
 
 struct Names {
-  std::unique_ptr<NamesInfo> info;
+  std::unique_ptr<NamesInfoImpl> info;
   Names(const char* name);
   Names(std::initializer_list<const char*> names);
 };

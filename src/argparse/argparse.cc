@@ -14,13 +14,13 @@ GNUArgpParser::Context::Context(const Argument* argument,
     this->value_.assign(value);
 }
 
-NamesInfo::NamesInfo(std::string name) {
+NamesInfoImpl::NamesInfoImpl(std::string name) {
   is_option = false;
   meta_var = ToUpper(name);
   long_names.push_back(std::move(name));
 }
 
-NamesInfo::NamesInfo(std::vector<const char*> names) {
+NamesInfoImpl::NamesInfoImpl(std::vector<const char*> names) {
   is_option = true;
   for (auto name : names) {
     std::size_t len = std::strlen(name);
@@ -45,18 +45,18 @@ NamesInfo::NamesInfo(std::vector<const char*> names) {
 
 Names::Names(const char* name) {
   if (name[0] == '-') {
-    info.reset(new NamesInfo(std::vector<const char*>{name}));
+    info.reset(new NamesInfoImpl(std::vector<const char*>{name}));
     return;
   }
   auto len = std::strlen(name);
   ARGPARSE_CHECK_F(IsValidPositionalName(name, len),
                    "Not a valid positional name: %s", name);
-  info.reset(new NamesInfo(name));
+  info.reset(new NamesInfoImpl(name));
 }
 
 Names::Names(std::initializer_list<const char*> names) {
   ARGPARSE_CHECK_F(names.size(), "At least one name must be provided");
-  info.reset(new NamesInfo(names));
+  info.reset(new NamesInfoImpl(names));
 }
 
 // ArgumentImpl:
@@ -465,7 +465,7 @@ ArgumentHolderImpl::ArgumentHolderImpl() {
   AddArgumentGroup("positional arguments");
 }
 
-bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
+bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfoImpl& names) {
   for (auto&& long_name : names.long_names)
     if (!name_set_.insert(long_name).second)
       return false;
