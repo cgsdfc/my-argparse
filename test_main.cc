@@ -35,5 +35,4 @@ int main(int argc, char const* argv[]) {
 
   // int input;
   // parser.add_argument("input", &input, "input");
-  ARGPARSE_DCHECK_F(false, "a string %s", "hhh");
 }

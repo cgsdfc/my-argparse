@@ -33,6 +33,7 @@
 #define ARGPARSE_CHECK_F(expr, format, ...) \
   ARGPARSE_CHECK_IMPL((expr), (format), ##__VA_ARGS__)
 
+// If no format, use the stringified expr.
 #define ARGPARSE_CHECK(expr) ARGPARSE_CHECK_IMPL((expr), "%s", #expr)
 
 #ifdef NDEBUG  // Not debug
@@ -586,8 +587,10 @@ struct OpenTraits<std::ofstream> : StreamOpenTraits<std::ofstream> {};
 // For STL-compatible T, by default use the push_back() method of T.
 template <typename T>
 struct DefaultAppendTraits {
-  using ValueType = typename T::value_type;
-  static void Run(T* obj, ValueType item) { obj->push_back(item); }
+  using ValueType = ValueTypeOf<T>;
+  static void Run(T* obj, ValueType item) {
+    obj->push_back(std::move_if_noexcept(item));
+  }
 };
 
 // Specialized for STL containers.
@@ -902,17 +905,17 @@ struct ActionInfo {
       : action_code(ActionKind::kCustom), callback(std::move(cb)) {}
 };
 
-struct TypeInfo {
+struct TypeInfoImpl {
   TypeKind type_code = TypeKind::kNothing;
   std::unique_ptr<Operations> ops;
   std::unique_ptr<TypeCallback> callback;
   OpenMode mode = kModeNoMode;
 
-  TypeInfo() = default;
-  explicit TypeInfo(OpenMode m) : type_code(TypeKind::kOpen), mode(m) {}
-  explicit TypeInfo(std::unique_ptr<TypeCallback> cb)
+  TypeInfoImpl() = default;
+  explicit TypeInfoImpl(OpenMode m) : type_code(TypeKind::kOpen), mode(m) {}
+  explicit TypeInfoImpl(std::unique_ptr<TypeCallback> cb)
       : type_code(TypeKind::kCustom), callback(std::move(cb)) {}
-  explicit TypeInfo(std::unique_ptr<Operations> ops)
+  explicit TypeInfoImpl(std::unique_ptr<Operations> ops)
       : type_code(TypeKind::kParse), ops(std::move(ops)) {}
 };
 
@@ -940,7 +943,7 @@ class Argument {
   virtual void SetHelpDoc(std::string help_doc) = 0;
   virtual void SetMetaVar(std::string meta_var) = 0;
   virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
+  virtual void SetType(std::unique_ptr<TypeInfoImpl> info) = 0;
   virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
@@ -1355,7 +1358,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     ARGPARSE_DCHECK(info);
     dest_info_ = std::move(info);
   }
-  void SetType(std::unique_ptr<TypeInfo> info) override {
+  void SetType(std::unique_ptr<TypeInfoImpl> info) override {
     ARGPARSE_DCHECK(info);
     type_info_ = std::move(info);
   }
@@ -1419,7 +1422,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
 
   std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfo> action_info_;
-  std::unique_ptr<TypeInfo> type_info_;
+  std::unique_ptr<TypeInfoImpl> type_info_;
   std::unique_ptr<NumArgsInfo> num_args_;
   std::unique_ptr<Any> const_value_;
   std::unique_ptr<Any> default_value_;
@@ -1691,26 +1694,26 @@ class FileType {
 };
 
 struct Type {
-  std::unique_ptr<TypeInfo> info;
+  std::unique_ptr<TypeInfoImpl> info;
 
   Type() = default;
   Type(Type&&) = default;
 
   // To explicitly request a type, use Type<double>().
   template <typename T>
-  Type() : info(new TypeInfo(CreateOperations<T>())) {}
+  Type() : info(new TypeInfoImpl(CreateOperations<T>())) {}
 
   // Use it to provide your own TypeCallback impl.
   Type(TypeCallback* cb)
-      : info(new TypeInfo(std::unique_ptr<TypeCallback>(cb))) {}
+      : info(new TypeInfoImpl(std::unique_ptr<TypeCallback>(cb))) {}
 
   // Use FileType("rw") to request opening a file to read/write.
-  Type(FileType file_type) : info(new TypeInfo(file_type.mode())) {}
+  Type(FileType file_type) : info(new TypeInfoImpl(file_type.mode())) {}
 
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
   Type(Callback&& cb)
-      : info(new TypeInfo(CreateTypeCallback(std::forward<Callback>(cb)))) {}
+      : info(new TypeInfoImpl(CreateTypeCallback(std::forward<Callback>(cb)))) {}
 };
 
 ActionKind StringToActions(const std::string& str);

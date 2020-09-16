@@ -219,7 +219,7 @@ void ArgumentImpl::InitAction() {
 
 void ArgumentImpl::InitType() {
   if (!type_info_) {
-    type_info_ = std::make_unique<TypeInfo>();
+    type_info_ = std::make_unique<TypeInfoImpl>();
   }
 
   if (type_info_->type_code == TypeKind::kCustom) {
@@ -888,7 +888,7 @@ void ArgpCompiler::CompileArgumentIndexes(ArgpIndexesInfo* out) {
 //     ARGPARSE_DCHECK(info);
 //     cb_info_->dest_info_ = std::move(info);
 //   }
-//   void SetType(std::unique_ptr<TypeInfo> info) override {
+//   void SetType(std::unique_ptr<TypeInfoImpl> info) override {
 //     ARGPARSE_DCHECK(info);
 //     cb_info_->type_info_ = std::move(info);
 //   }
