@@ -1791,35 +1791,6 @@ using ::error_t;
 using ::program_invocation_name;
 using ::program_invocation_short_name;
 
-// TODO: Don't need this wrapper.
-// Wrapper of argp_state.
-class ArgpState {
- public:
-  ArgpState(argp_state* state) : state_(state) {}
-  void PrintHelp(FILE* file, unsigned flags) {
-    argp_state_help(state_, file, flags);
-  }
-  void PrintUsage() { argp_usage(state_); }
-
-  template <typename... Args>
-  void ErrorF(const char* fmt, Args... args) {
-    return argp_error(state_, fmt, args...);
-  }
-  void Error(const std::string& msg) { return ErrorF("%s", msg.c_str()); }
-
-  template <typename... Args>
-  void FailureF(int status, int errnum, const char* fmt, Args... args) {
-    return argp_failure(state_, status, errnum, fmt, args...);
-  }
-  void Failure(int status, int errnum, const std::string& msg) {
-    return FailureF(status, errnum, "%s", msg.c_str());
-  }
-  argp_state* operator->() { return state_; }
-
- private:
-  argp_state* state_;
-};
-
 // All the data elements needs by argp.
 // Created by Compiler and kept alive by Parser.
 class GNUArgpContext {
@@ -1909,9 +1880,9 @@ class GNUArgpParser : public Parser {
   // This is an internal class to communicate data/state between user's
   // callback.
   class Context;
-  void RunCallback(Argument* arg, char* value, ArgpState state);
+  void RunCallback(Argument* arg, char* value, argp_state* state);
 
-  error_t DoParse(int key, char* arg, ArgpState state);
+  error_t DoParse(int key, char* arg, argp_state* state);
 
   static error_t ParserCallbackImpl(int key, char* arg, argp_state* state) {
     auto* self = reinterpret_cast<GNUArgpParser*>(state->input);
@@ -1937,14 +1908,17 @@ class GNUArgpParser : public Parser {
 
 class GNUArgpParser::Context : public CallbackRunner::Delegate {
  public:
-  Context(const Argument* argument, const char* value, ArgpState state);
+  Context(const Argument* argument, const char* value, argp_state* state);
 
   void OnCallbackError(const std::string& errmsg) override {
-    return state_.ErrorF("error parsing argument: %s", errmsg.c_str());
+    return argp_error(state_, "error parsing argument: %s", errmsg.c_str());
   }
 
-  void OnPrintUsage() override { return state_.PrintUsage(); }
-  void OnPrintHelp() override { return state_.PrintHelp(stderr, help_flags_); }
+  void OnPrintUsage() override { return argp_usage(state_); }
+  void OnPrintHelp() override {
+    return argp_state_help(state_, stderr, help_flags_);
+  }
+
   bool GetValue(std::string* out) override {
     if (has_value_) {
       *out = value_;
@@ -1956,7 +1930,7 @@ class GNUArgpParser::Context : public CallbackRunner::Delegate {
  private:
   const bool has_value_;
   const Argument* arg_;
-  ArgpState state_;
+  argp_state* state_;
   std::string value_;
   int help_flags_ = 0;
 };

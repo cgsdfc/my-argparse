@@ -8,7 +8,7 @@ namespace argparse {
 
 GNUArgpParser::Context::Context(const Argument* argument,
                                  const char* value,
-                                 ArgpState state)
+                                 argp_state* state)
     : has_value_(bool(value)), arg_(argument), state_(state) {
   if (has_value_)
     this->value_.assign(value);
@@ -328,7 +328,7 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   argp_.args_doc = args_doc_.c_str();
 // }
 
-// void ArgpParserImpl::RunCallback(Argument* arg, char* value, ArgpState state) {
+// void ArgpParserImpl::RunCallback(Argument* arg, char* value, argp_state* state) {
 //   arg->GetCallbackRunner()->RunCallback(
 //       std::make_unique<Context>(arg, value, state));
 // }
@@ -380,7 +380,7 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   return false;
 // }
 
-error_t GNUArgpParser::DoParse(int key, char* arg, ArgpState state) {
+error_t GNUArgpParser::DoParse(int key, char* arg, argp_state* state) {
   // Positional argument.
   // if (key == ARGP_KEY_ARG) {
   //   const int arg_num = state->arg_num;
