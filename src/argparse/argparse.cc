@@ -725,10 +725,9 @@ const char* TypeNameImpl(const std::type_info& type) {
   return g_typenames[type].c_str();
 }
 
-void CheckImpl(bool cond, SourceLocation loc, const char* fmt, ...) {
-  if (cond)
-    return;
-  std::fprintf(stderr, "Error at %s:%d: ", loc.filename, loc.line);
+void CheckFailed(SourceLocation loc, const char* fmt, ...) {
+  std::fprintf(stderr, "Error at %s:%d:%s: ", loc.filename, loc.line,
+               loc.function);
 
   va_list ap;
   va_start(ap, fmt);

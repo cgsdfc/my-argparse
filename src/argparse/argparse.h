@@ -23,11 +23,17 @@
 #include <fmt/core.h>
 #endif
 
+#define ARGPARSE_CHECK_IMPL(condition, format, ...)                         \
+  do {                                                                      \
+    if (!static_cast<bool>(condition))                                      \
+      CheckFailed({__LINE__, __FILE__, __func__}, (format), ##__VA_ARGS__); \
+  } while (0)
+
 // Perform a runtime check for user's error.
 #define ARGPARSE_CHECK_F(expr, format, ...) \
-  CheckImpl(bool(expr), {__LINE__, __FILE__}, (format), ##__VA_ARGS__)
+  ARGPARSE_CHECK_IMPL((expr), (format), ##__VA_ARGS__)
 
-#define ARGPARSE_CHECK(expr) CheckImpl(bool(expr), {__LINE__, __FILE__}, #expr)
+#define ARGPARSE_CHECK(expr) ARGPARSE_CHECK_IMPL((expr), "%s", #expr)
 
 #ifdef NDEBUG  // Not debug
 #define ARGPARSE_DCHECK(expr) ((void)(expr))
@@ -46,14 +52,13 @@ class ArgumentGroup;
 struct SourceLocation {
   int line;
   const char* filename;
+  const char* function;
 };
 
 // When an meaningless type is needed.
 struct NoneType {};
 
-// TODO: replace with ARGPARSE_CHECK(), CHECK_F, ARGPARSE_DCHECK(),
-// ARGPARSE_DCHECK_F()
-void CheckImpl(bool cond, SourceLocation loc, const char* fmt, ...);
+[[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
 
 // Result<T> handles user' returned value and error using a union.
 template <typename T>
