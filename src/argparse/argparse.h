@@ -23,12 +23,20 @@
 #include <fmt/core.h>
 #endif
 
-#define DCHECK(expr) assert(expr)
-#define DCHECK2(expr, msg) assert(expr&& msg)
-
 // Perform a runtime check for user's error.
-#define CHECK_USER(expr, format, ...) \
-  CheckUserError(bool(expr), {__LINE__, __FILE__}, (format), ##__VA_ARGS__)
+#define ARGPARSE_CHECK_F(expr, format, ...) \
+  CheckImpl(bool(expr), {__LINE__, __FILE__}, (format), ##__VA_ARGS__)
+
+#define ARGPARSE_CHECK(expr) CheckImpl(bool(expr), {__LINE__, __FILE__}, #expr)
+
+#ifdef NDEBUG  // Not debug
+#define ARGPARSE_DCHECK(expr) ((void)(expr))
+#define ARGPARSE_DCHECK_F(expr, format, ...) ((void)(expr))
+#else
+#define ARGPARSE_DCHECK(expr) ARGPARSE_CHECK(expr)
+#define ARGPARSE_DCHECK_F(expr, format, ...) \
+  ARGPARSE_CHECK_F(expr, format, ##__VA_ARGS__)
+#endif
 
 namespace argparse {
 
@@ -43,18 +51,21 @@ struct SourceLocation {
 // When an meaningless type is needed.
 struct NoneType {};
 
-// TODO: replace with CHECK(), CHECK_F, DCHECK(), DCHECK_F()
-void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...);
+// TODO: replace with ARGPARSE_CHECK(), CHECK_F, ARGPARSE_DCHECK(),
+// ARGPARSE_DCHECK_F()
+void CheckImpl(bool cond, SourceLocation loc, const char* fmt, ...);
 
 // Result<T> handles user' returned value and error using a union.
 template <typename T>
 class Result {
  public:
   // Default is empty (!has_value && !has_error).
-  Result() { DCHECK(empty()); }
+  Result() { ARGPARSE_DCHECK(empty()); }
   // To hold a value.
-  explicit Result(T&& val) : data_(std::move(val)) { DCHECK(has_value()); }
-  explicit Result(const T& val) : data_(val) { DCHECK(has_value()); }
+  explicit Result(T&& val) : data_(std::move(val)) {
+    ARGPARSE_DCHECK(has_value());
+  }
+  explicit Result(const T& val) : data_(val) { ARGPARSE_DCHECK(has_value()); }
 
   // For now just use default. If T can't be moved, will it still work?
   Result(Result&&) = default;
@@ -65,19 +76,19 @@ class Result {
 
   void set_error(const std::string& msg) {
     data_.template emplace<kErrorMsgIndex>(msg);
-    DCHECK(has_error());
+    ARGPARSE_DCHECK(has_error());
   }
   void set_error(std::string&& msg) {
     data_.template emplace<kErrorMsgIndex>(std::move(msg));
-    DCHECK(has_error());
+    ARGPARSE_DCHECK(has_error());
   }
   void set_value(const T& val) {
     data_.template emplace<kValueIndex>(val);
-    DCHECK(has_value());
+    ARGPARSE_DCHECK(has_value());
   }
   void set_value(T&& val) {
     data_.template emplace<kValueIndex>(std::move(val));
-    DCHECK(has_value());
+    ARGPARSE_DCHECK(has_value());
   }
 
   Result& operator=(const T& val) {
@@ -91,29 +102,29 @@ class Result {
 
   // Release the err-msg (if any). Keep in error state.
   std::string release_error() {
-    DCHECK(has_error());
+    ARGPARSE_DCHECK(has_error());
     // We know that std::string is moveable.
     return std::get<kErrorMsgIndex>(std::move(data_));
   }
   const std::string& get_error() const {
-    DCHECK(has_error());
+    ARGPARSE_DCHECK(has_error());
     return std::get<kErrorMsgIndex>(data_);
   }
 
   // Release the value, Keep in value state.
   T release_value() {
-    DCHECK(has_value());
+    ARGPARSE_DCHECK(has_value());
     // But we don't know T is moveable or not.
     return std::get<kValueIndex>(std::move_if_noexcept(data_));
   }
   const T& get_value() const {
-    DCHECK(has_value());
+    ARGPARSE_DCHECK(has_value());
     return std::get<kValueIndex>(data_);
   }
   // Goes back to empty state.
   void reset() {
     data_.template emplace<kEmptyIndex>(NoneType{});
-    DCHECK(empty());
+    ARGPARSE_DCHECK(empty());
   }
 
  private:
@@ -151,11 +162,11 @@ class AnyImpl : public Any {
   const T& value() const { return value_; }
 
   static AnyImpl* FromAny(Any* any) {
-    DCHECK(any && any->GetType() == typeid(T));
+    ARGPARSE_DCHECK(any && any->GetType() == typeid(T));
     return static_cast<AnyImpl*>(any);
   }
   static const AnyImpl& FromAny(const Any& any) {
-    DCHECK(any.GetType() == typeid(T));
+    ARGPARSE_DCHECK(any.GetType() == typeid(T));
     return static_cast<const AnyImpl&>(any);
   }
 
@@ -176,7 +187,7 @@ AnyImpl<T> MakeAnyOnStack(T&& val) {
 
 template <typename T>
 T AnyCast(std::unique_ptr<Any> any) {
-  DCHECK(any);
+  ARGPARSE_DCHECK(any);
   return AnyImpl<T>::FromAny(any.get())->ReleaseValue();
 }
 
@@ -329,8 +340,8 @@ struct StringStreamFormatTraits {
   static std::string Run(const T& in) {
     std::ostringstream os;
     os << in;
-    CHECK_USER(os.good(), "error formatting type %s: std::ostream failed",
-               TypeName<T>());
+    ARGPARSE_CHECK_F(os.good(), "error formatting type %s: std::ostream failed",
+                     TypeName<T>());
     return os.str();
   }
 };
@@ -672,7 +683,7 @@ struct MetaTypeHint {
         return TypeName<T>();
       default:
         // List
-        DCHECK(false);
+        ARGPARSE_DCHECK(false);
     }
   }
 };
@@ -699,7 +710,7 @@ class DestPtr {
   // Copy content to out.
   template <typename T>
   const T& load() const {
-    DCHECK(type_ == typeid(T));
+    ARGPARSE_DCHECK(type_ == typeid(T));
     return *reinterpret_cast<const T*>(ptr_);
   }
   template <typename T>
@@ -709,7 +720,7 @@ class DestPtr {
 
   template <typename T>
   T* load_ptr() const {
-    DCHECK(type_ == typeid(T));
+    ARGPARSE_DCHECK(type_ == typeid(T));
     return reinterpret_cast<T*>(ptr_);
   }
   template <typename T>
@@ -720,7 +731,7 @@ class DestPtr {
   template <typename T>
   void store(T&& val) {
     using Type = std::remove_reference_t<T>;
-    DCHECK(type_ == typeid(Type));
+    ARGPARSE_DCHECK(type_ == typeid(Type));
     *reinterpret_cast<T*>(ptr_) = std::forward<T>(val);
   }
 
@@ -858,7 +869,7 @@ struct NumArgsInfo {
         lower_bound = 0;
         upper_bound = kMax;
       default:
-        DCHECK(false);
+        ARGPARSE_DCHECK(false);
         break;
     }
   }
@@ -965,7 +976,7 @@ class ArgArray {
 
   char** argv() const { return argv_; }
   char* operator[](std::size_t i) {
-    DCHECK(i < argc());
+    ARGPARSE_DCHECK(i < argc());
     return argv()[i];
   }
 
@@ -1015,7 +1026,7 @@ struct SubCommandInfo {
   SubCommandInfo(const char* name_,
                  const char* help,
                  std::vector<std::string> alias) {
-    DCHECK(name_);
+    ARGPARSE_DCHECK(name_);
     name.assign(name_);
     if (help)
       help_doc.assign(help);
@@ -1146,7 +1157,7 @@ template <OpsKind Ops, typename T>
 struct OpsImpl<Ops, T, false> {
   template <typename... Args>
   static void Run(Args&&...) {
-    CHECK_USER(
+    ARGPARSE_CHECK_F(
         false,
         "Operation %s is not supported by type %s. Please specialize one of "
         "AppendTraits, ParseTraits and OpenTraits, or pass in a callback.",
@@ -1223,7 +1234,7 @@ bool OpsIsSupportedImpl(OpsKind ops, std::index_sequence<OpsIndices...>) {
   static constexpr bool kArray[kMaxOps] = {
       (IsOpsSupported<static_cast<OpsKind>(OpsIndices), T>{})...};
   auto index = std::size_t(ops);
-  DCHECK(index < kMaxOps);
+  ARGPARSE_DCHECK(index < kMaxOps);
   return kArray[index];
 }
 
@@ -1336,33 +1347,33 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     names_info_->meta_var = std::move(meta_var);
   }
   void SetDest(std::unique_ptr<DestInfo> info) override {
-    DCHECK(info);
+    ARGPARSE_DCHECK(info);
     dest_info_ = std::move(info);
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
-    DCHECK(info);
+    ARGPARSE_DCHECK(info);
     type_info_ = std::move(info);
   }
   void SetAction(std::unique_ptr<ActionInfo> info) override {
-    DCHECK(info);
+    ARGPARSE_DCHECK(info);
     action_info_ = std::move(info);
   }
   void SetConstValue(std::unique_ptr<Any> value) override {
-    DCHECK(value);
+    ARGPARSE_DCHECK(value);
     const_value_ = std::move(value);
   }
   void SetDefaultValue(std::unique_ptr<Any> value) override {
-    DCHECK(value);
+    ARGPARSE_DCHECK(value);
     default_value_ = std::move(value);
   }
 
   void SetGroup(ArgumentGroup* group) override {
-    DCHECK(group);
+    ARGPARSE_DCHECK(group);
     group_ = group;
   }
 
   void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
-    DCHECK(info);
+    ARGPARSE_DCHECK(info);
     num_args_ = std::move(info);
   }
 
@@ -1386,11 +1397,11 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   void RunType(const std::string& in, OpsResult* out);
   // Helpers:
   const Any& const_value() const {
-    DCHECK(const_value_);
+    ARGPARSE_DCHECK(const_value_);
     return *const_value_;
   }
   const DestPtr& dest_ptr() const {
-    DCHECK(dest_info_);
+    ARGPARSE_DCHECK(dest_info_);
     return dest_info_->dest_ptr;
   }
 
@@ -1411,7 +1422,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
 
 inline std::unique_ptr<Argument> Argument::Create(
     std::unique_ptr<NamesInfo> info) {
-  DCHECK(info);
+  ARGPARSE_DCHECK(info);
   return std::make_unique<ArgumentImpl>(std::move(info));
 }
 
@@ -1607,7 +1618,7 @@ class CustomActionCallback : public ActionCallback {
  public:
   using CallbackType = std::function<ActionCallbackPrototype<T, V>>;
   explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {
-    DCHECK(callback_);
+    ARGPARSE_DCHECK(callback_);
   }
 
  private:
@@ -1728,7 +1739,7 @@ struct Dest {
   template <typename T>
   Dest(T* ptr)
       : info(new DestInfo(DestPtr(ptr), CreateOperationsFactory<T>())) {
-    CHECK_USER(ptr, "Pointer passed to dest() must not be null.");
+    ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
   }
 };
 
@@ -1754,12 +1765,12 @@ bool IsValidOptionName(const char* name, std::size_t len);
 
 // These two predicates must be called only when IsValidOptionName() holds.
 inline bool IsLongOptionName(const char* name, std::size_t len) {
-  DCHECK(IsValidOptionName(name, len));
+  ARGPARSE_DCHECK(IsValidOptionName(name, len));
   return len > 2;
 }
 
 inline bool IsShortOptionName(const char* name, std::size_t len) {
-  DCHECK(IsValidOptionName(name, len));
+  ARGPARSE_DCHECK(IsValidOptionName(name, len));
   return len == 2;
 }
 
@@ -1997,7 +2008,7 @@ class AddArgumentHelper;
 class argument {
  public:
   explicit argument(Names names) {
-    DCHECK(names.info);
+    ARGPARSE_DCHECK(names.info);
     arg_ = Argument::Create(std::move(names.info));
   }
 
@@ -2046,7 +2057,7 @@ class argument {
  private:
   friend class AddArgumentHelper;
   std::unique_ptr<Argument> ReleaseArgument() {
-    DCHECK(arg_);
+    ARGPARSE_DCHECK(arg_);
     return std::move(arg_);
   }
   std::unique_ptr<Argument> arg_;
@@ -2084,7 +2095,7 @@ class argument_group : public AddArgumentHelper {
 class AddArgumentGroupHelper : public AddArgumentHelper {
  public:
   argument_group add_argument_group(const char* header) {
-    DCHECK(header);
+    ARGPARSE_DCHECK(header);
     return argument_group(AddArgumentGroupImpl(header));
   }
 
@@ -2118,7 +2129,7 @@ class parser {
  private:
   friend class SubParserGroup;
   std::unique_ptr<SubCommandInfo> Release() {
-    DCHECK(info_);
+    ARGPARSE_DCHECK(info_);
     return std::move(info_);
   }
   std::unique_ptr<SubCommandInfo> info_;
@@ -2192,7 +2203,7 @@ class ArgumentParser : public MainParserHelper {
 
  private:
   bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) override {
-    DCHECK(out);
+    ARGPARSE_DCHECK(out);
     return controller_->GetParser()->ParseKnownArgs(args, out);
   }
   void AddArgumentImpl(std::unique_ptr<Argument> arg) override {

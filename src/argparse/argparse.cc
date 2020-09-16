@@ -7,8 +7,8 @@
 namespace argparse {
 
 GNUArgpParser::Context::Context(const Argument* argument,
-                                 const char* value,
-                                 argp_state* state)
+                                const char* value,
+                                argp_state* state)
     : has_value_(bool(value)), arg_(argument), state_(state) {
   if (has_value_)
     this->value_.assign(value);
@@ -24,8 +24,8 @@ NamesInfo::NamesInfo(std::vector<const char*> names) {
   is_option = true;
   for (auto name : names) {
     std::size_t len = std::strlen(name);
-    CHECK_USER(IsValidOptionName(name, len), "Not a valid option name: %s",
-               name);
+    ARGPARSE_CHECK_F(IsValidOptionName(name, len),
+                     "Not a valid option name: %s", name);
     if (IsLongOptionName(name, len)) {
       // Strip leading '-' at most twice.
       for (int i = 0; *name == '-' && i < 2; ++i) {
@@ -49,13 +49,13 @@ Names::Names(const char* name) {
     return;
   }
   auto len = std::strlen(name);
-  CHECK_USER(IsValidPositionalName(name, len),
-             "Not a valid positional name: %s", name);
+  ARGPARSE_CHECK_F(IsValidPositionalName(name, len),
+                   "Not a valid positional name: %s", name);
   info.reset(new NamesInfo(name));
 }
 
 Names::Names(std::initializer_list<const char*> names) {
-  CHECK_USER(names.size(), "At least one name must be provided");
+  ARGPARSE_CHECK_F(names.size(), "At least one name must be provided");
   info.reset(new NamesInfo(names));
 }
 
@@ -68,7 +68,7 @@ bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
 
   // positional compares on their names.
   if (!a->is_option() && !b->is_option()) {
-    DCHECK(a->name() && b->name());
+    ARGPARSE_DCHECK(a->name() && b->name());
     return std::strcmp(a->name(), b->name()) < 0;
   }
 
@@ -85,7 +85,7 @@ bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
   //   return a->key() < b->key();
 
   // a and b are both long option.
-  DCHECK(a->name() && b->name());
+  ARGPARSE_DCHECK(a->name() && b->name());
   return std::strcmp(a->name(), b->name()) < 0;
 }
 
@@ -96,7 +96,7 @@ static OpsKind TypesToOpsKind(TypeKind in) {
     case TypeKind::kParse:
       return OpsKind::kParse;
     default:
-      DCHECK2(false, "No corresponding OpsKind");
+      ARGPARSE_DCHECK_F(false, "No corresponding OpsKind");
   }
 }
 
@@ -111,7 +111,7 @@ static OpsKind ActionsToOpsKind(ActionKind in) {
     case ActionKind::kStoreConst:
       return OpsKind::kStoreConst;
     default:
-      DCHECK2(false, "No corresponding OpsKind");
+      ARGPARSE_DCHECK_F(false, "No corresponding OpsKind");
   }
 }
 
@@ -176,7 +176,7 @@ void ArgumentImpl::InitAction() {
   }
 
   if (action_info_->action_code == ActionKind::kCustom) {
-    DCHECK(action_info_->callback);
+    ARGPARSE_DCHECK(action_info_->callback);
     return;
   }
 
@@ -187,9 +187,9 @@ void ArgumentImpl::InitAction() {
 
   auto action_code = action_info_->action_code;
   const bool need_dest = ActionNeedsDest(action_code);
-  CHECK_USER(dest_info_ || !need_dest,
-             "Action %s needs a dest, which is not provided",
-             ActionsToString(action_code));
+  ARGPARSE_CHECK_F(dest_info_ || !need_dest,
+                   "Action %s needs a dest, which is not provided",
+                   ActionsToString(action_code));
 
   if (!need_dest) {
     // This action don't need a dest (provided or not).
@@ -198,22 +198,22 @@ void ArgumentImpl::InitAction() {
   }
 
   // Ops of action is always created from dest's ops-factory.
-  DCHECK(dest_info_ && dest_info_->ops_factory);
-  DCHECK(!action_info_->ops);
+  ARGPARSE_DCHECK(dest_info_ && dest_info_->ops_factory);
+  ARGPARSE_DCHECK(!action_info_->ops);
   action_info_->ops = dest_info_->ops_factory->Create();
 
   // See if Ops supports this action.
   auto* action_ops = action_info_->ops.get();
   auto ops_kind = ActionsToOpsKind(action_code);
-  CHECK_USER(action_ops->IsSupported(ops_kind),
-             "Action %s is not supported by type %s",
-             ActionsToString(action_code), action_ops->GetTypeName());
+  ARGPARSE_CHECK_F(action_ops->IsSupported(ops_kind),
+                   "Action %s is not supported by type %s",
+                   ActionsToString(action_code), action_ops->GetTypeName());
 
   // See if const value is provided as needed.
   if (ActionNeedsConstValue(action_code)) {
-    CHECK_USER(const_value_.get(),
-               "Action %s needs a const value, which is not provided",
-               ActionsToString(action_code));
+    ARGPARSE_CHECK_F(const_value_.get(),
+                     "Action %s needs a const value, which is not provided",
+                     ActionsToString(action_code));
   }
 }
 
@@ -223,7 +223,7 @@ void ArgumentImpl::InitType() {
   }
 
   if (type_info_->type_code == TypeKind::kCustom) {
-    DCHECK(type_info_->callback);
+    ARGPARSE_DCHECK(type_info_->callback);
     type_info_->ops.reset();
     return;
   }
@@ -245,7 +245,8 @@ void ArgumentImpl::InitType() {
 
   auto type_code = type_info_->type_code;
   // If type_code is open, mode shouldn't be no mode.
-  DCHECK(type_code != TypeKind::kOpen || type_info_->mode != kModeNoMode);
+  ARGPARSE_DCHECK(type_code != TypeKind::kOpen ||
+                  type_info_->mode != kModeNoMode);
 
   // Create type_ops_.
   if (!type_info_->ops) {
@@ -258,9 +259,9 @@ void ArgumentImpl::InitType() {
   // See if type_code_ is supported.
   auto ops = TypesToOpsKind(type_code);
   auto* type_ops = type_info_->ops.get();
-  CHECK_USER(type_ops->IsSupported(ops),
-             "Type %s is not supported by type % s ", TypesToString(type_code),
-             type_ops->GetTypeName());
+  ARGPARSE_CHECK_F(type_ops->IsSupported(ops),
+                   "Type %s is not supported by type % s ",
+                   TypesToString(type_code), type_ops->GetTypeName());
 }
 
 void ArgumentImpl::InitDefaultValue() {
@@ -328,7 +329,8 @@ bool ArgumentImpl::FormatDefaultValue(std::string* out) {
 //   argp_.args_doc = args_doc_.c_str();
 // }
 
-// void ArgpParserImpl::RunCallback(Argument* arg, char* value, argp_state* state) {
+// void ArgpParserImpl::RunCallback(Argument* arg, char* value, argp_state*
+// state) {
 //   arg->GetCallbackRunner()->RunCallback(
 //       std::make_unique<Context>(arg, value, state));
 // }
@@ -427,10 +429,10 @@ error_t GNUArgpParser::DoParse(int key, char* arg, argp_state* state) {
 //   if (!input || !text)
 //     return (char*)text;
 //   auto* self = reinterpret_cast<ArgpParserImpl*>(input);
-//   DCHECK2(self->help_filter_,
+//   ARGPARSE_DCHECK_F(self->help_filter_,
 //           "should only be called if user install help filter!");
 //   auto* arg = self->delegate_->FindOptionalArgument(key);
-//   DCHECK2(arg, "argp calls us with unknown key!");
+//   ARGPARSE_DCHECK_F(arg, "argp calls us with unknown key!");
 
 //   std::string repl(text);
 //   HelpFilterResult result = std::invoke(self->help_filter_, *arg, &repl);
@@ -449,8 +451,8 @@ error_t GNUArgpParser::DoParse(int key, char* arg, argp_state* state) {
 void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
                                             ArgumentGroup* group) {
   // First check if this arg will conflict with existing ones.
-  CHECK_USER(CheckNamesConflict(*arg->GetNamesInfo()),
-             "Names conflict with existing names!");
+  ARGPARSE_CHECK_F(CheckNamesConflict(*arg->GetNamesInfo()),
+                   "Names conflict with existing names!");
   arg->SetGroup(group);
   arg->Initialize();
   if (listener_)
@@ -491,7 +493,7 @@ bool IsValidOptionName(const char* name, std::size_t len) {
   if (len == 2)  // This rules out -?, -* -@ -= --
     return std::isalnum(name[1]);
   // check for long-ness.
-  CHECK_USER(
+  ARGPARSE_CHECK_F(
       name[1] == '-',
       "Single-dash long option (i.e., -jar) is not supported. Please use "
       "GNU-style long option (double-dash)");
@@ -517,14 +519,14 @@ ActionKind StringToActions(const std::string& str) {
       {"print_usage", ActionKind::kPrintUsage},
   };
   auto iter = kStringToActions.find(str);
-  CHECK_USER(iter != kStringToActions.end(),
-             "Unknown action string '%s' passed in", str.c_str());
+  ARGPARSE_CHECK_F(iter != kStringToActions.end(),
+                   "Unknown action string '%s' passed in", str.c_str());
   return iter->second;
 }
 
 // TODO: extract action-related logic into one class, say ActionHelper.
 void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
-                                           CallbackRunner::Delegate* delegate) {
+                             CallbackRunner::Delegate* delegate) {
   auto* ops = action_info_->ops.get();
   switch (action_info_->action_code) {
     case ActionKind::kNoAction:
@@ -550,7 +552,7 @@ void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
       delegate->OnPrintUsage();
       break;
     case ActionKind::kCustom:
-      DCHECK(action_info_->callback);
+      ARGPARSE_DCHECK(action_info_->callback);
       action_info_->callback->Run(dest_ptr(), std::move(data));
       break;
     case ActionKind::kCount:
@@ -561,12 +563,11 @@ void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
 
 CallbackRunner* ArgumentImpl::GetCallbackRunner() {
   return this;
-  // DCHECK(callback_info_);
+  // ARGPARSE_DCHECK(callback_info_);
   // return callback_info_.get();
 }
 
-void ArgumentImpl::RunType(const std::string& in,
-                                         OpsResult* out) {
+void ArgumentImpl::RunType(const std::string& in, OpsResult* out) {
   auto* ops = type_info_->ops.get();
   switch (type_info_->type_code) {
     case TypeKind::kNothing:
@@ -575,11 +576,11 @@ void ArgumentImpl::RunType(const std::string& in,
       ops->Parse(in, out);
       break;
     case TypeKind::kOpen:
-      DCHECK(type_info_->mode != kModeNoMode);
+      ARGPARSE_DCHECK(type_info_->mode != kModeNoMode);
       ops->Open(in, type_info_->mode, out);
       break;
     case TypeKind::kCustom:
-      DCHECK(type_info_->callback);
+      ARGPARSE_DCHECK(type_info_->callback);
       type_info_->callback->Run(in, out);
       break;
   }
@@ -656,7 +657,7 @@ OpenMode StreamModeToMode(std::ios_base::openmode stream_mode) {
 }
 
 OpenMode CharsToMode(const char* str) {
-  DCHECK(str);
+  ARGPARSE_DCHECK(str);
   int m;
   for (; *str; ++str) {
     switch (*str) {
@@ -693,7 +694,7 @@ const char* OpsToString(OpsKind ops) {
       {OpsKind::kParse, "Parse"},   {OpsKind::kOpen, "Open"},
   };
   auto iter = kOpsToStrings.find(ops);
-  DCHECK(iter != kOpsToStrings.end());
+  ARGPARSE_DCHECK(iter != kOpsToStrings.end());
   return iter->second.c_str();
 }
 
@@ -709,7 +710,7 @@ static std::string Demangle(const char* mangled_name) {
     return kDemangleFailedSub;
   }
 
-  DCHECK(realname);
+  ARGPARSE_DCHECK(realname);
   std::string result(realname, length);
   std::free((void*)realname);
   return result;
@@ -724,7 +725,7 @@ const char* TypeNameImpl(const std::type_info& type) {
   return g_typenames[type].c_str();
 }
 
-void CheckUserError(bool cond, SourceLocation loc, const char* fmt, ...) {
+void CheckImpl(bool cond, SourceLocation loc, const char* fmt, ...) {
   if (cond)
     return;
   std::fprintf(stderr, "Error at %s:%d: ", loc.filename, loc.line);
@@ -783,9 +784,8 @@ void ArgpCompiler::CompileArgument(Argument* arg,
 void ArgpCompiler::CompileOptions(std::vector<argp_option>* out) {
   holder_->ForEachGroup(
       [this, out](ArgumentGroup* g) { return CompileGroup(g, out); });
-  holder_->ForEachArgument([this, out](Argument* arg) {
-    return CompileArgument(arg, out);
-  });
+  holder_->ForEachArgument(
+      [this, out](Argument* arg) { return CompileArgument(arg, out); });
   out->push_back({});
 }
 
@@ -806,9 +806,7 @@ void ArgpCompiler::InitGroup(ArgumentGroup* group) {
 
 void ArgpCompiler::Initialize() {
   // Gen keys for args.
-  holder_->ForEachArgument([this](Argument* arg) {
-    return InitArgument(arg);
-  });
+  holder_->ForEachArgument([this](Argument* arg) { return InitArgument(arg); });
   // Gen ids for groups.
   holder_->ForEachGroup([this](ArgumentGroup* group) {
     // TODO: pos/opt default group..
@@ -817,32 +815,32 @@ void ArgpCompiler::Initialize() {
 }
 
 void ArgpCompiler::CompileUsageFor(Argument* arg, std::ostream& os) {
-    if (!arg->IsOption()) {
-      os << arg->GetNamesInfo()->meta_var;
-      return;
+  if (!arg->IsOption()) {
+    os << arg->GetNamesInfo()->meta_var;
+    return;
+  }
+  os << '[';
+  std::size_t i = 0;
+  const auto& long_names = arg->GetNamesInfo()->long_names;
+  const auto& short_names = arg->GetNamesInfo()->short_names;
+  const auto size = long_names.size() + short_names.size();
+
+  for (; i < size; ++i) {
+    if (i < long_names.size()) {
+      os << "--" << long_names[i];
+    } else {
+      os << '-' << short_names[i - long_names.size()];
     }
+    if (i < size - 1)
+      os << '|';
+  }
+
+  if (!arg->IsRequired())
     os << '[';
-    std::size_t i = 0;
-    const auto& long_names = arg->GetNamesInfo()->long_names;
-    const auto& short_names = arg->GetNamesInfo()->short_names;
-    const auto size = long_names.size() + short_names.size();
-
-    for (; i < size; ++i) {
-      if (i < long_names.size()) {
-        os << "--" << long_names[i];
-      } else {
-        os << '-' << short_names[i - long_names.size()];
-      }
-      if (i < size - 1)
-        os << '|';
-    }
-
-    if (!arg->IsRequired())
-      os << '[';
-    os << '=' << arg->GetNamesInfo()->meta_var;
-    if (!arg->IsRequired())
-      os << ']';
+  os << '=' << arg->GetNamesInfo()->meta_var;
+  if (!arg->IsRequired())
     os << ']';
+  os << ']';
 }
 
 void ArgpCompiler::CompileUsage(std::string* out) {
@@ -880,31 +878,31 @@ void ArgpCompiler::CompileArgumentIndexes(ArgpIndexesInfo* out) {
 //   InitializerImpl(ArgumentImpl* impl, CallbackInfo* cb_info)
 //       : impl_(impl), cb_info_(cb_info) {}
 
-//   void SetRequired(bool required) override { impl_->is_required_ = required; }
-//   void SetHelpDoc(std::string help_doc) override {
+//   void SetRequired(bool required) override { impl_->is_required_ = required;
+//   } void SetHelpDoc(std::string help_doc) override {
 //     impl_->help_doc_ = std::move(help_doc);
 //   }
 //   void SetMetaVar(std::string meta_var) override {
 //     impl_->names_info_->meta_var = std::move(meta_var);
 //   }
 //   void SetDest(std::unique_ptr<DestInfo> info) override {
-//     DCHECK(info);
+//     ARGPARSE_DCHECK(info);
 //     cb_info_->dest_info_ = std::move(info);
 //   }
 //   void SetType(std::unique_ptr<TypeInfo> info) override {
-//     DCHECK(info);
+//     ARGPARSE_DCHECK(info);
 //     cb_info_->type_info_ = std::move(info);
 //   }
 //   void SetAction(std::unique_ptr<ActionInfo> info) override {
-//     DCHECK(info);
+//     ARGPARSE_DCHECK(info);
 //     cb_info_->action_info_ = std::move(info);
 //   }
 //   void SetConstValue(std::unique_ptr<Any> value) override {
-//     DCHECK(value);
+//     ARGPARSE_DCHECK(value);
 //     cb_info_->const_value_ = std::move(value);
 //   }
 //   void SetDefaultValue(std::unique_ptr<Any> value) override {
-//     DCHECK(value);
+//     ARGPARSE_DCHECK(value);
 //     cb_info_->default_value_ = std::move(value);
 //   }
 //   ~InitializerImpl() override { impl_->Initialize(); }
@@ -931,7 +929,7 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
  public:
   GroupImpl(ArgumentHolderImpl* holder, const char* header)
       : holder_(holder), header_(header) {
-    DCHECK(header_.size());
+    ARGPARSE_DCHECK(header_.size());
     if (header_.back() != ':')
       header_.push_back(':');
   }
@@ -950,8 +948,7 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
   int members_ = 0;
 };
 
-ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(
-    const char* header) {
+ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(const char* header) {
   auto* group = new GroupImpl(this, header);
   groups_.emplace_back(group);
   if (listener_)
@@ -974,7 +971,7 @@ std::unique_ptr<SubCommandHolder> SubCommandHolder::Create() {
   return std::make_unique<SubCommandHolderImpl>();
 }
 std::unique_ptr<ArgumentController> ArgumentController::Create() {
-  DCHECK(g_parser_factory_callback);
+  ARGPARSE_DCHECK(g_parser_factory_callback);
   return std::make_unique<ArgumentControllerImpl>(g_parser_factory_callback());
 }
 
