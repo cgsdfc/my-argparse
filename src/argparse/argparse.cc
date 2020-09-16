@@ -172,7 +172,7 @@ static const char* ActionsToString(ActionKind in) {
 
 void ArgumentImpl::InitAction() {
   if (!action_info_) {
-    action_info_ = std::make_unique<ActionInfo>();
+    action_info_ = std::make_unique<ActionInfoImpl>();
   }
 
   if (action_info_->action_code == ActionKind::kCustom) {
@@ -871,45 +871,6 @@ void ArgpCompiler::CompileArgumentIndexes(ArgpIndexesInfo* out) {
     }
   });
 }
-
-// class ArgumentImpl::InitializerImpl : public ArgumentInitializer {
-//  public:
-//   InitializerImpl(ArgumentImpl* impl, CallbackInfo* cb_info)
-//       : impl_(impl), cb_info_(cb_info) {}
-
-//   void SetRequired(bool required) override { impl_->is_required_ = required;
-//   } void SetHelpDoc(std::string help_doc) override {
-//     impl_->help_doc_ = std::move(help_doc);
-//   }
-//   void SetMetaVar(std::string meta_var) override {
-//     impl_->names_info_->meta_var = std::move(meta_var);
-//   }
-//   void SetDest(std::unique_ptr<DestInfo> info) override {
-//     ARGPARSE_DCHECK(info);
-//     cb_info_->dest_info_ = std::move(info);
-//   }
-//   void SetType(std::unique_ptr<TypeInfoImpl> info) override {
-//     ARGPARSE_DCHECK(info);
-//     cb_info_->type_info_ = std::move(info);
-//   }
-//   void SetAction(std::unique_ptr<ActionInfo> info) override {
-//     ARGPARSE_DCHECK(info);
-//     cb_info_->action_info_ = std::move(info);
-//   }
-//   void SetConstValue(std::unique_ptr<Any> value) override {
-//     ARGPARSE_DCHECK(value);
-//     cb_info_->const_value_ = std::move(value);
-//   }
-//   void SetDefaultValue(std::unique_ptr<Any> value) override {
-//     ARGPARSE_DCHECK(value);
-//     cb_info_->default_value_ = std::move(value);
-//   }
-//   ~InitializerImpl() override { impl_->Initialize(); }
-
-//  private:
-//   ArgumentImpl* impl_;
-//   CallbackInfo* cb_info_;
-// };
 
 void AddArgumentHelper::add_argument(Names names,
                                      Dest dest,

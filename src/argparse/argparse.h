@@ -883,26 +883,36 @@ struct NumArgsInfo {
   }
 };
 
-struct DestInfo {
+struct DestInfoImpl {
   DestPtr dest_ptr;
   std::unique_ptr<OpsFactory> ops_factory;
   std::unique_ptr<Operations> ops;
 
-  DestInfo(DestPtr d, std::unique_ptr<OpsFactory> f)
+  DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
       : dest_ptr(d), ops_factory(std::move(f)) {
     ops = ops_factory->Create();
   }
 };
 
-struct ActionInfo {
+struct ActionInfoImpl {
   ActionKind action_code = ActionKind::kNoAction;
   std::unique_ptr<ActionCallback> callback;
   std::unique_ptr<Operations> ops;
 
-  ActionInfo() = default;
-  explicit ActionInfo(ActionKind a) : action_code(a) {}
-  explicit ActionInfo(std::unique_ptr<ActionCallback> cb)
+  ActionInfoImpl() = default;
+  explicit ActionInfoImpl(ActionKind a) : action_code(a) {}
+  explicit ActionInfoImpl(std::unique_ptr<ActionCallback> cb)
       : action_code(ActionKind::kCustom), callback(std::move(cb)) {}
+};
+
+class TypeInfo {
+ public:
+  virtual ~TypeInfo() {}
+  virtual void Run(const std::string& in, OpsResult* out) = 0;
+  virtual std::string GetTypeHint() = 0;
+
+  static std::unique_ptr<TypeInfo> CreateFileType(OpenMode mode);
+  static std::unique_ptr<TypeInfo> CreateDefault();
 };
 
 struct TypeInfoImpl {
@@ -942,9 +952,9 @@ class Argument {
   virtual void SetRequired(bool required) = 0;
   virtual void SetHelpDoc(std::string help_doc) = 0;
   virtual void SetMetaVar(std::string meta_var) = 0;
-  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
+  virtual void SetDest(std::unique_ptr<DestInfoImpl> dest) = 0;
   virtual void SetType(std::unique_ptr<TypeInfoImpl> info) = 0;
-  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
+  virtual void SetAction(std::unique_ptr<ActionInfoImpl> info) = 0;
   virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
   virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
   virtual void SetGroup(ArgumentGroup* group) = 0;
@@ -1354,7 +1364,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   void SetMetaVar(std::string meta_var) override {
     names_info_->meta_var = std::move(meta_var);
   }
-  void SetDest(std::unique_ptr<DestInfo> info) override {
+  void SetDest(std::unique_ptr<DestInfoImpl> info) override {
     ARGPARSE_DCHECK(info);
     dest_info_ = std::move(info);
   }
@@ -1362,7 +1372,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     ARGPARSE_DCHECK(info);
     type_info_ = std::move(info);
   }
-  void SetAction(std::unique_ptr<ActionInfo> info) override {
+  void SetAction(std::unique_ptr<ActionInfoImpl> info) override {
     ARGPARSE_DCHECK(info);
     action_info_ = std::move(info);
   }
@@ -1420,8 +1430,8 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   std::string help_doc_;
   bool is_required_ = false;
 
-  std::unique_ptr<DestInfo> dest_info_;
-  std::unique_ptr<ActionInfo> action_info_;
+  std::unique_ptr<DestInfoImpl> dest_info_;
+  std::unique_ptr<ActionInfoImpl> action_info_;
   std::unique_ptr<TypeInfoImpl> type_info_;
   std::unique_ptr<NumArgsInfo> num_args_;
   std::unique_ptr<Any> const_value_;
@@ -1713,40 +1723,41 @@ struct Type {
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
   Type(Callback&& cb)
-      : info(new TypeInfoImpl(CreateTypeCallback(std::forward<Callback>(cb)))) {}
+      : info(new TypeInfoImpl(CreateTypeCallback(std::forward<Callback>(cb)))) {
+  }
 };
 
 ActionKind StringToActions(const std::string& str);
 
 struct Action {
-  std::unique_ptr<ActionInfo> info;
+  std::unique_ptr<ActionInfoImpl> info;
 
   Action() = default;
   Action(Action&&) = default;
 
   // action("store_true").
   Action(const char* action_string)
-      : info(new ActionInfo(StringToActions(action_string))) {}
+      : info(new ActionInfoImpl(StringToActions(action_string))) {}
 
   // action(new MyAction()).
   Action(ActionCallback* cb)
-      : info(new ActionInfo(std::unique_ptr<ActionCallback>(cb))) {}
+      : info(new ActionInfoImpl(std::unique_ptr<ActionCallback>(cb))) {}
 
   // action([](T* out, Result<T> in) {})
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
   Action(Callback&& cb)
-      : info(new ActionInfo(CreateActionCallback(std::forward<Callback>(cb)))) {
-  }
+      : info(new ActionInfoImpl(
+            CreateActionCallback(std::forward<Callback>(cb)))) {}
 };
 
 struct Dest {
-  std::unique_ptr<DestInfo> info;
+  std::unique_ptr<DestInfoImpl> info;
 
   Dest() = default;
   template <typename T>
   Dest(T* ptr)
-      : info(new DestInfo(DestPtr(ptr), CreateOperationsFactory<T>())) {
+      : info(new DestInfoImpl(DestPtr(ptr), CreateOperationsFactory<T>())) {
     ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
   }
 };
