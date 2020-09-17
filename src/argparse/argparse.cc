@@ -218,50 +218,50 @@ void ArgumentImpl::InitAction() {
 }
 
 void ArgumentImpl::InitType() {
-  if (!type_info_) {
-    type_info_ = std::make_unique<TypeInfoImpl>();
-  }
+  // if (!type_info_) {
+  //   type_info_ = std::make_unique<TypeInfoImpl>();
+  // }
 
-  if (type_info_->type_code == TypeKind::kCustom) {
-    ARGPARSE_DCHECK(type_info_->callback);
-    type_info_->ops.reset();
-    return;
-  }
+  // if (type_info_->type_code == TypeKind::kCustom) {
+  //   ARGPARSE_DCHECK(type_info_->callback);
+  //   type_info_->ops.reset();
+  //   return;
+  // }
 
-  if (!ActionNeedsTypeCallback(action_info_->action_code)) {
-    // Some action, like print usage, store const.., don't need a type..
-    type_info_->type_code = TypeKind::kNothing;
-    type_info_->ops.reset();
-    return;
-  }
+  // if (!ActionNeedsTypeCallback(action_info_->action_code)) {
+  //   // Some action, like print usage, store const.., don't need a type..
+  //   type_info_->type_code = TypeKind::kNothing;
+  //   type_info_->ops.reset();
+  //   return;
+  // }
 
-  // Figure out type_code_.
-  if (type_info_->type_code == TypeKind::kNothing) {
-    // The action needs a type, but is not explicitly set, so default is kParse.
-    // So if your dest is a filetype, but type is not FileType, it will be an
-    // error.
-    type_info_->type_code = TypeKind::kParse;
-  }
+  // // Figure out type_code_.
+  // if (type_info_->type_code == TypeKind::kNothing) {
+  //   // The action needs a type, but is not explicitly set, so default is kParse.
+  //   // So if your dest is a filetype, but type is not FileType, it will be an
+  //   // error.
+  //   type_info_->type_code = TypeKind::kParse;
+  // }
 
-  auto type_code = type_info_->type_code;
-  // If type_code is open, mode shouldn't be no mode.
-  ARGPARSE_DCHECK(type_code != TypeKind::kOpen ||
-                  type_info_->mode != kModeNoMode);
+  // auto type_code = type_info_->type_code;
+  // // If type_code is open, mode shouldn't be no mode.
+  // ARGPARSE_DCHECK(type_code != TypeKind::kOpen ||
+  //                 type_info_->mode != kModeNoMode);
 
-  // Create type_ops_.
-  if (!type_info_->ops) {
-    // auto* ops_factory = dest_info_->ops_factory.get();
-    // type_info_->ops = action_info_->action_code == ActionKind::kAppend
-    //                       ? ops_factory->CreateValueTypeOps()
-    //                       : ops_factory->Create();
-  }
+  // // Create type_ops_.
+  // if (!type_info_->ops) {
+  //   // auto* ops_factory = dest_info_->ops_factory.get();
+  //   // type_info_->ops = action_info_->action_code == ActionKind::kAppend
+  //   //                       ? ops_factory->CreateValueTypeOps()
+  //   //                       : ops_factory->Create();
+  // }
 
-  // See if type_code_ is supported.
-  auto ops = TypesToOpsKind(type_code);
-  auto* type_ops = type_info_->ops.get();
-  ARGPARSE_CHECK_F(type_ops->IsSupported(ops),
-                   "Type %s is not supported by type % s ",
-                   TypesToString(type_code), type_ops->GetTypeName());
+  // // See if type_code_ is supported.
+  // auto ops = TypesToOpsKind(type_code);
+  // auto* type_ops = type_info_->ops.get();
+  // ARGPARSE_CHECK_F(type_ops->IsSupported(ops),
+  //                  "Type %s is not supported by type % s ",
+  //                  TypesToString(type_code), type_ops->GetTypeName());
 }
 
 void ArgumentImpl::InitDefaultValue() {
@@ -295,10 +295,10 @@ bool ArgumentImpl::GetTypeHint(std::string* out) {
 }
 
 bool ArgumentImpl::FormatDefaultValue(std::string* out) {
-  if (type_info_->ops) {
-    *out = type_info_->ops->GetTypeHint();
-    return true;
-  }
+  // if (type_info_->ops) {
+  //   *out = type_info_->ops->GetTypeHint();
+  //   return true;
+  // }
   return false;
 }
 
@@ -568,22 +568,22 @@ CallbackRunner* ArgumentImpl::GetCallbackRunner() {
 }
 
 void ArgumentImpl::RunType(const std::string& in, OpsResult* out) {
-  auto* ops = type_info_->ops.get();
-  switch (type_info_->type_code) {
-    case TypeKind::kNothing:
-      break;
-    case TypeKind::kParse:
-      ops->Parse(in, out);
-      break;
-    case TypeKind::kOpen:
-      ARGPARSE_DCHECK(type_info_->mode != kModeNoMode);
-      ops->Open(in, type_info_->mode, out);
-      break;
-    case TypeKind::kCustom:
-      ARGPARSE_DCHECK(type_info_->callback);
-      type_info_->callback->Run(in, out);
-      break;
-  }
+  // auto* ops = type_info_->ops.get();
+  // switch (type_info_->type_code) {
+  //   case TypeKind::kNothing:
+  //     break;
+  //   case TypeKind::kParse:
+  //     ops->Parse(in, out);
+  //     break;
+  //   case TypeKind::kOpen:
+  //     ARGPARSE_DCHECK(type_info_->mode != kModeNoMode);
+  //     ops->Open(in, type_info_->mode, out);
+  //     break;
+  //   case TypeKind::kCustom:
+  //     ARGPARSE_DCHECK(type_info_->callback);
+  //     type_info_->callback->Run(in, out);
+  //     break;
+  // }
 }
 
 void ArgumentImpl::RunCallback(

@@ -816,11 +816,11 @@ using ActionCallbackPrototype = void(T*, Result<V>);
 // using ActionCallbackPrototypeNoDest = void(Result<V>);
 
 // Perform data conversion..
-class TypeCallback {
- public:
-  virtual ~TypeCallback() {}
-  virtual void Run(const std::string& in, OpsResult* out) {}
-};
+// class TypeCallback {
+//  public:
+//   virtual ~TypeCallback() {}
+//   virtual void Run(const std::string& in, OpsResult* out) {}
+// };
 
 class ActionCallback {
  public:
@@ -843,6 +843,17 @@ class CallbackRunner {
   virtual void InitCallback() {}
   virtual void RunCallback(std::unique_ptr<Delegate> delegate) = 0;
   virtual ~CallbackRunner() {}
+};
+
+class NamesInfo {
+ public:
+  virtual ~NamesInfo() {}
+  virtual bool IsOption() = 0;
+  virtual std::string GetDefaultMetaVar() = 0;
+
+  static std::unique_ptr<NamesInfo> CreateOption(const std::string& in);
+  static std::unique_ptr<NamesInfo> CreatePositional(
+      const std::vector<std::string>& in);
 };
 
 // TODO: make these info class abstract.
@@ -953,23 +964,31 @@ class TypeInfo {
   virtual ~TypeInfo() {}
   virtual void Run(const std::string& in, OpsResult* out) = 0;
   virtual std::string GetTypeHint() = 0;
+  virtual void Initialize(DestInfo* dest) = 0;
 
-  static std::unique_ptr<TypeInfo> CreateFileType(OpenMode mode);
-  static std::unique_ptr<TypeInfo> CreateDefault();
+  static std::unique_ptr<TypeInfo> CreateFromFileType(OpenMode mode);
+  template <typename Callback>
+  static std::unique_ptr<TypeInfo> CreateFromCallback(Callback&& cb);
 };
 
-struct TypeInfoImpl {
-  TypeKind type_code = TypeKind::kNothing;
-  std::unique_ptr<Operations> ops;
-  std::unique_ptr<TypeCallback> callback;
-  OpenMode mode = kModeNoMode;
-
+class TypeInfoImpl : public TypeInfo {
+ public:
   TypeInfoImpl() = default;
   explicit TypeInfoImpl(OpenMode m) : type_code(TypeKind::kOpen), mode(m) {}
-  explicit TypeInfoImpl(std::unique_ptr<TypeCallback> cb)
-      : type_code(TypeKind::kCustom), callback(std::move(cb)) {}
+  // explicit TypeInfoImpl(std::unique_ptr<TypeCallback> cb)
+  //     : type_code(TypeKind::kCustom), callback(std::move(cb)) {}
   explicit TypeInfoImpl(std::unique_ptr<Operations> ops)
       : type_code(TypeKind::kParse), ops(std::move(ops)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {}
+  std::string GetTypeHint() override {}
+  void Initialize(DestInfo* dest) override {}
+
+ private:
+  TypeKind type_code = TypeKind::kNothing;
+  std::unique_ptr<Operations> ops;
+  // std::unique_ptr<TypeCallback> callback;
+  OpenMode mode = kModeNoMode;
 };
 
 // Control whether some extra info appear in the help doc.
@@ -1665,16 +1684,19 @@ class SubCommandHolderImpl::GroupImpl : public SubCommandGroup {
 };
 
 template <typename T>
-class CustomTypeCallback : public TypeCallback {
+class TypeCallback : public TypeInfo {
  public:
   using CallbackType = std::function<TypeCallbackPrototype<T>>;
-  explicit CustomTypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
+  explicit TypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
 
   void Run(const std::string& in, OpsResult* out) override {
     Result<T> result;
     std::invoke(callback_, in, &result);
     ConvertResults(&result, out);
   }
+
+  std::string GetTypeHint() override { return TypeHint<T>(); }
+  void Initialize(DestInfo* dest) override {}
 
  private:
   CallbackType callback_;
@@ -1700,17 +1722,17 @@ class CustomActionCallback : public ActionCallback {
 };
 
 template <typename Callback, typename T>
-std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
+std::unique_ptr<TypeInfo> CreateTypeCallbackImpl(
     Callback&& cb,
     TypeCallbackPrototype<T>*) {
-  return std::make_unique<CustomTypeCallback<T>>(std::forward<Callback>(cb));
+  return std::make_unique<TypeCallback<T>>(std::forward<Callback>(cb));
 }
 
 template <typename Callback, typename T>
-std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
+std::unique_ptr<TypeInfo> CreateTypeCallbackImpl(
     Callback&& cb,
     TypeCallbackPrototypeThrows<T>*) {
-  return std::make_unique<CustomTypeCallback<T>>(
+  return std::make_unique<TypeCallback<T>>(
       [cb](const std::string& in, Result<T>* out) {
         try {
           *out = std::invoke(cb, in);
@@ -1721,7 +1743,7 @@ std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
 }
 
 template <typename Callback>
-std::unique_ptr<TypeCallback> CreateTypeCallback(Callback&& cb) {
+std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(Callback&& cb) {
   return CreateTypeCallbackImpl(
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
@@ -1764,8 +1786,8 @@ struct Type {
   Type() : info(new TypeInfoImpl(CreateOperations<T>())) {}
 
   // Use it to provide your own TypeCallback impl.
-  Type(TypeCallback* cb)
-      : info(new TypeInfoImpl(std::unique_ptr<TypeCallback>(cb))) {}
+  // Type(TypeCallback* cb)
+  //     : info(new TypeInfoImpl(std::unique_ptr<TypeCallback>(cb))) {}
 
   // Use FileType("rw") to request opening a file to read/write.
   Type(FileType file_type) : info(new TypeInfoImpl(file_type.mode())) {}
@@ -1773,8 +1795,7 @@ struct Type {
   template <typename Callback,
             typename = std::enable_if_t<detail::is_callback<Callback>{}>>
   Type(Callback&& cb)
-      : info(new TypeInfoImpl(CreateTypeCallback(std::forward<Callback>(cb)))) {
-  }
+      : info(TypeInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
 };
 
 ActionKind StringToActions(const std::string& str);
@@ -1851,6 +1872,7 @@ struct Names {
   Names(std::initializer_list<const char*> names);
 };
 
+// TODO: remove this..
 using ::argp;
 using ::argp_error;
 using ::argp_failure;
