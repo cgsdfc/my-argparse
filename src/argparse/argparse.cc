@@ -171,50 +171,50 @@ static const char* ActionsToString(ActionKind in) {
 }
 
 void ArgumentImpl::InitAction() {
-  if (!action_info_) {
-    action_info_ = std::make_unique<ActionInfoImpl>();
-  }
+  // if (!action_info_) {
+  //   // action_info_ = std::make_unique<ActionInfoImpl>();
+  // }
 
-  if (action_info_->action_code == ActionKind::kCustom) {
-    ARGPARSE_DCHECK(action_info_->callback);
-    return;
-  }
+  // if (action_info_->action_code == ActionKind::kCustom) {
+  //   // ARGPARSE_DCHECK(action_info_->callback);
+  //   return;
+  // }
 
-  if (action_info_->action_code == ActionKind::kNoAction) {
-    // If there is a dest, but no explicit action given, default is store.
-    action_info_->action_code = ActionKind::kStore;
-  }
+  // if (action_info_->action_code == ActionKind::kNoAction) {
+  //   // If there is a dest, but no explicit action given, default is store.
+  //   action_info_->action_code = ActionKind::kStore;
+  // }
 
-  auto action_code = action_info_->action_code;
-  const bool need_dest = ActionNeedsDest(action_code);
-  ARGPARSE_CHECK_F(dest_info_ || !need_dest,
-                   "Action %s needs a dest, which is not provided",
-                   ActionsToString(action_code));
+  // auto action_code = action_info_->action_code;
+  // const bool need_dest = ActionNeedsDest(action_code);
+  // ARGPARSE_CHECK_F(dest_info_ || !need_dest,
+  //                  "Action %s needs a dest, which is not provided",
+  //                  ActionsToString(action_code));
 
-  if (!need_dest) {
-    // This action don't need a dest (provided or not).
-    dest_info_.reset();
-    return;
-  }
+  // if (!need_dest) {
+  //   // This action don't need a dest (provided or not).
+  //   dest_info_.reset();
+  //   return;
+  // }
 
-  // Ops of action is always created from dest's ops-factory.
-  // ARGPARSE_DCHECK(dest_info_ && dest_info_->ops_factory);
-  // ARGPARSE_DCHECK(!action_info_->ops);
-  // action_info_->ops = dest_info_->ops_factory->Create();
+  // // Ops of action is always created from dest's ops-factory.
+  // // ARGPARSE_DCHECK(dest_info_ && dest_info_->ops_factory);
+  // // ARGPARSE_DCHECK(!action_info_->ops);
+  // // action_info_->ops = dest_info_->ops_factory->Create();
 
-  // See if Ops supports this action.
-  auto* action_ops = action_info_->ops.get();
-  auto ops_kind = ActionsToOpsKind(action_code);
-  ARGPARSE_CHECK_F(action_ops->IsSupported(ops_kind),
-                   "Action %s is not supported by type %s",
-                   ActionsToString(action_code), action_ops->GetTypeName());
+  // // See if Ops supports this action.
+  // auto* action_ops = action_info_->ops.get();
+  // auto ops_kind = ActionsToOpsKind(action_code);
+  // ARGPARSE_CHECK_F(action_ops->IsSupported(ops_kind),
+  //                  "Action %s is not supported by type %s",
+  //                  ActionsToString(action_code), action_ops->GetTypeName());
 
-  // See if const value is provided as needed.
-  if (ActionNeedsConstValue(action_code)) {
-    ARGPARSE_CHECK_F(const_value_.get(),
-                     "Action %s needs a const value, which is not provided",
-                     ActionsToString(action_code));
-  }
+  // // See if const value is provided as needed.
+  // if (ActionNeedsConstValue(action_code)) {
+  //   ARGPARSE_CHECK_F(const_value_.get(),
+  //                    "Action %s needs a const value, which is not provided",
+  //                    ActionsToString(action_code));
+  // }
 }
 
 void ArgumentImpl::InitType() {
@@ -265,18 +265,18 @@ void ArgumentImpl::InitType() {
 }
 
 void ArgumentImpl::InitDefaultValue() {
-  switch (action_info_->action_code) {
-    case ActionKind::kStoreFalse:
-      default_value_ = MakeAny(true);
-      const_value_ = MakeAny(false);
-      break;
-    case ActionKind::kStoreTrue:
-      default_value_ = MakeAny(false);
-      const_value_ = MakeAny(true);
-      break;
-    default:
-      break;
-  }
+  // switch (action_info_->action_code) {
+  //   case ActionKind::kStoreFalse:
+  //     default_value_ = MakeAny(true);
+  //     const_value_ = MakeAny(false);
+  //     break;
+  //   case ActionKind::kStoreTrue:
+  //     default_value_ = MakeAny(false);
+  //     const_value_ = MakeAny(true);
+  //     break;
+  //   default:
+  //     break;
+  // }
 }
 
 void ArgumentImpl::Initialize() {
@@ -527,38 +527,38 @@ ActionKind StringToActions(const std::string& str) {
 // TODO: extract action-related logic into one class, say ActionHelper.
 void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
                              CallbackRunner::Delegate* delegate) {
-  auto* ops = action_info_->ops.get();
-  switch (action_info_->action_code) {
-    case ActionKind::kNoAction:
-      break;
-    case ActionKind::kStore:
-      ops->Store(dest_ptr(), std::move(data));
-      break;
-    case ActionKind::kStoreConst:
-    case ActionKind::kStoreTrue:
-    case ActionKind::kStoreFalse:
-      ops->StoreConst(dest_ptr(), const_value());
-      break;
-    case ActionKind::kAppend:
-      ops->Append(dest_ptr(), std::move(data));
-      break;
-    case ActionKind::kAppendConst:
-      ops->AppendConst(dest_ptr(), const_value());
-      break;
-    case ActionKind::kPrintHelp:
-      delegate->OnPrintHelp();
-      break;
-    case ActionKind::kPrintUsage:
-      delegate->OnPrintUsage();
-      break;
-    case ActionKind::kCustom:
-      ARGPARSE_DCHECK(action_info_->callback);
-      action_info_->callback->Run(dest_ptr(), std::move(data));
-      break;
-    case ActionKind::kCount:
-      ops->Count(dest_ptr());
-      break;
-  }
+  // auto* ops = action_info_->ops.get();
+  // switch (action_info_->action_code) {
+  //   case ActionKind::kNoAction:
+  //     break;
+  //   case ActionKind::kStore:
+  //     ops->Store(dest_ptr(), std::move(data));
+  //     break;
+  //   case ActionKind::kStoreConst:
+  //   case ActionKind::kStoreTrue:
+  //   case ActionKind::kStoreFalse:
+  //     ops->StoreConst(dest_ptr(), const_value());
+  //     break;
+  //   case ActionKind::kAppend:
+  //     ops->Append(dest_ptr(), std::move(data));
+  //     break;
+  //   case ActionKind::kAppendConst:
+  //     ops->AppendConst(dest_ptr(), const_value());
+  //     break;
+  //   case ActionKind::kPrintHelp:
+  //     delegate->OnPrintHelp();
+  //     break;
+  //   case ActionKind::kPrintUsage:
+  //     delegate->OnPrintUsage();
+  //     break;
+  //   case ActionKind::kCustom:
+  //     // ARGPARSE_DCHECK(action_info_->callback);
+  //     // action_info_->callback->Run(dest_ptr(), std::move(data));
+  //     break;
+  //   case ActionKind::kCount:
+  //     ops->Count(dest_ptr());
+  //     break;
+  // }
 }
 
 CallbackRunner* ArgumentImpl::GetCallbackRunner() {
