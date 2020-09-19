@@ -815,19 +815,6 @@ using ActionCallbackPrototype = void(T*, Result<V>);
 // template <typename T, typename V>
 // using ActionCallbackPrototypeNoDest = void(Result<V>);
 
-// Perform data conversion..
-// class TypeCallback {
-//  public:
-//   virtual ~TypeCallback() {}
-//   virtual void Run(const std::string& in, OpsResult* out) {}
-// };
-
-// class ActionCallback {
-//  public:
-//   virtual ~ActionCallback() {}
-//   virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
-// };
-
 class CallbackRunner {
  public:
   // Communicate with outside when callback is fired.
@@ -845,11 +832,26 @@ class CallbackRunner {
   virtual ~CallbackRunner() {}
 };
 
+// This is the type eraser of user's callback to the type() option.
+class TypeCallback {
+ public:
+  virtual ~TypeCallback() {}
+  virtual void Run(const std::string& in, OpsResult* out) = 0;
+  virtual std::string GetTypeHint() = 0;
+};
+
+// Similar to TypeCallback, but is for action().
+class ActionCallback {
+ public:
+  virtual ~ActionCallback() {}
+  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
+};
+
 class NamesInfo {
  public:
   virtual ~NamesInfo() {}
-  virtual bool IsOption() = 0;
-  virtual std::string GetDefaultMetaVar() = 0;
+  virtual bool IsOption() {}
+  virtual std::string GetDefaultMetaVar() {}
 
   enum NameKind {
     kLongName,
@@ -860,25 +862,12 @@ class NamesInfo {
   // Visit each name of the optional argument.
   virtual void ForEachName(
       NameKind name_kind,
-      std::function<void(const std::string&)> callback) = 0;
-  virtual const char* GetPositionalName() = 0;
+      std::function<void(const std::string&)> callback) {}
+  virtual const char* GetPositionalName() {}
 
   static std::unique_ptr<NamesInfo> CreateOptional(const std::string& in);
   static std::unique_ptr<NamesInfo> CreatePositional(
       const std::vector<std::string>& in);
-};
-
-// TODO: make these info class abstract.
-struct NamesInfoImpl {
-  bool is_option = false;
-  std::vector<std::string> long_names;
-  std::vector<char> short_names;
-  std::string meta_var;
-
-  // Positional.
-  explicit NamesInfoImpl(std::string name);
-  // Option.
-  explicit NamesInfoImpl(std::vector<const char*> names);
 };
 
 class NumArgsInfo {
@@ -890,42 +879,6 @@ class NumArgsInfo {
   static std::unique_ptr<NumArgsInfo> CreateFromFlag(char flag);
   static std::unique_ptr<NumArgsInfo> CreateFromNum(int num);
 };
-
-class NumArgsInfoImpl : public NumArgsInfo {
- public:
-  explicit NumArgsInfoImpl(int num) : lower_bound_(num), upper_bound_(num) {}
-  explicit NumArgsInfoImpl(char flag) {
-    switch (flag) {
-      case '+':
-        lower_bound_ = 1;
-        upper_bound_ = kMax;
-        break;
-      case '?':
-        lower_bound_ = 0;
-        upper_bound_ = 1;
-      case '*':
-        lower_bound_ = 0;
-        upper_bound_ = kMax;
-      default:
-        ARGPARSE_DCHECK(false);
-        break;
-    }
-  }
-
-  bool Run(unsigned num, std::string* errmsg) override { return false; }
-
- private:
-  static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
-  unsigned lower_bound_;
-  unsigned upper_bound_;
-};
-
-inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
-  return std::make_unique<NumArgsInfoImpl>(flag);
-}
-inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
-  return std::make_unique<NumArgsInfoImpl>(num);
-}
 
 class DestInfo {
  public:
@@ -941,64 +894,28 @@ class DestInfo {
   static std::unique_ptr<DestInfo> CreateFromPtr(T* ptr);
 };
 
-class DestInfoImpl : public DestInfo {
+class CallbackClient {
  public:
-  DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
-      : dest_ptr_(d), ops_factory_(std::move(f)) {
-    ops_ = ops_factory_->Create();
-  }
-
-  DestPtr GetDestPtr() override { return dest_ptr_; }
-  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
-  std::string FormatValue(const Any& in) override {
-    return ops_->FormatValue(in);
-  }
-
- private:
-  DestPtr dest_ptr_;
-  std::unique_ptr<OpsFactory> ops_factory_;
-  std::unique_ptr<Operations> ops_;
+  virtual ~CallbackClient() {}
+  virtual std::unique_ptr<Any> GetData() = 0;
+  virtual DestPtr GetDestPtr() = 0;
+  virtual const Any* GetConstValue() = 0;
+  virtual void PrintHelp() = 0;
+  virtual void PrintUsage() = 0;
 };
 
 class ActionInfo {
  public:
   virtual ~ActionInfo() {}
 
-  struct Params {
-    DestPtr dest_ptr;
-    std::unique_ptr<Any> data;
-    const Any* const_value;
-    CallbackRunner::Delegate* delegate;
-  };
+  virtual void Run(CallbackClient* client) = 0;
 
-  virtual void Run(Params params) = 0;
+  static std::unique_ptr<ActionInfo> CreateDefault(
+      ActionKind action_kind,
+      std::unique_ptr<Operations> ops);
 
-  static std::unique_ptr<ActionInfo> CreateDefault(ActionKind action_kind);
-  template <typename Callback>
-  static std::unique_ptr<ActionInfo> CreateFromCallback(Callback&& cb);
-};
-
-class DefaultActionInfo : public ActionInfo {
- public:
-  DefaultActionInfo(ActionKind action_kind, std::unique_ptr<Operations> ops)
-      : action_kind_(action_kind), ops_(std::move(ops)) {}
-
-  void Run(Params params) override;
-
- private:
-  ActionKind action_kind_;
-  std::unique_ptr<Operations> ops_;
-};
-
-struct ActionInfoImpl {
-  ActionKind action_code = ActionKind::kNoAction;
-  // std::unique_ptr<ActionCallback> callback;
-  std::unique_ptr<Operations> ops;
-
-  ActionInfoImpl() = default;
-  explicit ActionInfoImpl(ActionKind a) : action_code(a) {}
-  // explicit ActionInfoImpl(std::unique_ptr<ActionCallback> cb)
-  //     : action_code(ActionKind::kCustom), callback(std::move(cb)) {}
+  static std::unique_ptr<ActionInfo> CreateFromCallback(
+      std::unique_ptr<ActionCallback> cb);
 };
 
 class TypeInfo {
@@ -1006,15 +923,17 @@ class TypeInfo {
   virtual ~TypeInfo() {}
   virtual void Run(const std::string& in, OpsResult* out) = 0;
   virtual std::string GetTypeHint() = 0;
-  virtual void Initialize(DestInfo* dest) = 0;
 
   // Default version: parse a single string into value.
-  static std::unique_ptr<TypeInfo> CreateDefault();
+  static std::unique_ptr<TypeInfo> CreateDefault(
+      std::unique_ptr<Operations> ops);
   // Open a file.
-  static std::unique_ptr<TypeInfo> CreateFromFileType(OpenMode mode);
+  static std::unique_ptr<TypeInfo> CreateFileType(
+      std::unique_ptr<Operations> ops,
+      OpenMode mode);
   // Invoke user's callback.
-  template <typename Callback>
-  static std::unique_ptr<TypeInfo> CreateFromCallback(Callback&& cb);
+  static std::unique_ptr<TypeInfo> CreateFromCallback(
+      std::unique_ptr<TypeCallback> cb);
 };
 
 // Control whether some extra info appear in the help doc.
@@ -1028,10 +947,10 @@ class Argument {
  public:
   virtual bool IsRequired() = 0;
   virtual const char* GetHelpDoc() = 0;
-  const char* GetMetaVar() { return GetNamesInfo()->meta_var.c_str(); }
-  bool IsOption() { return GetNamesInfo()->is_option; }
+  const char* GetMetaVar() {/* return GetNamesInfo()->meta_var.c_str();*/ }
+  bool IsOption() { return GetNamesInfo()->IsOption(); }
   virtual ArgumentGroup* GetGroup() = 0;
-  virtual const NamesInfoImpl* GetNamesInfo() = 0;
+  virtual NamesInfo* GetNamesInfo() = 0;
   // If a typehint exists, return true and set out.
   virtual bool GetTypeHint(std::string* out) = 0;
   // If a default-value exists, return true and set out.
@@ -1053,7 +972,7 @@ class Argument {
   virtual bool Before(const Argument* that) const = 0;
 
   virtual ~Argument() {}
-  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfoImpl> info);
+  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
 };
 
 // Return value of help filter function.
@@ -1239,30 +1158,163 @@ class ArgumentController {
 // End of interfaces. Begin of Impls. //
 ////////////////////////////////////////
 
-// Default version of TypeInfo, created by DestInfo.
-class TypeInfoImpl : public TypeInfo {
- public:
-  TypeInfoImpl(TypeKind type_kind, std::unique_ptr<Operations> ops)
-      : type_kind_(type_kind), ops_(std::move(ops)) {}
+// TODO: make these info class abstract.
+struct NamesInfoImpl : public NamesInfo {
+  bool is_option = false;
+  std::vector<std::string> long_names;
+  std::vector<char> short_names;
+  std::string meta_var;
 
-  void Run(const std::string& in, OpsResult* out) override {
-    switch (type_kind_) {
-      case TypeKind::kParse:
-        return ops_->Parse(in, out);
-      case TypeKind::kOpen:
-        //  return ops_->Open(in, out);
+  // Positional.
+  explicit NamesInfoImpl(std::string name);
+  // Option.
+  explicit NamesInfoImpl(std::vector<const char*> names);
+};
+
+class NumArgsInfoImpl : public NumArgsInfo {
+ public:
+  explicit NumArgsInfoImpl(int num) : lower_bound_(num), upper_bound_(num) {}
+  explicit NumArgsInfoImpl(char flag) {
+    switch (flag) {
+      case '+':
+        lower_bound_ = 1;
+        upper_bound_ = kMax;
+        break;
+      case '?':
+        lower_bound_ = 0;
+        upper_bound_ = 1;
+      case '*':
+        lower_bound_ = 0;
+        upper_bound_ = kMax;
       default:
         ARGPARSE_DCHECK(false);
+        break;
     }
+  }
+
+  bool Run(unsigned num, std::string* errmsg) override { return false; }
+
+ private:
+  static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
+  unsigned lower_bound_;
+  unsigned upper_bound_;
+};
+
+inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
+  return std::make_unique<NumArgsInfoImpl>(flag);
+}
+
+inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
+  return std::make_unique<NumArgsInfoImpl>(num);
+}
+
+class DestInfoImpl : public DestInfo {
+ public:
+  DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
+      : dest_ptr_(d), ops_factory_(std::move(f)) {
+    ops_ = ops_factory_->Create();
+  }
+
+  DestPtr GetDestPtr() override { return dest_ptr_; }
+  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
+  std::string FormatValue(const Any& in) override {
+    return ops_->FormatValue(in);
+  }
+
+ private:
+  DestPtr dest_ptr_;
+  std::unique_ptr<OpsFactory> ops_factory_;
+  std::unique_ptr<Operations> ops_;
+};
+
+// ActionInfo for builtin actions like store and append.
+class DefaultActionInfo : public ActionInfo {
+ public:
+  DefaultActionInfo(ActionKind action_kind, std::unique_ptr<Operations> ops)
+      : action_kind_(action_kind), ops_(std::move(ops)) {}
+
+  void Run(CallbackClient* client) override;
+
+ private:
+  // Since kind of action is too much, we use a switch instead of subclasses.
+  ActionKind action_kind_;
+  std::unique_ptr<Operations> ops_;
+};
+
+// Adapt an ActionCallback to ActionInfo.
+class ActionCallbackInfo : public ActionInfo {
+ public:
+  explicit ActionCallbackInfo(std::unique_ptr<ActionCallback> cb)
+      : action_callback_(std::move(cb)) {}
+
+  void Run(CallbackClient* client) override {
+    return action_callback_->Run(client->GetDestPtr(), client->GetData());
+  }
+
+ private:
+  std::unique_ptr<ActionCallback> action_callback_;
+};
+
+inline std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(
+    ActionKind action_kind,
+    std::unique_ptr<Operations> ops) {
+  return std::make_unique<DefaultActionInfo>(action_kind, std::move(ops));
+}
+
+inline std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(
+    std::unique_ptr<ActionCallback> cb) {
+  return std::make_unique<ActionCallbackInfo>(std::move(cb));
+}
+
+// The default of TypeInfo: parse a single string into a value
+// using ParseTraits.
+class DefaultTypeInfo : public TypeInfo {
+ public:
+  explicit DefaultTypeInfo(std::unique_ptr<Operations> ops)
+    : ops_(std::move(ops)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {
+    return ops_->Parse(in, out);
   }
 
   std::string GetTypeHint() override { return ops_->GetTypeHint(); }
 
-  void Initialize(DestInfo* dest) override {}
+ private:
+  std::unique_ptr<Operations> ops_;
+};
+
+// TypeInfo that opens a file according to some mode.
+class FileTypeInfo : public TypeInfo {
+ public:
+  // TODO: set up cache of Operations objs..
+  FileTypeInfo(std::unique_ptr<Operations> ops, OpenMode mode)
+      : ops_(std::move(ops)), mode_(mode) {
+    ARGPARSE_DCHECK(mode != kModeNoMode);
+  }
+
+  void Run(const std::string& in, OpsResult* out) override {
+    return ops_->Open(in, mode_, out);
+  }
+
+  std::string GetTypeHint() override { return ops_->GetTypeHint(); }
 
  private:
-  TypeKind type_kind_;
   std::unique_ptr<Operations> ops_;
+  OpenMode mode_;
+};
+
+// TypeInfo that runs user's callback.
+class TypeCallbackInfo : public TypeInfo {
+ public:
+  explicit TypeCallbackInfo(std::unique_ptr<TypeCallback> cb)
+      : type_callback_(std::move(cb)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {
+    return type_callback_->Run(in, out);
+  }
+
+ private:
+  std::unique_ptr<TypeCallback> type_callback_;
 };
 
 template <typename T>
@@ -1447,13 +1499,13 @@ std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument, public CallbackRunner {
  public:
-  explicit ArgumentImpl(std::unique_ptr<NamesInfoImpl> names)
+  explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
       : names_info_(std::move(names)) {}
 
   ArgumentGroup* GetGroup() override { return group_; }
-  const NamesInfoImpl* GetNamesInfo() override { return names_info_.get(); }
+   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required(); }
-  bool is_option() const { return names_info_->is_option; }
+  bool is_option() const {  }
   bool is_required() const { return is_required_; }
 
   const std::string& help_doc() const { return help_doc_; }
@@ -1462,15 +1514,15 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     return help_doc_.empty() ? nullptr : help_doc_.c_str();
   }
 
-  const std::string& meta_var() const { return names_info_->meta_var; }
+  const std::string& meta_var() const {  }
 
   // TODO: split the long_names, short_names from Names into name, key and
   // alias.
   const std::vector<std::string>& long_names() const {
-    return names_info_->long_names;
+    // return names_info_->long_names;
   }
   const std::vector<char>& short_names() const {
-    return names_info_->short_names;
+    // return names_info_->short_names;
   }
 
   const char* name() const {
@@ -1482,7 +1534,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     help_doc_ = std::move(help_doc);
   }
   void SetMetaVar(std::string meta_var) override {
-    names_info_->meta_var = std::move(meta_var);
+    // names_info_->meta_var = std::move(meta_var);
   }
   void SetDest(std::unique_ptr<DestInfo> info) override {
     ARGPARSE_DCHECK(info);
@@ -1545,7 +1597,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
-  std::unique_ptr<NamesInfoImpl> names_info_;
+  std::unique_ptr<NamesInfo> names_info_;
   ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
   bool is_required_ = false;
@@ -1559,7 +1611,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
 };
 
 inline std::unique_ptr<Argument> Argument::Create(
-    std::unique_ptr<NamesInfoImpl> info) {
+    std::unique_ptr<NamesInfo> info) {
   ARGPARSE_DCHECK(info);
   return std::make_unique<ArgumentImpl>(std::move(info));
 }
@@ -1608,7 +1660,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
     return groups_[kPositionalGroup].get();
   }
 
-  bool CheckNamesConflict(const NamesInfoImpl& names);
+  bool CheckNamesConflict(const NamesInfo& names);
 
   std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
@@ -1735,10 +1787,10 @@ class SubCommandHolderImpl::GroupImpl : public SubCommandGroup {
 };
 
 template <typename T>
-class TypeCallback : public TypeInfo {
+class TypeCallbackImpl : public TypeCallback {
  public:
   using CallbackType = std::function<TypeCallbackPrototype<T>>;
-  explicit TypeCallback(CallbackType cb) : callback_(std::move(cb)) {}
+  explicit TypeCallbackImpl(CallbackType cb) : callback_(std::move(cb)) {}
 
   void Run(const std::string& in, OpsResult* out) override {
     Result<T> result;
@@ -1747,7 +1799,6 @@ class TypeCallback : public TypeInfo {
   }
 
   std::string GetTypeHint() override { return TypeHint<T>(); }
-  void Initialize(DestInfo* dest) override {}
 
  private:
   CallbackType callback_;
@@ -1755,7 +1806,7 @@ class TypeCallback : public TypeInfo {
 
 // Provided by user's callable obj.
 template <typename T, typename V>
-class CustomActionCallback : public ActionInfo {
+class CustomActionCallback : public ActionCallback {
  public:
   using CallbackType = std::function<ActionCallbackPrototype<T, V>>;
   explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {
@@ -1763,9 +1814,9 @@ class CustomActionCallback : public ActionInfo {
   }
 
  private:
-  void Run(Params params) override {
-    Result<V> result(AnyCast<V>(std::move(params.data)));
-    auto* obj = params.dest_ptr.template load_ptr<T>();
+  void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) override {
+    Result<V> result(AnyCast<V>(std::move(data)));
+    auto* obj = dest_ptr.template load_ptr<T>();
     std::invoke(callback_, obj, std::move(result));
   }
 
@@ -1773,16 +1824,16 @@ class CustomActionCallback : public ActionInfo {
 };
 
 template <typename Callback, typename T>
-std::unique_ptr<TypeInfo> CreateTypeCallbackImpl(Callback&& cb,
+std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(Callback&& cb,
                                                  TypeCallbackPrototype<T>*) {
-  return std::make_unique<TypeCallback<T>>(std::forward<Callback>(cb));
+  return std::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
 }
 
 template <typename Callback, typename T>
-std::unique_ptr<TypeInfo> CreateTypeCallbackImpl(
+std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
     Callback&& cb,
     TypeCallbackPrototypeThrows<T>*) {
-  return std::make_unique<TypeCallback<T>>(
+  return std::make_unique<TypeCallbackImpl<T>>(
       [cb](const std::string& in, Result<T>* out) {
         try {
           *out = std::invoke(cb, in);
@@ -1793,14 +1844,14 @@ std::unique_ptr<TypeInfo> CreateTypeCallbackImpl(
 }
 
 template <typename Callback>
-std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(Callback&& cb) {
+std::unique_ptr<TypeCallback> CreateFromCallback(Callback&& cb) {
   return CreateTypeCallbackImpl(
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
 }
 
 template <typename Callback, typename T, typename V>
-std::unique_ptr<ActionInfo> CreateActionCallbackImpl(
+std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
     Callback&& cb,
     ActionCallbackPrototype<T, V>*) {
   return std::make_unique<CustomActionCallback<T, V>>(
@@ -1808,8 +1859,8 @@ std::unique_ptr<ActionInfo> CreateActionCallbackImpl(
 }
 
 template <typename Callback>
-std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(Callback&& cb) {
-  return CreateActionCallbackImpl(
+std::unique_ptr<ActionCallback> MakeActionCallback(Callback&& cb) {
+  return MakeActionCallbackImpl(
       std::forward<Callback>(cb),
       (detail::function_signature_t<Callback>*)nullptr);
 }
@@ -1832,21 +1883,17 @@ struct Type {
   Type(Type&&) = default;
 
   // To explicitly request a type, use Type<double>().
-  template <typename T>
-  Type() : info(new TypeInfoImpl(CreateOperations<T>())) {}
-
-  // Use it to provide your own TypeCallback impl.
-  // Type(TypeCallback* cb)
-  //     : info(new TypeInfoImpl(std::unique_ptr<TypeCallback>(cb))) {}
+  // template <typename T>
+  // Type() : info(TypeInfo::CreateDefault()) {}
+  // TODO..
 
   // Use FileType("rw") to request opening a file to read/write.
-  Type(FileType file_type)
-      : info(TypeInfo::CreateFromFileType(file_type.mode())) {}
+  // Type(FileType file_type) : info(TypeInfo::CreateOpen(file_type.mode())) {}
 
-  template <typename Callback,
-            typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  Type(Callback&& cb)
-      : info(TypeInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
+  // template <typename Callback,
+  //           typename = std::enable_if_t<detail::is_callback<Callback>{}>>
+  // Type(Callback&& cb)
+  //     : info(TypeInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
 };
 
 ActionKind StringToActions(const std::string& str);
@@ -1858,14 +1905,14 @@ struct Action {
   Action(Action&&) = default;
 
   // action("store_true").
-  Action(const char* action_string)
-      : info(ActionInfo::CreateDefault(StringToActions(action_string))) {}
+  // Action(const char* action_string)
+  //     : info(ActionInfo::CreateDefault(StringToActions(action_string))) {}
 
   // action([](T* out, Result<T> in) {})
-  template <typename Callback,
-            typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  Action(Callback&& cb)
-      : info(ActionInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
+  // template <typename Callback,
+  //           typename = std::enable_if_t<detail::is_callback<Callback>{}>>
+  // Action(Callback&& cb)
+  //     : info(ActionInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
 };
 
 struct Dest {
@@ -1913,7 +1960,7 @@ inline std::string ToUpper(const std::string& in) {
 }
 
 struct Names {
-  std::unique_ptr<NamesInfoImpl> info;
+  std::unique_ptr<NamesInfo> info;
   Names(const char* name);
   Names(std::initializer_list<const char*> names);
 };

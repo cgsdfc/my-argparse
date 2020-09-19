@@ -465,15 +465,15 @@ ArgumentHolderImpl::ArgumentHolderImpl() {
   AddArgumentGroup("positional arguments");
 }
 
-bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfoImpl& names) {
-  for (auto&& long_name : names.long_names)
-    if (!name_set_.insert(long_name).second)
-      return false;
-  // May not use multiple short names.
-  for (char short_name : names.short_names)
-    if (!name_set_.insert(std::string(&short_name, 1)).second)
-      return false;
-  return true;
+bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
+  // for (auto&& long_name : names.long_names)
+  //   if (!name_set_.insert(long_name).second)
+  //     return false;
+  // // May not use multiple short names.
+  // for (char short_name : names.short_names)
+  //   if (!name_set_.insert(std::string(&short_name, 1)).second)
+  //     return false;
+  // return true;
 }
 
 bool IsValidPositionalName(const char* name, std::size_t len) {
@@ -524,41 +524,48 @@ ActionKind StringToActions(const std::string& str) {
   return iter->second;
 }
 
+void DefaultActionInfo::Run(CallbackClient* client) {
+  auto dest_ptr = client->GetDestPtr();
+  auto data = client->GetData();
+
+  switch (action_kind_) {
+    case ActionKind::kNoAction:
+      break;
+    case ActionKind::kStore:
+      ops_->Store(dest_ptr, std::move(data));
+      break;
+    case ActionKind::kStoreConst:
+      ops_->StoreConst(dest_ptr, *client->GetConstValue());
+      break;
+    case ActionKind::kStoreTrue:
+      ops_->StoreConst(dest_ptr, MakeAnyOnStack(true));
+      break;
+    case ActionKind::kStoreFalse:
+      ops_->StoreConst(dest_ptr, MakeAnyOnStack(false));
+      break;
+    case ActionKind::kAppend:
+      ops_->Append(dest_ptr, std::move(data));
+      break;
+    case ActionKind::kAppendConst:
+      ops_->AppendConst(dest_ptr, *client->GetConstValue());
+      break;
+    case ActionKind::kPrintHelp:
+      client->PrintHelp();
+      break;
+    case ActionKind::kPrintUsage:
+      client->PrintUsage();
+      break;
+    case ActionKind::kCustom:
+      break;
+    case ActionKind::kCount:
+      ops_->Count(dest_ptr);
+      break;
+  }
+}
+
 // TODO: extract action-related logic into one class, say ActionHelper.
 void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
                              CallbackRunner::Delegate* delegate) {
-  // auto* ops = action_info_->ops.get();
-  // switch (action_info_->action_code) {
-  //   case ActionKind::kNoAction:
-  //     break;
-  //   case ActionKind::kStore:
-  //     ops->Store(dest_ptr(), std::move(data));
-  //     break;
-  //   case ActionKind::kStoreConst:
-  //   case ActionKind::kStoreTrue:
-  //   case ActionKind::kStoreFalse:
-  //     ops->StoreConst(dest_ptr(), const_value());
-  //     break;
-  //   case ActionKind::kAppend:
-  //     ops->Append(dest_ptr(), std::move(data));
-  //     break;
-  //   case ActionKind::kAppendConst:
-  //     ops->AppendConst(dest_ptr(), const_value());
-  //     break;
-  //   case ActionKind::kPrintHelp:
-  //     delegate->OnPrintHelp();
-  //     break;
-  //   case ActionKind::kPrintUsage:
-  //     delegate->OnPrintUsage();
-  //     break;
-  //   case ActionKind::kCustom:
-  //     // ARGPARSE_DCHECK(action_info_->callback);
-  //     // action_info_->callback->Run(dest_ptr(), std::move(data));
-  //     break;
-  //   case ActionKind::kCount:
-  //     ops->Count(dest_ptr());
-  //     break;
-  // }
 }
 
 CallbackRunner* ArgumentImpl::GetCallbackRunner() {
@@ -752,32 +759,32 @@ void ArgpCompiler::CompileGroup(ArgumentGroup* group,
 
 void ArgpCompiler::CompileArgument(Argument* arg,
                                    std::vector<argp_option>* out) {
-  argp_option opt{};
-  opt.doc = arg->GetHelpDoc();
-  opt.group = FindGroup(arg->GetGroup());
-  // opt.name = name();
+  // argp_option opt{};
+  // opt.doc = arg->GetHelpDoc();
+  // opt.group = FindGroup(arg->GetGroup());
+  // // opt.name = name();
 
-  if (!arg->IsOption()) {
-    // positional means none-zero in only doc and name, and flag should be
-    // OPTION_DOC.
-    opt.flags = OPTION_DOC;
-    return out->push_back(opt);
-  }
+  // if (!arg->IsOption()) {
+  //   // positional means none-zero in only doc and name, and flag should be
+  //   // OPTION_DOC.
+  //   opt.flags = OPTION_DOC;
+  //   return out->push_back(opt);
+  // }
 
-  // opt.arg = arg();
-  opt.key = FindArgument(arg);
-  out->push_back(opt);
+  // // opt.arg = arg();
+  // opt.key = FindArgument(arg);
+  // out->push_back(opt);
 
-  // TODO: handle alias correctly. Add all aliases.
-  auto* info = arg->GetNamesInfo();
-  for (auto first = info->long_names.begin() + 1, last = info->long_names.end();
-       first != last; ++first) {
-    argp_option opt_alias;
-    std::memcpy(&opt_alias, &opt, sizeof(argp_option));
-    opt.name = first->c_str();
-    opt.flags = OPTION_ALIAS;
-    out->push_back(opt_alias);
-  }
+  // // TODO: handle alias correctly. Add all aliases.
+  // auto* info = arg->GetNamesInfo();
+  // for (auto first = info->long_names.begin() + 1, last = info->long_names.end();
+  //      first != last; ++first) {
+  //   argp_option opt_alias;
+  //   std::memcpy(&opt_alias, &opt, sizeof(argp_option));
+  //   opt.name = first->c_str();
+  //   opt.flags = OPTION_ALIAS;
+  //   out->push_back(opt_alias);
+  // }
 }
 
 void ArgpCompiler::CompileOptions(std::vector<argp_option>* out) {
@@ -789,9 +796,9 @@ void ArgpCompiler::CompileOptions(std::vector<argp_option>* out) {
 }
 
 void ArgpCompiler::InitArgument(Argument* arg) {
-  const auto& short_names = arg->GetNamesInfo()->short_names;
-  int key = short_names.empty() ? next_arg_key_++ : short_names[0];
-  argument_to_id_[arg] = key;
+  // const auto& short_names = arg->GetNamesInfo()->short_names;
+  // int key = short_names.empty() ? next_arg_key_++ : short_names[0];
+  // argument_to_id_[arg] = key;
 }
 
 void ArgpCompiler::InitGroup(ArgumentGroup* group) {
@@ -814,32 +821,32 @@ void ArgpCompiler::Initialize() {
 }
 
 void ArgpCompiler::CompileUsageFor(Argument* arg, std::ostream& os) {
-  if (!arg->IsOption()) {
-    os << arg->GetNamesInfo()->meta_var;
-    return;
-  }
-  os << '[';
-  std::size_t i = 0;
-  const auto& long_names = arg->GetNamesInfo()->long_names;
-  const auto& short_names = arg->GetNamesInfo()->short_names;
-  const auto size = long_names.size() + short_names.size();
+  // if (!arg->IsOption()) {
+  //   os << arg->GetNamesInfo()->meta_var;
+  //   return;
+  // }
+  // os << '[';
+  // std::size_t i = 0;
+  // const auto& long_names = arg->GetNamesInfo()->long_names;
+  // const auto& short_names = arg->GetNamesInfo()->short_names;
+  // const auto size = long_names.size() + short_names.size();
 
-  for (; i < size; ++i) {
-    if (i < long_names.size()) {
-      os << "--" << long_names[i];
-    } else {
-      os << '-' << short_names[i - long_names.size()];
-    }
-    if (i < size - 1)
-      os << '|';
-  }
+  // for (; i < size; ++i) {
+  //   if (i < long_names.size()) {
+  //     os << "--" << long_names[i];
+  //   } else {
+  //     os << '-' << short_names[i - long_names.size()];
+  //   }
+  //   if (i < size - 1)
+  //     os << '|';
+  // }
 
-  if (!arg->IsRequired())
-    os << '[';
-  os << '=' << arg->GetNamesInfo()->meta_var;
-  if (!arg->IsRequired())
-    os << ']';
-  os << ']';
+  // if (!arg->IsRequired())
+  //   os << '[';
+  // os << '=' << arg->GetNamesInfo()->meta_var;
+  // if (!arg->IsRequired())
+  //   os << ']';
+  // os << ']';
 }
 
 void ArgpCompiler::CompileUsage(std::string* out) {
