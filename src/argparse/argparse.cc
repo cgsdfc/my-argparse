@@ -926,7 +926,7 @@ static bool ActionNeedsValueType(ActionKind in) {
   return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
 }
 
-std::unique_ptr<Argument> ArgumentFactoryImpl::Create() {
+std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
                              : arg_->GetNamesInfo()->GetDefaultMetaVar());
 
@@ -947,7 +947,7 @@ std::unique_ptr<Argument> ArgumentFactoryImpl::Create() {
       action_kind_ = ActionKind::kStore;
     // Some action don't need an ops, like print_help, we perhaps need to
     // distinct that..
-    auto ops = factory ? factory->Create() : nullptr;
+    auto ops = factory ? factory->CreateOps() : nullptr;
     arg_->SetAction(ActionInfo::CreateDefault(action_kind_, std::move(ops)));
   }
 
@@ -955,7 +955,7 @@ std::unique_ptr<Argument> ArgumentFactoryImpl::Create() {
     std::unique_ptr<Operations> ops = nullptr;
     if (factory)
       ops = ActionNeedsValueType(action_kind_) ? factory->CreateValueTypeOps()
-                                               : factory->Create();
+                                               : factory->CreateOps();
     auto info = open_mode_ == kModeNoMode
                     ? TypeInfo::CreateDefault(std::move(ops))
                     : TypeInfo::CreateFileType(std::move(ops), open_mode_);
@@ -963,6 +963,10 @@ std::unique_ptr<Argument> ArgumentFactoryImpl::Create() {
   }
 
   return std::move(arg_);
+}
+
+std::unique_ptr<ArgumentFactory> ArgumentFactory::Create() {
+  return std::make_unique<ArgumentFactoryImpl>();
 }
 
 }  // namespace argparse

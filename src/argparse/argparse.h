@@ -792,7 +792,7 @@ class Operations {
 // How to create a vtable?
 class OpsFactory {
  public:
-  virtual std::unique_ptr<Operations> Create() = 0;
+  virtual std::unique_ptr<Operations> CreateOps() = 0;
   // If this type has a concept of value_type, create a handle.
   virtual std::unique_ptr<Operations> CreateValueTypeOps() = 0;
   virtual ~OpsFactory() {}
@@ -1048,9 +1048,9 @@ class ArgumentFactory {
   virtual void SetMetaVar(std::string val) = 0;
 
   // Finally..
-  virtual std::unique_ptr<Argument> Create() = 0;
+  virtual std::unique_ptr<Argument> CreateArgument() = 0;
 
-  static std::unique_ptr<ArgumentFactory> CreateDefault();
+  static std::unique_ptr<ArgumentFactory> Create();
 };
 
 // Return value of help filter function.
@@ -1290,7 +1290,7 @@ class DestInfoImpl : public DestInfo {
  public:
   DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
       : dest_ptr_(d), ops_factory_(std::move(f)) {
-    ops_ = ops_factory_->Create();
+    ops_ = ops_factory_->CreateOps();
   }
 
   DestPtr GetDestPtr() override { return dest_ptr_; }
@@ -1475,7 +1475,7 @@ class ArgumentFactoryImpl : public ArgumentFactory {
     arg_->SetAction(ActionInfo::CreateFromCallback(std::move(cb)));
   }
 
-  std::unique_ptr<Argument> Create() override;
+  std::unique_ptr<Argument> CreateArgument() override;
 
  private:
   // Some options are directly fed into arg.
@@ -1646,7 +1646,7 @@ struct CreateValueTypeOpsImpl<T, true> {
 template <typename T>
 class OpsFactoryImpl : public OpsFactory {
  public:
-  std::unique_ptr<Operations> Create() override {
+  std::unique_ptr<Operations> CreateOps() override {
     return CreateOperations<T>();
   }
   std::unique_ptr<Operations> CreateValueTypeOps() override {
@@ -2256,7 +2256,7 @@ class AddArgumentHelper;
 class ArgumentBuilder {
  public:
   explicit ArgumentBuilder(Names names)
-      : factory_(ArgumentFactory::CreateDefault()) {
+      : factory_(ArgumentFactory::Create()) {
     ARGPARSE_DCHECK(names.info);
     factory_->SetNames(std::move(names.info));
   }
@@ -2323,7 +2323,7 @@ class ArgumentBuilder {
 
  private:
   friend class AddArgumentHelper;
-  std::unique_ptr<Argument> CreateArgument() { return factory_->Create(); }
+  std::unique_ptr<Argument> CreateArgument() { return factory_->CreateArgument(); }
 
   std::unique_ptr<ArgumentFactory> factory_;
 };
@@ -2443,6 +2443,9 @@ class MainParserHelper : public AddArgumentGroupHelper {
                         std::vector<std::string>* out) {
     return ParseArgsImpl(args, out);
   }
+
+  using AddArgumentGroupHelper::add_argument_group;
+  using AddArgumentHelper::add;
 
   SubParserGroup add(subparsers& sub) {}
   // TODO: More precise signature.
