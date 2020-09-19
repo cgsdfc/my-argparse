@@ -980,6 +980,69 @@ class Argument {
   static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
 };
 
+// This class handles Argument creation.
+// It understands user' options and tries to create an argument correctly.
+// Its necessity originates from the fact that some computation is unavoidable
+// between creating XXXInfos and getting what user gives us. For example, user's
+// action only tells us some string, but the actual performing of the action
+// needs an Operation, which can only be found from DestInfo. Meanwhile, impl
+// can choose to ignore some of user's options if the parser don't support it
+// and create their own impl of Argument to fit their parser. In a word, this
+// abstraction is right needed.
+class ArgumentFactory {
+ public:
+  virtual ~ArgumentFactory() {}
+
+  // Accept things from argument.
+
+  // names
+  virtual void SetNames(std::unique_ptr<NamesInfo> info) = 0;
+
+  // dest(&obj)
+  virtual void SetDest(std::unique_ptr<DestInfo> info) = 0;
+
+  // action("store")
+  virtual void SetActionString(const char* str) = 0;
+
+  // action(<lambda>)
+  virtual void SetActionCallback(std::unique_ptr<ActionCallback> cb) = 0;
+
+  // type<int>()
+  virtual void SetTypeOperations(std::unique_ptr<Operations> ops) = 0;
+
+  // type(<lambda>)
+  virtual void SetTypeCallback(std::unique_ptr<TypeCallback> cb) = 0;
+
+  // type(FileType())
+  virtual void SetTypeFileType(OpenMode mode) = 0;
+
+  // nargs('+')
+  virtual void SetNumArgsFlag(char flag) = 0;
+
+  // nargs(42)
+  virtual void SetNumArgsNumber(int num) = 0;
+
+  // const_value(...)
+  virtual void SetConstValue(std::unique_ptr<Any> val) = 0;
+
+  // default_value(...)
+  virtual void SetDefaultValue(std::unique_ptr<Any> val) = 0;
+
+  // required(false)
+  virtual void SetRequired(bool req) = 0;
+
+  // help(xxx)
+  virtual void SetHelp(std::string val) = 0;
+
+  // meta_var(xxx)
+  virtual void SetMetaVar(std::string val) = 0;
+
+  // Finally..
+  virtual std::unique_ptr<Argument> Create() = 0;
+
+  static std::unique_ptr<ArgumentFactory> CreateDefault();
+};
+
 // Return value of help filter function.
 enum class HelpFilterResult {
   kKeep,
@@ -1888,65 +1951,7 @@ class FileType {
   OpenMode mode_;
 };
 
-struct Type {
-  std::unique_ptr<TypeInfo> info;
-
-  Type() = default;
-  Type(Type&&) = default;
-
-  // To explicitly request a type, use Type<double>().
-  // template <typename T>
-  // Type() : info(TypeInfo::CreateDefault()) {}
-  // TODO..
-
-  // Use FileType("rw") to request opening a file to read/write.
-  // Type(FileType file_type) : info(TypeInfo::CreateOpen(file_type.mode())) {}
-
-  // template <typename Callback,
-  //           typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  // Type(Callback&& cb)
-  //     : info(TypeInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
-};
-
 ActionKind StringToActions(const std::string& str);
-
-struct Action {
-  std::unique_ptr<ActionInfo> info;
-
-  Action() = default;
-  Action(Action&&) = default;
-
-  // action("store_true").
-  // Action(const char* action_string)
-  //     : info(ActionInfo::CreateDefault(StringToActions(action_string))) {}
-
-  // action([](T* out, Result<T> in) {})
-  // template <typename Callback,
-  //           typename = std::enable_if_t<detail::is_callback<Callback>{}>>
-  // Action(Callback&& cb)
-  //     : info(ActionInfo::CreateFromCallback(std::forward<Callback>(cb))) {}
-};
-
-struct Dest {
-  std::unique_ptr<DestInfo> info;
-  Dest() = default;
-  template <typename T>
-  Dest(T* ptr) : info(DestInfo::CreateFromPtr(ptr)) {}
-};
-
-struct AnyValue {
-  std::unique_ptr<Any> data;
-  AnyValue(AnyValue&&) = delete;
-
-  template <typename T>
-  AnyValue(T&& val) : data(MakeAny(std::forward<T>(val))) {}
-};
-
-struct NumArgs {
-  std::unique_ptr<NumArgsInfoImpl> info;
-  NumArgs(char flag) : info(new NumArgsInfoImpl(flag)) {}
-  NumArgs(int num) : info(new NumArgsInfoImpl(num)) {}
-};
 
 bool IsValidPositionalName(const char* name, std::size_t len);
 
@@ -2197,75 +2202,98 @@ struct Options {
 
 class AddArgumentHelper;
 
-class argument {
+class ArgumentBuilder {
  public:
-  explicit argument(Names names) {
+  explicit ArgumentBuilder(Names names)
+      : factory_(ArgumentFactory::CreateDefault()) {
     ARGPARSE_DCHECK(names.info);
-    arg_ = Argument::Create(std::move(names.info));
+    factory_->SetNames(std::move(names.info));
   }
 
   // TODO: Fix the typeinfo/actioninfo deduction.
-  argument& dest(Dest d) {
-    if (d.info)
-      arg_->SetDest(std::move(d.info));
+  template <typename T>
+  ArgumentBuilder& dest(T* ptr) {
+    factory_->SetDest(DestInfo::CreateFromPtr(ptr));
     return *this;
   }
-  argument& action(Action a) {
-    if (a.info)
-      arg_->SetAction(std::move(a.info));
+  ArgumentBuilder& action(const char* str) {
+    factory_->SetActionString(str);
     return *this;
   }
-  argument& type(Type t) {
-    if (t.info)
-      arg_->SetType(std::move(t.info));
+  template <typename Callback>
+  ArgumentBuilder& action(Callback&& cb) {
+    factory_->SetActionCallback(MakeActionCallback(std::forward<Callback>(cb)));
     return *this;
   }
-  argument& const_value(AnyValue val) {
-    arg_->SetConstValue(std::move(val.data));
+  template <typename Callback>
+  ArgumentBuilder& type(Callback&& cb) {
+    factory_->SetTypeCallback(MakeTypeCallback(std::forward<Callback>(cb)));
     return *this;
   }
-  argument& default_value(AnyValue val) {
-    arg_->SetDefaultValue(std::move(val.data));
+  template <typename T>
+  ArgumentBuilder& type() {
+    factory_->SetTypeOperations(CreateOperations<T>());
     return *this;
   }
-  argument& help(const char* h) {
-    if (h)
-      arg_->SetHelpDoc(h);
+  ArgumentBuilder& type(FileType file_type) {
+    factory_->SetTypeFileType(file_type.mode());
     return *this;
   }
-  argument& required(bool b) {
-    arg_->SetRequired(b);
+  template <typename T>
+  ArgumentBuilder& const_value(T&& val) {
+    factory_->SetConstValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
-  argument& meta_var(const char* v) {
-    if (v)
-      arg_->SetMetaVar(v);
+  template <typename T>
+  ArgumentBuilder& default_value(T&& val) {
+    factory_->SetDefaultValue(MakeAny(std::forward<T>(val)));
     return *this;
   }
-  argument& num_args(NumArgs n) {
-    arg_->SetNumArgs(std::move(n.info));
+  ArgumentBuilder& help(std::string val) {
+    factory_->SetHelp(std::move(val));
+    return *this;
+  }
+  ArgumentBuilder& required(bool val) {
+    factory_->SetRequired(val);
+    return *this;
+  }
+  ArgumentBuilder& meta_var(std::string val) {
+    factory_->SetMetaVar(std::move(val));
+    return *this;
+  }
+  ArgumentBuilder& nargs(int num) {
+    factory_->SetNumArgsNumber(num);
+    return *this;
+  }
+  ArgumentBuilder& nargs(char flag) {
+    factory_->SetNumArgsFlag(flag);
     return *this;
   }
 
  private:
   friend class AddArgumentHelper;
-  std::unique_ptr<Argument> ReleaseArgument() {
-    ARGPARSE_DCHECK(arg_);
-    return std::move(arg_);
+  std::unique_ptr<Argument> CreateArgument() {
+    return factory_->Create();
   }
-  std::unique_ptr<Argument> arg_;
+
+  std::unique_ptr<ArgumentFactory> factory_;
 };
+
+// Helper alias.
+using argument = ArgumentBuilder;
 
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
-  void add_argument(Names names,
-                    Dest dest = {},
-                    const char* help = {},
-                    Type type = {},
-                    Action action = {});
+  // void add_argument(Names names,
+  //                   Dest dest = {},
+  //                   const char* help = {},
+  //                   Type type = {},
+  //                   Action action = {});
 
-  void add(argument& arg) { AddArgumentImpl(arg.ReleaseArgument()); }
+  void add(ArgumentBuilder& builder) {
+    AddArgumentImpl(builder.CreateArgument());
+  }
   virtual ~AddArgumentHelper() {}
 
  private:

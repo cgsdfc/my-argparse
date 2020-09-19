@@ -863,18 +863,18 @@ void ArgpCompiler::CompileArgumentIndexes(ArgpIndexesInfo* out) {
   });
 }
 
-void AddArgumentHelper::add_argument(Names names,
-                                     Dest dest,
-                                     const char* help,
-                                     Type type,
-                                     Action action) {
-  argument arg(std::move(names));
-  arg.dest(std::move(dest))
-      .help(help)
-      .type(std::move(type))
-      .action(std::move(action));
-  return add(arg);
-}
+// void AddArgumentHelper::add_argument(Names names,
+//                                      Dest dest,
+//                                      const char* help,
+//                                      Type type,
+//                                      Action action) {
+//   argument arg(std::move(names));
+//   arg.dest(std::move(dest))
+//       .help(help)
+//       .type(std::move(type))
+//       .action(std::move(action));
+//   return add(arg);
+// }
 
 class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
  public:
