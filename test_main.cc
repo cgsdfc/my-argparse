@@ -24,6 +24,8 @@ int main(int argc, char const* argv[]) {
   // ArgumentParser parser;
   std::cout << IsOpsSupported<OpsKind::kCount, double>{};
 
+  new ArgumentFactoryImpl;
+
   // std::string output;
   // parser.add(ap::argument("output")
   //                .dest(&output)

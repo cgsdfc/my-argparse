@@ -1398,6 +1398,93 @@ class TypeCallbackInfo : public TypeInfo {
   std::unique_ptr<TypeCallback> type_callback_;
 };
 
+inline std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(
+    std::unique_ptr<Operations> ops) {
+  return std::make_unique<DefaultTypeInfo>(std::move(ops));
+}
+inline std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
+    std::unique_ptr<Operations> ops,
+    OpenMode mode) {
+  return std::make_unique<FileTypeInfo>(std::move(ops), mode);
+}
+// Invoke user's callback.
+inline std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
+    std::unique_ptr<TypeCallback> cb) {
+  return std::make_unique<TypeCallbackInfo>(std::move(cb));
+}
+
+ActionKind StringToActions(const std::string& str);
+
+class ArgumentFactoryImpl : public ArgumentFactory {
+ public:
+  void SetNames(std::unique_ptr<NamesInfo> info) override {
+    ARGPARSE_DCHECK_F(!arg_, "SetNames should only be called once");
+    arg_ = Argument::Create(std::move(info));
+  }
+
+  void SetDest(std::unique_ptr<DestInfo> info) override {
+    arg_->SetDest(std::move(info));
+  }
+
+  void SetActionString(const char* str) override {
+    action_kind_ = StringToActions(str);
+  }
+
+  void SetTypeOperations(std::unique_ptr<Operations> ops) override {
+    arg_->SetType(TypeInfo::CreateDefault(std::move(ops)));
+  }
+
+  void SetTypeCallback(std::unique_ptr<TypeCallback> cb) override {
+    arg_->SetType(TypeInfo::CreateFromCallback(std::move(cb)));
+  }
+
+  void SetTypeFileType(OpenMode mode) override { open_mode_ = mode; }
+
+  void SetNumArgsFlag(char flag) override {
+    arg_->SetNumArgs(NumArgsInfo::CreateFromFlag(flag));
+  }
+
+  void SetNumArgsNumber(int num) override {
+    arg_->SetNumArgs(NumArgsInfo::CreateFromNum(num));
+  }
+
+  void SetConstValue(std::unique_ptr<Any> val) override {
+    arg_->SetConstValue(std::move(val));
+  }
+
+  void SetDefaultValue(std::unique_ptr<Any> val) override {
+    arg_->SetDefaultValue(std::move(val));
+  }
+
+  void SetMetaVar(std::string val) override {
+    meta_var_ = std::make_unique<std::string>(std::move(val));
+  }
+
+  void SetRequired(bool val) override {
+    ARGPARSE_DCHECK(arg_);
+    arg_->SetRequired(val);
+  }
+
+  void SetHelp(std::string val) override {
+    ARGPARSE_DCHECK(arg_);
+    arg_->SetHelpDoc(std::move(val));
+  }
+
+  void SetActionCallback(std::unique_ptr<ActionCallback> cb) override {
+    arg_->SetAction(ActionInfo::CreateFromCallback(std::move(cb)));
+  }
+
+  std::unique_ptr<Argument> Create() override { return nullptr; }
+
+ private:
+  // Some options are directly fed into arg.
+  std::unique_ptr<Argument> arg_;
+  // If not given, use default from NamesInfo.
+  std::unique_ptr<std::string> meta_var_;
+  ActionKind action_kind_ = ActionKind::kNoAction;
+  OpenMode open_mode_ = kModeNoMode;
+};
+
 template <typename T>
 void ConvertResults(Result<T>* in, OpsResult* out) {
   out->has_error = in->has_error();
@@ -1629,42 +1716,19 @@ class ArgumentImpl : public Argument {
     num_args_ = std::move(info);
   }
 
-  // bool GetTypeHint(std::string* out) override;
-  // bool FormatDefaultValue(std::string* out) override;
-
-  // CallbackRunner* GetCallbackRunner() override;
-
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
-  // void Initialize() override;
-
  private:
-  // void RunCallback(std::unique_ptr<Delegate> delegate) override;
-  // void InitAction();
-  // void InitType();
-  // void InitDefaultValue();
-  // void RunAction(std::unique_ptr<Any> data, Delegate*);
-  // void RunType(const std::string& in, OpsResult* out);
-  // Helpers:
-  // const Any& const_value() const {
-  //   ARGPARSE_DCHECK(const_value_);
-  //   return *const_value_;
-  // }
-  // const DestPtr& dest_ptr() const {
-  //   ARGPARSE_DCHECK(dest_info_);
-    // return dest_info_->dest_ptr_;
-  // }
-
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
-  std::unique_ptr<NamesInfo> names_info_;
   ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
   std::string meta_var_;
   bool is_required_ = false;
 
+  std::unique_ptr<NamesInfo> names_info_;
   std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfo> action_info_;
   std::unique_ptr<TypeInfo> type_info_;
@@ -1938,8 +2002,6 @@ class FileType {
   OpenMode mode_;
 };
 
-ActionKind StringToActions(const std::string& str);
-
 bool IsValidPositionalName(const char* name, std::size_t len);
 
 // A valid option name is long or short option name and not '--', '-'.
@@ -2148,6 +2210,7 @@ enum Flags {
 };
 
 // Options to ArgumentParser constructor.
+// TODO: rename to OptionsBuilder and typedef.
 struct Options {
   // Only the most common options are listed in this list.
   Options() : info(new OptionsInfo) {}
@@ -2259,9 +2322,7 @@ class ArgumentBuilder {
 
  private:
   friend class AddArgumentHelper;
-  std::unique_ptr<Argument> CreateArgument() {
-    return factory_->Create();
-  }
+  std::unique_ptr<Argument> CreateArgument() { return factory_->Create(); }
 
   std::unique_ptr<ArgumentFactory> factory_;
 };
@@ -2272,12 +2333,6 @@ using argument = ArgumentBuilder;
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
-  // void add_argument(Names names,
-  //                   Dest dest = {},
-  //                   const char* help = {},
-  //                   Type type = {},
-  //                   Action action = {});
-
   void add(ArgumentBuilder& builder) {
     AddArgumentImpl(builder.CreateArgument());
   }
