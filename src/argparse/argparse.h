@@ -860,9 +860,8 @@ class NamesInfo {
   };
 
   // Visit each name of the optional argument.
-  virtual void ForEachName(
-      NameKind name_kind,
-      std::function<void(const std::string&)> callback) {}
+  virtual void ForEachName(NameKind name_kind,
+                           std::function<void(const std::string&)> callback) {}
   virtual const char* GetPositionalName() {}
 
   static std::unique_ptr<NamesInfo> CreateOptional(const std::string& in);
@@ -947,7 +946,8 @@ class Argument {
  public:
   virtual bool IsRequired() = 0;
   virtual const char* GetHelpDoc() = 0;
-  const char* GetMetaVar() {/* return GetNamesInfo()->meta_var.c_str();*/ }
+  const char* GetMetaVar() { /* return GetNamesInfo()->meta_var.c_str();*/
+  }
   bool IsOption() { return GetNamesInfo()->IsOption(); }
   virtual ArgumentGroup* GetGroup() = 0;
   virtual NamesInfo* GetNamesInfo() = 0;
@@ -1271,7 +1271,7 @@ inline std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(
 class DefaultTypeInfo : public TypeInfo {
  public:
   explicit DefaultTypeInfo(std::unique_ptr<Operations> ops)
-    : ops_(std::move(ops)) {}
+      : ops_(std::move(ops)) {}
 
   void Run(const std::string& in, OpsResult* out) override {
     return ops_->Parse(in, out);
@@ -1312,6 +1312,8 @@ class TypeCallbackInfo : public TypeInfo {
   void Run(const std::string& in, OpsResult* out) override {
     return type_callback_->Run(in, out);
   }
+
+  std::string GetTypeHint() override { return type_callback_->GetTypeHint(); }
 
  private:
   std::unique_ptr<TypeCallback> type_callback_;
@@ -1503,9 +1505,9 @@ class ArgumentImpl : public Argument, public CallbackRunner {
       : names_info_(std::move(names)) {}
 
   ArgumentGroup* GetGroup() override { return group_; }
-   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
+  NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required(); }
-  bool is_option() const {  }
+  bool is_option() const {}
   bool is_required() const { return is_required_; }
 
   const std::string& help_doc() const { return help_doc_; }
@@ -1514,7 +1516,7 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     return help_doc_.empty() ? nullptr : help_doc_.c_str();
   }
 
-  const std::string& meta_var() const {  }
+  const std::string& meta_var() const {}
 
   // TODO: split the long_names, short_names from Names into name, key and
   // alias.
@@ -1824,13 +1826,13 @@ class CustomActionCallback : public ActionCallback {
 };
 
 template <typename Callback, typename T>
-std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(Callback&& cb,
-                                                 TypeCallbackPrototype<T>*) {
+std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(Callback&& cb,
+                                                   TypeCallbackPrototype<T>*) {
   return std::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
 }
 
 template <typename Callback, typename T>
-std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
+std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
     Callback&& cb,
     TypeCallbackPrototypeThrows<T>*) {
   return std::make_unique<TypeCallbackImpl<T>>(
@@ -1844,10 +1846,9 @@ std::unique_ptr<TypeCallback> CreateTypeCallbackImpl(
 }
 
 template <typename Callback>
-std::unique_ptr<TypeCallback> CreateFromCallback(Callback&& cb) {
-  return CreateTypeCallbackImpl(
-      std::forward<Callback>(cb),
-      (detail::function_signature_t<Callback>*)nullptr);
+std::unique_ptr<TypeCallback> MakeTypeCallback(Callback&& cb) {
+  return MakeTypeCallbackImpl(std::forward<Callback>(cb),
+                              (detail::function_signature_t<Callback>*)nullptr);
 }
 
 template <typename Callback, typename T, typename V>
