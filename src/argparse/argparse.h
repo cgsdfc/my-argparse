@@ -180,15 +180,14 @@ class AnyImpl : public Any {
   T value_;
 };
 
-template <typename T>
-std::unique_ptr<Any> MakeAny(T&& val) {
-  return std::make_unique<AnyImpl<T>>(std::forward<T>(val));
+template <typename T, typename... Args>
+std::unique_ptr<Any> MakeAny(Args&&... args) {
+  return std::make_unique<AnyImpl<T>>(std::forward<Args>(args)...);
 }
 
-// Use it like const Any& val = MakeAnyOnStack(0);
-template <typename T>
-AnyImpl<T> MakeAnyOnStack(T&& val) {
-  return AnyImpl<T>(std::forward<T>(val));
+template <typename T, typename... Args>
+AnyImpl<T> MakeAnyOnStack(Args&&... args) {
+  return AnyImpl<T>(std::forward<Args>(args)...);
 }
 
 template <typename T>
@@ -1320,6 +1319,8 @@ class DefaultActionInfo : public ActionInfo {
   std::unique_ptr<Operations> ops_;
 };
 
+// class TypeLessActionInfo : public 
+
 // Adapt an ActionCallback to ActionInfo.
 class ActionCallbackInfo : public ActionInfo {
  public:
@@ -1474,7 +1475,7 @@ class ArgumentFactoryImpl : public ArgumentFactory {
     arg_->SetAction(ActionInfo::CreateFromCallback(std::move(cb)));
   }
 
-  std::unique_ptr<Argument> Create() override { return nullptr; }
+  std::unique_ptr<Argument> Create() override;
 
  private:
   // Some options are directly fed into arg.
@@ -1491,7 +1492,7 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
   if (out->has_error) {
     out->errmsg = in->release_error();
   } else if (in->has_value()) {
-    out->value = MakeAny(in->release_value());
+    out->value = MakeAny<T>(in->release_value());
   }
 }
 
@@ -2291,12 +2292,12 @@ class ArgumentBuilder {
   }
   template <typename T>
   ArgumentBuilder& const_value(T&& val) {
-    factory_->SetConstValue(MakeAny(std::forward<T>(val)));
+    factory_->SetConstValue(MakeAny<T>(std::forward<T>(val)));
     return *this;
   }
   template <typename T>
   ArgumentBuilder& default_value(T&& val) {
-    factory_->SetDefaultValue(MakeAny(std::forward<T>(val)));
+    factory_->SetDefaultValue(MakeAny<T>(std::forward<T>(val)));
     return *this;
   }
   ArgumentBuilder& help(std::string val) {
