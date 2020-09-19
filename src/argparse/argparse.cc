@@ -575,22 +575,6 @@ CallbackRunner* ArgumentImpl::GetCallbackRunner() {
 }
 
 void ArgumentImpl::RunType(const std::string& in, OpsResult* out) {
-  // auto* ops = type_info_->ops.get();
-  // switch (type_info_->type_code) {
-  //   case TypeKind::kNothing:
-  //     break;
-  //   case TypeKind::kParse:
-  //     ops->Parse(in, out);
-  //     break;
-  //   case TypeKind::kOpen:
-  //     ARGPARSE_DCHECK(type_info_->mode != kModeNoMode);
-  //     ops->Open(in, type_info_->mode, out);
-  //     break;
-  //   case TypeKind::kCustom:
-  //     ARGPARSE_DCHECK(type_info_->callback);
-  //     type_info_->callback->Run(in, out);
-  //     break;
-  // }
 }
 
 void ArgumentImpl::RunCallback(

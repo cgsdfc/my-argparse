@@ -955,6 +955,11 @@ class Argument {
   virtual bool GetTypeHint(std::string* out) = 0;
   // If a default-value exists, return true and set out.
   virtual bool FormatDefaultValue(std::string* out) = 0;
+  virtual DestInfo* GetDest() = 0;
+  virtual TypeInfo* GetType() = 0;
+  virtual ActionInfo* GetAction() = 0;
+  virtual const Any* GetConstValue() = 0;
+  virtual const Any* GetDefaultValue() = 0;
 
   virtual void SetRequired(bool required) = 0;
   virtual void SetHelpDoc(std::string help_doc) = 0;
@@ -1503,6 +1508,12 @@ class ArgumentImpl : public Argument, public CallbackRunner {
  public:
   explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
       : names_info_(std::move(names)) {}
+
+  DestInfo* GetDest() override { return dest_info_.get(); }
+  TypeInfo* GetType() override { return type_info_.get(); }
+  ActionInfo* GetAction() override { return action_info_.get(); }
+  const Any* GetConstValue() override { return const_value_.get(); }
+  const Any* GetDefaultValue() override { return default_value_.get(); }
 
   ArgumentGroup* GetGroup() override { return group_; }
   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
@@ -2193,6 +2204,7 @@ class argument {
     arg_ = Argument::Create(std::move(names.info));
   }
 
+  // TODO: Fix the typeinfo/actioninfo deduction.
   argument& dest(Dest d) {
     if (d.info)
       arg_->SetDest(std::move(d.info));
