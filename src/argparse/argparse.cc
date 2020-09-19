@@ -62,31 +62,31 @@ Names::Names(std::initializer_list<const char*> names) {
 // ArgumentImpl:
 bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
                                     const ArgumentImpl* b) {
-  // options go before positionals.
-  if (a->is_option() != b->is_option())
-    return int(a->is_option()) > int(b->is_option());
+  // // options go before positionals.
+  // if (a->is_option() != b->is_option())
+  //   return int(a->is_option()) > int(b->is_option());
 
-  // positional compares on their names.
-  if (!a->is_option() && !b->is_option()) {
-    ARGPARSE_DCHECK(a->name() && b->name());
-    return std::strcmp(a->name(), b->name()) < 0;
-  }
+  // // positional compares on their names.
+  // if (!a->is_option() && !b->is_option()) {
+  //   ARGPARSE_DCHECK(a->name() && b->name());
+  //   return std::strcmp(a->name(), b->name()) < 0;
+  // }
 
-  // required option goes first.
-  if (a->is_required() != b->is_required())
-    return int(a->is_required()) > int(b->is_required());
+  // // required option goes first.
+  // if (a->is_required() != b->is_required())
+  //   return int(a->is_required()) > int(b->is_required());
 
-  // short-only option goes before the rest.
-  if (bool(a->name()) != bool(b->name()))
-    return bool(a->name()) < bool(b->name());
+  // // short-only option goes before the rest.
+  // if (bool(a->name()) != bool(b->name()))
+  //   return bool(a->name()) < bool(b->name());
 
-  // a and b are both short-only option.
-  // if (!a->name() && !b->name())
-  //   return a->key() < b->key();
+  // // a and b are both short-only option.
+  // // if (!a->name() && !b->name())
+  // //   return a->key() < b->key();
 
-  // a and b are both long option.
-  ARGPARSE_DCHECK(a->name() && b->name());
-  return std::strcmp(a->name(), b->name()) < 0;
+  // // a and b are both long option.
+  // ARGPARSE_DCHECK(a->name() && b->name());
+  // return std::strcmp(a->name(), b->name()) < 0;
 }
 
 static OpsKind TypesToOpsKind(TypeKind in) {
@@ -170,7 +170,7 @@ static const char* ActionsToString(ActionKind in) {
   }
 }
 
-void ArgumentImpl::InitAction() {
+// void ArgumentImpl::InitAction() {
   // if (!action_info_) {
   //   // action_info_ = std::make_unique<ActionInfoImpl>();
   // }
@@ -215,9 +215,9 @@ void ArgumentImpl::InitAction() {
   //                    "Action %s needs a const value, which is not provided",
   //                    ActionsToString(action_code));
   // }
-}
+// }
 
-void ArgumentImpl::InitType() {
+// void ArgumentImpl::InitType() {
   // if (!type_info_) {
   //   type_info_ = std::make_unique<TypeInfoImpl>();
   // }
@@ -262,9 +262,9 @@ void ArgumentImpl::InitType() {
   // ARGPARSE_CHECK_F(type_ops->IsSupported(ops),
   //                  "Type %s is not supported by type % s ",
   //                  TypesToString(type_code), type_ops->GetTypeName());
-}
+// }
 
-void ArgumentImpl::InitDefaultValue() {
+// void ArgumentImpl::InitDefaultValue() {
   // switch (action_info_->action_code) {
   //   case ActionKind::kStoreFalse:
   //     default_value_ = MakeAny(true);
@@ -277,30 +277,30 @@ void ArgumentImpl::InitDefaultValue() {
   //   default:
   //     break;
   // }
-}
+// }
 
-void ArgumentImpl::Initialize() {
-  InitAction();
-  InitType();
-  InitDefaultValue();
-}
+// void ArgumentImpl::Initialize() {
+//   InitAction();
+//   InitType();
+//   InitDefaultValue();
+// }
 
-bool ArgumentImpl::GetTypeHint(std::string* out) {
-  // The type of default value is always the type of dest.
-  if (default_value_ && dest_info_) {
-    // *out = dest_info_->ops->FormatValue(*default_value_);
-    return true;
-  }
-  return false;
-}
+// bool ArgumentImpl::GetTypeHint(std::string* out) {
+//   // The type of default value is always the type of dest.
+//   if (default_value_ && dest_info_) {
+//     // *out = dest_info_->ops->FormatValue(*default_value_);
+//     return true;
+//   }
+//   return false;
+// }
 
-bool ArgumentImpl::FormatDefaultValue(std::string* out) {
-  // if (type_info_->ops) {
-  //   *out = type_info_->ops->GetTypeHint();
-  //   return true;
-  // }
-  return false;
-}
+// bool ArgumentImpl::FormatDefaultValue(std::string* out) {
+//   // if (type_info_->ops) {
+//   //   *out = type_info_->ops->GetTypeHint();
+//   //   return true;
+//   // }
+//   return false;
+// }
 
 // void ArgumentImpl::ProcessHelpFormatPolicy(HelpFormatPolicy policy) {
 //   if (policy == HelpFormatPolicy::kDefault)
@@ -454,7 +454,6 @@ void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
   ARGPARSE_CHECK_F(CheckNamesConflict(*arg->GetNamesInfo()),
                    "Names conflict with existing names!");
   arg->SetGroup(group);
-  arg->Initialize();
   if (listener_)
     listener_->OnAddArgument(arg.get());
   arguments_.push_back(std::move(arg));
@@ -564,31 +563,31 @@ void DefaultActionInfo::Run(CallbackClient* client) {
 }
 
 // TODO: extract action-related logic into one class, say ActionHelper.
-void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
-                             CallbackRunner::Delegate* delegate) {
-}
+// void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
+//                              CallbackRunner::Delegate* delegate) {
+// }
 
-CallbackRunner* ArgumentImpl::GetCallbackRunner() {
-  return this;
-  // ARGPARSE_DCHECK(callback_info_);
-  // return callback_info_.get();
-}
+// CallbackRunner* ArgumentImpl::GetCallbackRunner() {
+//   return this;
+//   // ARGPARSE_DCHECK(callback_info_);
+//   // return callback_info_.get();
+// }
 
-void ArgumentImpl::RunType(const std::string& in, OpsResult* out) {
-}
+// void ArgumentImpl::RunType(const std::string& in, OpsResult* out) {
+// }
 
-void ArgumentImpl::RunCallback(
-    std::unique_ptr<CallbackRunner::Delegate> delegate) {
-  std::string in;
-  OpsResult result;
-  if (delegate->GetValue(&in))
-    RunType(in, &result);
-  if (result.has_error) {
-    delegate->OnCallbackError(result.errmsg);
-    return;
-  }
-  RunAction(std::move(result.value), delegate.get());
-}
+// void ArgumentImpl::RunCallback(
+//     std::unique_ptr<CallbackRunner::Delegate> delegate) {
+//   std::string in;
+//   OpsResult result;
+//   if (delegate->GetValue(&in))
+//     RunType(in, &result);
+//   if (result.has_error) {
+//     delegate->OnCallbackError(result.errmsg);
+//     return;
+//   }
+//   RunAction(std::move(result.value), delegate.get());
+// }
 
 std::string ModeToChars(OpenMode mode) {
   std::string m;

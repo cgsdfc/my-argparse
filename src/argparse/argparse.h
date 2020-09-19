@@ -946,15 +946,9 @@ class Argument {
  public:
   virtual bool IsRequired() = 0;
   virtual const char* GetHelpDoc() = 0;
-  const char* GetMetaVar() { /* return GetNamesInfo()->meta_var.c_str();*/
-  }
-  bool IsOption() { return GetNamesInfo()->IsOption(); }
+  virtual const char* GetMetaVar() = 0;
   virtual ArgumentGroup* GetGroup() = 0;
   virtual NamesInfo* GetNamesInfo() = 0;
-  // If a typehint exists, return true and set out.
-  virtual bool GetTypeHint(std::string* out) = 0;
-  // If a default-value exists, return true and set out.
-  virtual bool FormatDefaultValue(std::string* out) = 0;
   virtual DestInfo* GetDest() = 0;
   virtual TypeInfo* GetType() = 0;
   virtual ActionInfo* GetAction() = 0;
@@ -972,8 +966,25 @@ class Argument {
   virtual void SetGroup(ArgumentGroup* group) = 0;
   virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
 
-  virtual void Initialize() = 0;
-  virtual CallbackRunner* GetCallbackRunner() = 0;
+  // non-virtual helpers.
+  bool IsOption() { return GetNamesInfo()->IsOption(); }
+  // If a typehint exists, return true and set out.
+  bool GetTypeHint(std::string* out) {
+    if (auto* type = GetType()) {
+      *out = type->GetTypeHint();
+      return true;
+    }
+    return false;
+  }
+  // If a default-value exists, return true and set out.
+  bool FormatDefaultValue(std::string* out) {
+    if (GetDefaultValue() && GetDest()) {
+      *out = GetDest()->FormatValue(*GetDefaultValue());
+      return true;
+    }
+    return false;
+  }
+
   virtual bool Before(const Argument* that) const = 0;
 
   virtual ~Argument() {}
@@ -1567,7 +1578,7 @@ std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
 }
 
 // Holds all meta-info about an argument.
-class ArgumentImpl : public Argument, public CallbackRunner {
+class ArgumentImpl : public Argument {
  public:
   explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
       : names_info_(std::move(names)) {}
@@ -1577,40 +1588,17 @@ class ArgumentImpl : public Argument, public CallbackRunner {
   ActionInfo* GetAction() override { return action_info_.get(); }
   const Any* GetConstValue() override { return const_value_.get(); }
   const Any* GetDefaultValue() override { return default_value_.get(); }
-
+  const char* GetMetaVar() override { return meta_var_.c_str(); }
   ArgumentGroup* GetGroup() override { return group_; }
   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
-  bool IsRequired() override { return is_required(); }
-  bool is_option() const {}
-  bool is_required() const { return is_required_; }
-
-  const std::string& help_doc() const { return help_doc_; }
-  const char* GetHelpDoc() override { return doc(); }
-  const char* doc() const {
-    return help_doc_.empty() ? nullptr : help_doc_.c_str();
-  }
-
-  const std::string& meta_var() const {}
-
-  // TODO: split the long_names, short_names from Names into name, key and
-  // alias.
-  const std::vector<std::string>& long_names() const {
-    // return names_info_->long_names;
-  }
-  const std::vector<char>& short_names() const {
-    // return names_info_->short_names;
-  }
-
-  const char* name() const {
-    return long_names().empty() ? nullptr : long_names()[0].c_str();
-  }
-
+  bool IsRequired() override { return is_required_; }
+  const char* GetHelpDoc() override { return help_doc_.c_str(); }
   void SetRequired(bool required) override { is_required_ = required; }
   void SetHelpDoc(std::string help_doc) override {
     help_doc_ = std::move(help_doc);
   }
   void SetMetaVar(std::string meta_var) override {
-    // names_info_->meta_var = std::move(meta_var);
+    meta_var_ = std::move(meta_var);
   }
   void SetDest(std::unique_ptr<DestInfo> info) override {
     ARGPARSE_DCHECK(info);
@@ -1632,50 +1620,49 @@ class ArgumentImpl : public Argument, public CallbackRunner {
     ARGPARSE_DCHECK(value);
     default_value_ = std::move(value);
   }
-
   void SetGroup(ArgumentGroup* group) override {
     ARGPARSE_DCHECK(group);
     group_ = group;
   }
-
   void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
     ARGPARSE_DCHECK(info);
     num_args_ = std::move(info);
   }
 
-  bool GetTypeHint(std::string* out) override;
-  bool FormatDefaultValue(std::string* out) override;
+  // bool GetTypeHint(std::string* out) override;
+  // bool FormatDefaultValue(std::string* out) override;
 
-  CallbackRunner* GetCallbackRunner() override;
+  // CallbackRunner* GetCallbackRunner() override;
 
   bool Before(const Argument* that) const override {
     return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
   }
 
-  void Initialize() override;
+  // void Initialize() override;
 
  private:
-  void RunCallback(std::unique_ptr<Delegate> delegate) override;
-  void InitAction();
-  void InitType();
-  void InitDefaultValue();
-  void RunAction(std::unique_ptr<Any> data, Delegate*);
-  void RunType(const std::string& in, OpsResult* out);
+  // void RunCallback(std::unique_ptr<Delegate> delegate) override;
+  // void InitAction();
+  // void InitType();
+  // void InitDefaultValue();
+  // void RunAction(std::unique_ptr<Any> data, Delegate*);
+  // void RunType(const std::string& in, OpsResult* out);
   // Helpers:
-  const Any& const_value() const {
-    ARGPARSE_DCHECK(const_value_);
-    return *const_value_;
-  }
-  const DestPtr& dest_ptr() const {
-    ARGPARSE_DCHECK(dest_info_);
+  // const Any& const_value() const {
+  //   ARGPARSE_DCHECK(const_value_);
+  //   return *const_value_;
+  // }
+  // const DestPtr& dest_ptr() const {
+  //   ARGPARSE_DCHECK(dest_info_);
     // return dest_info_->dest_ptr_;
-  }
+  // }
 
   static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
 
   std::unique_ptr<NamesInfo> names_info_;
   ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
+  std::string meta_var_;
   bool is_required_ = false;
 
   std::unique_ptr<DestInfo> dest_info_;
