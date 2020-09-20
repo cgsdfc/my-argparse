@@ -2292,12 +2292,14 @@ class ArgumentBuilder {
   }
   template <typename T>
   ArgumentBuilder& const_value(T&& val) {
-    factory_->SetConstValue(MakeAny<T>(std::forward<T>(val)));
+    using Type = std::decay_t<T>;
+    factory_->SetConstValue(MakeAny<Type>(std::forward<T>(val)));
     return *this;
   }
   template <typename T>
   ArgumentBuilder& default_value(T&& val) {
-    factory_->SetDefaultValue(MakeAny<T>(std::forward<T>(val)));
+    using Type = std::decay_t<T>;
+    factory_->SetDefaultValue(MakeAny<Type>(std::forward<T>(val)));
     return *this;
   }
   ArgumentBuilder& help(std::string val) {

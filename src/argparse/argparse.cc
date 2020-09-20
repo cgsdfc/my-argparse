@@ -927,6 +927,7 @@ static bool ActionNeedsValueType(ActionKind in) {
 }
 
 std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
+  ARGPARSE_DCHECK(arg_);
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
                              : arg_->GetNamesInfo()->GetDefaultMetaVar());
 
