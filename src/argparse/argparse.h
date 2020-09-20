@@ -850,21 +850,23 @@ class NamesInfo {
  public:
   virtual ~NamesInfo() {}
   virtual bool IsOption() {}
-  virtual std::string GetDefaultMetaVar() {}
+  virtual std::string GetDefaultMetaVar() { return {}; }
 
   enum NameKind {
     kLongName,
     kShortName,
+    kPosName,
     kAllNames,
   };
 
   // Visit each name of the optional argument.
   virtual void ForEachName(NameKind name_kind,
                            std::function<void(const std::string&)> callback) {}
-  virtual const char* GetPositionalName() {}
 
-  static std::unique_ptr<NamesInfo> CreateOptional(const std::string& in);
-  static std::unique_ptr<NamesInfo> CreatePositional(
+  virtual const char* GetName() {}
+
+  static std::unique_ptr<NamesInfo> CreatePositional(std::string in);
+  static std::unique_ptr<NamesInfo> CreateOptional(
       const std::vector<std::string>& in);
 };
 
@@ -1236,19 +1238,6 @@ class ArgumentController {
 // End of interfaces. Begin of Impls. //
 ////////////////////////////////////////
 
-// TODO: make these info class abstract.
-struct NamesInfoImpl : public NamesInfo {
-  bool is_option = false;
-  std::vector<std::string> long_names;
-  std::vector<char> short_names;
-  std::string meta_var;
-
-  // Positional.
-  explicit NamesInfoImpl(std::string name);
-  // Option.
-  explicit NamesInfoImpl(std::vector<const char*> names);
-};
-
 class NumArgsInfoImpl : public NumArgsInfo {
  public:
   explicit NumArgsInfoImpl(int num) : lower_bound_(num), upper_bound_(num) {}
@@ -1319,7 +1308,7 @@ class DefaultActionInfo : public ActionInfo {
   std::unique_ptr<Operations> ops_;
 };
 
-// class TypeLessActionInfo : public 
+// class TypeLessActionInfo : public
 
 // Adapt an ActionCallback to ActionInfo.
 class ActionCallbackInfo : public ActionInfo {
@@ -2003,21 +1992,21 @@ class FileType {
   OpenMode mode_;
 };
 
-bool IsValidPositionalName(const char* name, std::size_t len);
+bool IsValidPositionalName(const std::string& name);
 
 // A valid option name is long or short option name and not '--', '-'.
 // This is only checked once and true for good.
-bool IsValidOptionName(const char* name, std::size_t len);
+bool IsValidOptionName(const std::string& name);
 
 // These two predicates must be called only when IsValidOptionName() holds.
-inline bool IsLongOptionName(const char* name, std::size_t len) {
-  ARGPARSE_DCHECK(IsValidOptionName(name, len));
-  return len > 2;
+inline bool IsLongOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() > 2;
 }
 
-inline bool IsShortOptionName(const char* name, std::size_t len) {
-  ARGPARSE_DCHECK(IsValidOptionName(name, len));
-  return len == 2;
+inline bool IsShortOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() == 2;
 }
 
 inline std::string ToUpper(const std::string& in) {
@@ -2026,10 +2015,93 @@ inline std::string ToUpper(const std::string& in) {
   return out;
 }
 
+class PositionalName : public NamesInfo {
+ public:
+  explicit PositionalName(std::string name) : name_(std::move(name)) {}
+
+  bool IsOption() override { return false; }
+  std::string GetDefaultMetaVar() override { return ToUpper(name_); }
+  void ForEachName(NameKind name_kind,
+                   std::function<void(const std::string&)> callback) override {
+    if (name_kind == kPosName)
+      callback(name_);
+  }
+  const char* GetName() override { return name_.c_str(); }
+
+ private:
+  std::string name_;
+};
+
+class OptionalNames : public NamesInfo {
+ public:
+  explicit OptionalNames(const std::vector<std::string>& names) {
+    for (auto& name : names) {
+      ARGPARSE_CHECK_F(IsValidOptionName(name), "Not a valid option name: %s",
+                       name.c_str());
+      if (IsLongOptionName(name)) {
+        long_names_.push_back(name);
+      } else {
+        ARGPARSE_DCHECK(IsShortOptionName(name));
+        short_names_.push_back(name);
+      }
+    }
+  }
+
+  bool IsOption() override { return true; }
+
+  std::string GetDefaultMetaVar() override {
+    std::string in =
+        long_names_.empty() ? short_names_.front() : long_names_.front();
+    std::replace(in.begin(), in.end(), '-', '_');
+    return ToUpper(in);
+  }
+
+  void ForEachName(NameKind name_kind,
+                   std::function<void(const std::string&)> callback) override {
+    switch (name_kind) {
+      case kPosName:
+        return;
+      case kLongName: {
+        for (auto& name : std::as_const(long_names_))
+          callback(name);
+        break;
+      }
+      case kShortName: {
+        for (auto& name : std::as_const(short_names_))
+          callback(name);
+        break;
+      }
+      case kAllNames: {
+        for (auto& name : std::as_const(long_names_))
+          callback(name);
+        for (auto& name : std::as_const(short_names_))
+          callback(name);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+ private:
+  std::vector<std::string> long_names_;
+  std::vector<std::string> short_names_;
+};
+
+inline std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
+  return std::make_unique<PositionalName>(std::move(in));
+}
+
+inline std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
+    const std::vector<std::string>& in) {
+  return std::make_unique<OptionalNames>(in);
+}
+
 struct Names {
   std::unique_ptr<NamesInfo> info;
-  Names(const char* name);
-  Names(std::initializer_list<const char*> names);
+  Names(const char* name) : Names(std::string(name)) { ARGPARSE_DCHECK(name); }
+  Names(std::string name);
+  Names(std::initializer_list<std::string> names);
 };
 
 // TODO: remove this..
@@ -2255,8 +2327,7 @@ class AddArgumentHelper;
 
 class ArgumentBuilder {
  public:
-  explicit ArgumentBuilder(Names names)
-      : factory_(ArgumentFactory::Create()) {
+  explicit ArgumentBuilder(Names names) : factory_(ArgumentFactory::Create()) {
     ARGPARSE_DCHECK(names.info);
     factory_->SetNames(std::move(names.info));
   }
@@ -2325,7 +2396,9 @@ class ArgumentBuilder {
 
  private:
   friend class AddArgumentHelper;
-  std::unique_ptr<Argument> CreateArgument() { return factory_->CreateArgument(); }
+  std::unique_ptr<Argument> CreateArgument() {
+    return factory_->CreateArgument();
+  }
 
   std::unique_ptr<ArgumentFactory> factory_;
 };

@@ -14,49 +14,21 @@ GNUArgpParser::Context::Context(const Argument* argument,
     this->value_.assign(value);
 }
 
-NamesInfoImpl::NamesInfoImpl(std::string name) {
-  is_option = false;
-  meta_var = ToUpper(name);
-  long_names.push_back(std::move(name));
-}
-
-NamesInfoImpl::NamesInfoImpl(std::vector<const char*> names) {
-  is_option = true;
-  for (auto name : names) {
-    std::size_t len = std::strlen(name);
-    ARGPARSE_CHECK_F(IsValidOptionName(name, len),
-                     "Not a valid option name: %s", name);
-    if (IsLongOptionName(name, len)) {
-      // Strip leading '-' at most twice.
-      for (int i = 0; *name == '-' && i < 2; ++i) {
-        ++name;
-        --len;
-      }
-      long_names.emplace_back(name, len);
-    } else {
-      short_names.push_back(name[1]);
-    }
-  }
-  if (long_names.size())
-    meta_var = ToUpper(long_names[0]);
-  else
-    meta_var = ToUpper({&short_names[0], 1});
-}
-
-Names::Names(const char* name) {
+Names::Names(std::string name) {
   if (name[0] == '-') {
-    info.reset(new NamesInfoImpl(std::vector<const char*>{name}));
+    // This is in fact an option.
+    std::vector<std::string> names{std::move(name)};
+    info = NamesInfo::CreateOptional(std::move(names));
     return;
   }
-  auto len = std::strlen(name);
-  ARGPARSE_CHECK_F(IsValidPositionalName(name, len),
-                   "Not a valid positional name: %s", name);
-  info.reset(new NamesInfoImpl(name));
+  ARGPARSE_CHECK_F(IsValidPositionalName(name),
+                   "Not a valid positional name: %s", name.c_str());
+  info = NamesInfo::CreatePositional(std::move(name));
 }
 
-Names::Names(std::initializer_list<const char*> names) {
+Names::Names(std::initializer_list<std::string> names)
+    : info(NamesInfo::CreateOptional(names)) {
   ARGPARSE_CHECK_F(names.size(), "At least one name must be provided");
-  info.reset(new NamesInfoImpl(names));
 }
 
 // ArgumentImpl:
@@ -476,34 +448,32 @@ bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
   // return true;
 }
 
-bool IsValidPositionalName(const char* name, std::size_t len) {
-  if (!name || !len || !std::isalpha(name[0]))
+bool IsValidPositionalName(const std::string& name) {
+  auto len = name.size();
+  if (!len || !std::isalpha(name[0]))
     return false;
-  for (++name, --len; len > 0; ++name, --len) {
-    if (std::isalnum(*name) || *name == '-' || *name == '_')
-      continue;  // allowed.
-    return false;
-  }
-  return true;
+
+  return std::all_of(name.begin() + 1, name.end(), [](char c) {
+    return std::isalnum(c) || c == '-' || c == '_';
+  });
 }
 
-bool IsValidOptionName(const char* name, std::size_t len) {
-  if (!name || len < 2 || name[0] != '-')
+bool IsValidOptionName(const std::string& name) {
+  auto len = name.size();
+  if (len < 2 || name[0] != '-')
     return false;
   if (len == 2)  // This rules out -?, -* -@ -= --
     return std::isalnum(name[1]);
   // check for long-ness.
+  // TODO: fixthis.
   ARGPARSE_CHECK_F(
       name[1] == '-',
       "Single-dash long option (i.e., -jar) is not supported. Please use "
       "GNU-style long option (double-dash)");
 
-  for (name += 2; *name; ++name) {
-    if (*name == '-' || *name == '_' || std::isalnum(*name))
-      continue;
-    return false;
-  }
-  return true;
+  return std::all_of(name.begin() + 2, name.end(), [](char c) {
+    return c == '-' || c == '_' || std::isalnum(c);
+  });
 }
 
 ActionKind StringToActions(const std::string& str) {

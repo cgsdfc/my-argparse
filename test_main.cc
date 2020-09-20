@@ -24,7 +24,7 @@ int main(int argc, char const* argv[]) {
   ArgumentParser parser;
 
   std::string output;
-  parser.add(ap::argument("output")
+  parser.add(ap::argument({"a", "b"})
                  .dest(&output)
                  .const_value(std::string("path"))
                  .type([](const std::string& in) -> std::string { return ""; })
