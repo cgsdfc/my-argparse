@@ -1238,41 +1238,64 @@ class ArgumentController {
 // End of interfaces. Begin of Impls. //
 ////////////////////////////////////////
 
-class NumArgsInfoImpl : public NumArgsInfo {
+class NumberNumArgsInfo : public NumArgsInfo {
  public:
-  explicit NumArgsInfoImpl(int num) : lower_bound_(num), upper_bound_(num) {}
-  explicit NumArgsInfoImpl(char flag) {
-    switch (flag) {
-      case '+':
-        lower_bound_ = 1;
-        upper_bound_ = kMax;
-        break;
-      case '?':
-        lower_bound_ = 0;
-        upper_bound_ = 1;
-      case '*':
-        lower_bound_ = 0;
-        upper_bound_ = kMax;
-      default:
-        ARGPARSE_DCHECK(false);
-        break;
-    }
+  explicit NumberNumArgsInfo(unsigned num) : num_(num) {}
+  bool Run(unsigned in, std::string* errmsg) override {
+    if (in == num_)
+      return true;
+    std::ostringstream os;
+    os << "expected " << num_ << " values, got " << in;
+    *errmsg = os.str();
+    return false;
   }
 
-  bool Run(unsigned num, std::string* errmsg) override { return false; }
-
  private:
-  static constexpr unsigned kMax = std::numeric_limits<unsigned>::max();
-  unsigned lower_bound_;
-  unsigned upper_bound_;
+  const unsigned num_;
 };
 
+class FlagNumArgsInfo : public NumArgsInfo {
+ public:
+  explicit FlagNumArgsInfo(char flag) : flag_(flag) {}
+  bool Run(unsigned in, std::string* errmsg) override {
+    bool ok = false;
+    switch (flag_) {
+      case '+':
+        ok = in >= 1;
+        break;
+      case '?':
+        ok = in == 0 || in == 1;
+        break;
+      case '*':
+        ok = true;
+      default:
+        ARGPARSE_DCHECK(false);
+    }
+    if (ok)
+      return true;
+    std::ostringstream os;
+    os << "expected '" << flag_ << "' values, got " << in;
+    *errmsg = os.str();
+    return false;
+  }
+
+ private:
+  const char flag_;
+};
+
+inline bool IsValidNumArgsFlag(char in) {
+  return in == '+' || in == '*' || in == '+';
+}
+
 inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
-  return std::make_unique<NumArgsInfoImpl>(flag);
+  ARGPARSE_CHECK_F(IsValidNumArgsFlag(flag), "Not a valid flag to nargs: %c",
+                   flag);
+  return std::make_unique<FlagNumArgsInfo>(flag);
 }
 
 inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
-  return std::make_unique<NumArgsInfoImpl>(num);
+  ARGPARSE_CHECK_F(num >= 0, "nargs number must be >= 0");
+  return std::make_unique<NumberNumArgsInfo>(num);
 }
 
 class DestInfoImpl : public DestInfo {
