@@ -32,21 +32,21 @@ Names::Names(std::initializer_list<std::string> names)
 }
 
 // ArgumentImpl:
-bool ArgumentImpl::CompareArguments(const ArgumentImpl* a,
-                                    const ArgumentImpl* b) {
+bool Argument::Less(Argument* a, Argument* b) {
   // // options go before positionals.
-  // if (a->is_option() != b->is_option())
-  //   return int(a->is_option()) > int(b->is_option());
+  if (a->IsOption() != b->IsOption())
+    return a->IsOption();
 
   // // positional compares on their names.
-  // if (!a->is_option() && !b->is_option()) {
-  //   ARGPARSE_DCHECK(a->name() && b->name());
-  //   return std::strcmp(a->name(), b->name()) < 0;
-  // }
+  if (!a->IsOption() && !b->IsOption()) {
+    ARGPARSE_DCHECK(a->GetName());
+    ARGPARSE_DCHECK(b->GetName());
+    return std::strcmp(a->GetName(), b->GetName()) < 0;
+  }
 
   // // required option goes first.
-  // if (a->is_required() != b->is_required())
-  //   return int(a->is_required()) > int(b->is_required());
+  if (a->IsRequired() != b->IsRequired())
+    return a->IsRequired();
 
   // // short-only option goes before the rest.
   // if (bool(a->name()) != bool(b->name()))
@@ -424,7 +424,7 @@ error_t GNUArgpParser::DoParse(int key, char* arg, argp_state* state) {
 void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
                                             ArgumentGroup* group) {
   // First check if this arg will conflict with existing ones.
-  ARGPARSE_CHECK_F(CheckNamesConflict(*arg->GetNamesInfo()),
+  ARGPARSE_CHECK_F(CheckNamesConflict(arg->GetNamesInfo()),
                    "Names conflict with existing names!");
   arg->SetGroup(group);
   if (listener_)
@@ -437,15 +437,13 @@ ArgumentHolderImpl::ArgumentHolderImpl() {
   AddArgumentGroup("positional arguments");
 }
 
-bool ArgumentHolderImpl::CheckNamesConflict(const NamesInfo& names) {
-  // for (auto&& long_name : names.long_names)
-  //   if (!name_set_.insert(long_name).second)
-  //     return false;
-  // // May not use multiple short names.
-  // for (char short_name : names.short_names)
-  //   if (!name_set_.insert(std::string(&short_name, 1)).second)
-  //     return false;
-  // return true;
+bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
+  bool ok = true;
+  names->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
+    if (!name_set_.insert(in).second)
+      ok = false;
+  });
+  return ok;
 }
 
 bool IsValidPositionalName(const std::string& name) {
@@ -801,12 +799,7 @@ void ArgpCompiler::CompileUsageFor(Argument* arg, std::ostream& os) {
 
 void ArgpCompiler::CompileUsage(std::string* out) {
   std::vector<Argument*> args;
-  args.reserve(holder_->GetArgumentCount());
-  holder_->ForEachArgument(
-      [&args](Argument* arg) { return args.push_back(arg); });
-
-  std::sort(args.begin(), args.end(),
-            [](Argument* a, Argument* b) { return a->Before(b); });
+  holder_->SortArguments(&args);
 
   // join the dump of each arg with a space.
   std::ostringstream os;

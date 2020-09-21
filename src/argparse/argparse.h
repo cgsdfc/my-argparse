@@ -161,6 +161,10 @@ class AnyImpl : public Any {
  public:
   explicit AnyImpl(T&& val) : value_(std::move(val)) {}
   explicit AnyImpl(const T& val) : value_(val) {}
+  template <typename... Args>
+  explicit AnyImpl(std::in_place_type_t<T>, Args&&... args)
+      : value_(std::forward<Args>(args)...) {}
+
   ~AnyImpl() override {}
   std::type_index GetType() const override { return typeid(T); }
 
@@ -182,13 +186,14 @@ class AnyImpl : public Any {
 
 template <typename T, typename... Args>
 std::unique_ptr<Any> MakeAny(Args&&... args) {
-  return std::make_unique<AnyImpl<T>>(std::forward<Args>(args)...);
+  return std::make_unique<AnyImpl<T>>(std::in_place_type<T>,
+                                      std::forward<Args>(args)...);
 }
 
-template <typename T, typename... Args>
-AnyImpl<T> MakeAnyOnStack(Args&&... args) {
-  return AnyImpl<T>(std::forward<Args>(args)...);
-}
+// template <typename T, typename... Args>
+// AnyImpl<T> MakeAnyOnStack(Args&&... args) {
+//   return AnyImpl<T>(std::forward<Args>(args)...);
+// }
 
 template <typename T>
 T AnyCast(std::unique_ptr<Any> any) {
@@ -849,8 +854,8 @@ class ActionCallback {
 class NamesInfo {
  public:
   virtual ~NamesInfo() {}
-  virtual bool IsOption() {}
-  virtual std::string GetDefaultMetaVar() { return {}; }
+  virtual bool IsOption() = 0;
+  virtual std::string GetDefaultMetaVar() = 0;
 
   enum NameKind {
     kLongName,
@@ -863,7 +868,7 @@ class NamesInfo {
   virtual void ForEachName(NameKind name_kind,
                            std::function<void(const std::string&)> callback) {}
 
-  virtual const char* GetName() {}
+  virtual const char* GetName() = 0;
 
   static std::unique_ptr<NamesInfo> CreatePositional(std::string in);
   static std::unique_ptr<NamesInfo> CreateOptional(
@@ -953,6 +958,7 @@ class Argument {
   virtual DestInfo* GetDest() = 0;
   virtual TypeInfo* GetType() = 0;
   virtual ActionInfo* GetAction() = 0;
+  virtual NumArgsInfo* GetNumArgs() = 0;
   virtual const Any* GetConstValue() = 0;
   virtual const Any* GetDefaultValue() = 0;
 
@@ -969,6 +975,13 @@ class Argument {
 
   // non-virtual helpers.
   bool IsOption() { return GetNamesInfo()->IsOption(); }
+  // For positional, this will be PosName. For Option, this will be
+  // the first long name or first short name (if no long name).
+  const char* GetName() {
+    ARGPARSE_DCHECK(GetNamesInfo());
+    return GetNamesInfo()->GetName();
+  }
+
   // If a typehint exists, return true and set out.
   bool GetTypeHint(std::string* out) {
     if (auto* type = GetType()) {
@@ -986,7 +999,8 @@ class Argument {
     return false;
   }
 
-  virtual bool Before(const Argument* that) const = 0;
+  // Default comparison of Argument.
+  static bool Less(Argument* lhs, Argument* rhs);
 
   virtual ~Argument() {}
   static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
@@ -1121,6 +1135,20 @@ class ArgumentHolder {
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual ~ArgumentHolder() {}
   static std::unique_ptr<ArgumentHolder> Create();
+
+  void CopyArguments(std::vector<Argument*>* out) {
+    out->clear();
+    out->reserve(GetArgumentCount());
+    ForEachArgument([out](Argument* arg) { out->push_back(arg); });
+  }
+
+  // Get a sorted list of Argument.
+  void SortArguments(
+      std::vector<Argument*>* out,
+      std::function<bool(Argument*, Argument*)> cmp = &Argument::Less) {
+    CopyArguments(out);
+    std::sort(out->begin(), out->end(), std::move(cmp));
+  }
 };
 
 struct SubCommandInfo {
@@ -1256,7 +1284,10 @@ class NumberNumArgsInfo : public NumArgsInfo {
 
 class FlagNumArgsInfo : public NumArgsInfo {
  public:
-  explicit FlagNumArgsInfo(char flag) : flag_(flag) {}
+  explicit FlagNumArgsInfo(char flag) : flag_(flag) {
+    ARGPARSE_CHECK_F(IsValidNumArgsFlag(flag), "Not a valid flag to nargs: %c",
+                     flag);
+  }
   bool Run(unsigned in, std::string* errmsg) override {
     bool ok = false;
     switch (flag_) {
@@ -1274,22 +1305,31 @@ class FlagNumArgsInfo : public NumArgsInfo {
     if (ok)
       return true;
     std::ostringstream os;
-    os << "expected '" << flag_ << "' values, got " << in;
+    os << "expected " << FlagToString(flag_) << " values, got " << in;
     *errmsg = os.str();
     return false;
+  }
+  static bool IsValidNumArgsFlag(char in) {
+    return in == '+' || in == '*' || in == '+';
+  }
+  static const char* FlagToString(char flag) {
+    switch (flag) {
+      case '+':
+        return "one or more";
+      case '?':
+        return "zero or one";
+      case '*':
+        return "zero or more";
+      default:
+        ARGPARSE_DCHECK(false);
+    }
   }
 
  private:
   const char flag_;
 };
 
-inline bool IsValidNumArgsFlag(char in) {
-  return in == '+' || in == '*' || in == '+';
-}
-
 inline std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
-  ARGPARSE_CHECK_F(IsValidNumArgsFlag(flag), "Not a valid flag to nargs: %c",
-                   flag);
   return std::make_unique<FlagNumArgsInfo>(flag);
 }
 
@@ -1686,6 +1726,7 @@ class ArgumentImpl : public Argument {
   DestInfo* GetDest() override { return dest_info_.get(); }
   TypeInfo* GetType() override { return type_info_.get(); }
   ActionInfo* GetAction() override { return action_info_.get(); }
+  NumArgsInfo* GetNumArgs() override { return num_args_.get(); }
   const Any* GetConstValue() override { return const_value_.get(); }
   const Any* GetDefaultValue() override { return default_value_.get(); }
   const char* GetMetaVar() override { return meta_var_.c_str(); }
@@ -1729,13 +1770,7 @@ class ArgumentImpl : public Argument {
     num_args_ = std::move(info);
   }
 
-  bool Before(const Argument* that) const override {
-    return CompareArguments(this, static_cast<const ArgumentImpl*>(that));
-  }
-
  private:
-  static bool CompareArguments(const ArgumentImpl* a, const ArgumentImpl* b);
-
   ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
   std::string meta_var_;
@@ -1800,7 +1835,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
     return groups_[kPositionalGroup].get();
   }
 
-  bool CheckNamesConflict(const NamesInfo& names);
+  bool CheckNamesConflict( NamesInfo* names);
 
   std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
@@ -1893,7 +1928,9 @@ class SubCommandHolderImpl : public SubCommandHolder {
   }
 
   SubCommandGroup* AddSubCommandGroup(
-      std::unique_ptr<SubCommandGroupInfo> info) override {}
+      std::unique_ptr<SubCommandGroupInfo> info) override {
+        return nullptr;
+      }
 
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
@@ -2104,6 +2141,12 @@ class OptionalNames : public NamesInfo {
       default:
         break;
     }
+  }
+
+  const char* GetName() override {
+    const auto& name =
+        long_names_.empty() ? short_names_.front() : long_names_.front();
+    return name.c_str();
   }
 
  private:
@@ -2545,7 +2588,9 @@ class MainParserHelper : public AddArgumentGroupHelper {
   using AddArgumentGroupHelper::add_argument_group;
   using AddArgumentHelper::add;
 
-  SubParserGroup add(subparsers& sub) {}
+  SubParserGroup add(subparsers& sub) {
+    return SubParserGroup(nullptr);
+  }
   // TODO: More precise signature.
   SubParserGroup add_subparsers() {
     return SubParserGroup(AddSubParsersImpl(nullptr));
