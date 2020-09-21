@@ -33,32 +33,28 @@ Names::Names(std::initializer_list<std::string> names)
 
 // ArgumentImpl:
 bool Argument::Less(Argument* a, Argument* b) {
-  // // options go before positionals.
+  // options go before positionals.
   if (a->IsOption() != b->IsOption())
     return a->IsOption();
 
-  // // positional compares on their names.
+  // positional compares on their names.
   if (!a->IsOption() && !b->IsOption()) {
     ARGPARSE_DCHECK(a->GetName());
     ARGPARSE_DCHECK(b->GetName());
     return std::strcmp(a->GetName(), b->GetName()) < 0;
   }
 
-  // // required option goes first.
+  // required option goes first.
   if (a->IsRequired() != b->IsRequired())
     return a->IsRequired();
 
-  // // short-only option goes before the rest.
-  // if (bool(a->name()) != bool(b->name()))
-  //   return bool(a->name()) < bool(b->name());
+  // // short-only option (flag) goes before the rest.
+  if (a->IsFlag() != b->IsFlag())
+    return a->IsFlag();
 
-  // // a and b are both short-only option.
-  // // if (!a->name() && !b->name())
-  // //   return a->key() < b->key();
-
-  // // a and b are both long option.
-  // ARGPARSE_DCHECK(a->name() && b->name());
-  // return std::strcmp(a->name(), b->name()) < 0;
+  // a and b are both long options or both flags.
+  ARGPARSE_DCHECK(a->GetName() && b->GetName());
+  return std::strcmp(a->GetName(), b->GetName()) < 0;
 }
 
 static OpsKind TypesToOpsKind(TypeKind in) {
@@ -837,12 +833,19 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
   }
   const char* GetHeader() override { return header_.c_str(); }
 
-  int GetArgumentCount() override { return members_; }
+  unsigned GetArgumentCount() override { return members_; }
+
+  void ForEachArgument(std::function<void(Argument*)> callback) override {
+    for (auto& arg : holder_->arguments_) {
+      if (arg->GetGroup() == this)
+        callback(arg.get());
+    }
+  }
 
  private:
   ArgumentHolderImpl* holder_;
   std::string header_;  // the text provided by user plus a ':'.
-  int members_ = 0;
+  unsigned members_ = 0;
 };
 
 ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(const char* header) {
@@ -933,4 +936,5 @@ std::unique_ptr<ArgumentFactory> ArgumentFactory::Create() {
   return std::make_unique<ArgumentFactoryImpl>();
 }
 
+// SubCommandImpl::SubCommandImpl()
 }  // namespace argparse

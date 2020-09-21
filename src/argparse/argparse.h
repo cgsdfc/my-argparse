@@ -855,6 +855,11 @@ class NamesInfo {
  public:
   virtual ~NamesInfo() {}
   virtual bool IsOption() = 0;
+  virtual unsigned GetLongNamesCount() { return 0; }
+  virtual unsigned GetShortNamesCount() { return 0; }
+  bool HasLongNames() { return GetLongNamesCount(); }
+  bool HasShortNames() { return GetShortNamesCount(); }
+
   virtual std::string GetDefaultMetaVar() = 0;
 
   enum NameKind {
@@ -975,6 +980,12 @@ class Argument {
 
   // non-virtual helpers.
   bool IsOption() { return GetNamesInfo()->IsOption(); }
+  // Flag is an option that only has short names.
+  bool IsFlag() {
+    auto* names = GetNamesInfo();
+    return names->IsOption() && 0 == names->GetLongNamesCount();
+  }
+
   // For positional, this will be PosName. For Option, this will be
   // the first long name or first short name (if no long name).
   const char* GetName() {
@@ -1109,11 +1120,10 @@ class ArgumentGroup {
   virtual ~ArgumentGroup() {}
   virtual const char* GetHeader() = 0;
   // Visit each arg.
-  // TODO: impl this.
-  virtual void ForEachArgument(std::function<void(Argument*)> callback) {}
+  virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   // Add an arg to this group.
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
-  virtual int GetArgumentCount() = 0;
+  virtual unsigned GetArgumentCount() = 0;
 };
 
 class ArgumentHolder {
@@ -1130,7 +1140,7 @@ class ArgumentHolder {
   virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
-  virtual int GetArgumentCount() = 0;
+  virtual unsigned GetArgumentCount() = 0;
   // method to add arg to default group.
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual ~ArgumentHolder() {}
@@ -1151,30 +1161,22 @@ class ArgumentHolder {
   }
 };
 
-struct SubCommandInfo {
-  std::string name;
-  std::string help_doc;
-  std::vector<std::string> aliases;
-
-  SubCommandInfo(const char* name_,
-                 const char* help,
-                 std::vector<std::string> alias) {
-    ARGPARSE_DCHECK(name_);
-    name.assign(name_);
-    if (help)
-      help_doc.assign(help);
-    aliases = std::move(alias);
-  }
-};
+class SubCommandGroup;
 
 class SubCommand {
  public:
   virtual ~SubCommand() {}
   virtual ArgumentHolder* GetHolder() = 0;
-  virtual SubCommandInfo* GetInfo() = 0;
-  // virtual const char* GetName() = 0;
-  // virtual const char* GetHelpDoc() = 0;
-  // virtual void ForEachAlias(std::function<void(const char*)> callback) {}
+  virtual void SetAliases(std::vector<std::string> val) = 0;
+  virtual void SetHelpDoc(std::string val) = 0;
+  virtual const char* GetName() = 0;
+  virtual const char* GetHelpDoc() = 0;
+  virtual void ForEachAlias(
+      std::function<void(const std::string&)> callback) = 0;
+  virtual void SetGroup(SubCommandGroup* group) = 0;
+  virtual SubCommandGroup* GetGroup() = 0;
+
+  static std::unique_ptr<SubCommand> Create(std::string name);
 };
 
 // The basic information of this group.
@@ -1184,7 +1186,7 @@ struct SubCommandGroupInfo {};
 class SubCommandGroup {
  public:
   virtual ~SubCommandGroup() {}
-  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) = 0;
+  virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd) = 0;
   virtual SubCommandGroupInfo* GetInfo() = 0;
 };
 
@@ -1812,7 +1814,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
       callback(group.get());
   }
 
-  int GetArgumentCount() override { return arguments_.size(); }
+  unsigned GetArgumentCount() override { return arguments_.size(); }
 
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
@@ -1899,21 +1901,34 @@ class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
 
 class SubCommandImpl : public SubCommand {
  public:
-  ArgumentHolder* GetHolder() override { return holder_.get(); }
-  SubCommandInfo* GetInfo() override { return info_.get(); }
+  explicit SubCommandImpl(std::string name) : name_(std::move(name)) {}
 
-  explicit SubCommandImpl(SubCommandGroup* group,
-                          std::unique_ptr<SubCommandInfo> info);
-  // : group_(group),
-  //   info_(std::move(info)),
-  //   holder_(new ArgumentHolderImpl()) {}
+  ArgumentHolder* GetHolder() override { return holder_.get(); }
+  void SetGroup(SubCommandGroup* group) override { group_ = group; }
+  SubCommandGroup* GetGroup() override { return group_; }
+  const char* GetName() override { return name_.c_str(); }
+  const char* GetHelpDoc() override { return help_doc_.c_str(); }
+  void SetAliases(std::vector<std::string> val) override {
+    aliases_ = std::move(val);
+  }
+  void SetHelpDoc(std::string val) override { help_doc_ = std::move(val); }
+
+  void ForEachAlias(std::function<void(const std::string&)> callback) override {
+    for (auto& al : aliases_)
+      callback(al);
+  }
 
  private:
-  SubCommandGroup* group_;
-  // Option given by user.
-  std::unique_ptr<SubCommandInfo> info_;
+  SubCommandGroup* group_ = nullptr;
+  std::string name_;
+  std::string help_doc_;
+  std::vector<std::string> aliases_;
   std::unique_ptr<ArgumentHolder> holder_;
 };
+
+inline std::unique_ptr<SubCommand> SubCommand::Create(std::string name) {
+  return std::make_unique<SubCommandImpl>(std::move(name));
+}
 
 class SubCommandHolderImpl : public SubCommandHolder {
  public:
@@ -1940,12 +1955,10 @@ class SubCommandHolderImpl : public SubCommandHolder {
   class GroupImpl;
 
   SubCommand* AddSubCommandToGroup(SubCommandGroup* group,
-                                   std::unique_ptr<SubCommandInfo> info) {
-    auto* sub = new SubCommandImpl(group, std::move(info));
-    if (listener_)
-      listener_->OnAddSubCommand(sub);
-    subcmds_.emplace_back(sub);
-    return sub;
+                                   std::unique_ptr<SubCommand> cmd) {
+    cmd->SetGroup(group);
+    subcmds_.push_back(std::move(cmd));
+    return subcmds_.back().get();
   }
 
   std::unique_ptr<Listener> listener_;
@@ -1955,8 +1968,8 @@ class SubCommandHolderImpl : public SubCommandHolder {
 
 class SubCommandHolderImpl::GroupImpl : public SubCommandGroup {
  public:
-  SubCommand* AddSubCommand(std::unique_ptr<SubCommandInfo> info) override {
-    return impl_->AddSubCommandToGroup(this, std::move(info));
+  SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd) override {
+    return impl_->AddSubCommandToGroup(this, std::move(cmd));
   }
 
  private:
@@ -2108,6 +2121,8 @@ class OptionalNames : public NamesInfo {
   }
 
   bool IsOption() override { return true; }
+  unsigned GetLongNamesCount() override { return long_names_.size(); }
+  unsigned GetShortNamesCount() override { return short_names_.size(); }
 
   std::string GetDefaultMetaVar() override {
     std::string in =
@@ -2525,19 +2540,27 @@ class SubParser : public AddArgumentGroupHelper {
 class SubParserGroup;
 
 // Support add(parser("something").aliases({...}).help("..."))
-class parser {
+class SubCommandBuilder {
  public:
-  explicit parser(const char* name);
-  parser& aliases(std::vector<std::string> als);
-  parser& help(const char* h);
+  explicit SubCommandBuilder(std::string name)
+      : cmd_(SubCommand::Create(std::move(name))) {}
+
+  SubCommandBuilder& aliases(std::vector<std::string> als) {
+    cmd_->SetAliases(std::move(als));
+    return *this;
+  }
+  SubCommandBuilder& help(std::string val) {
+    cmd_->SetHelpDoc(std::move(val));
+    return *this;
+  }
 
  private:
   friend class SubParserGroup;
-  std::unique_ptr<SubCommandInfo> Release() {
-    ARGPARSE_DCHECK(info_);
-    return std::move(info_);
+  std::unique_ptr<SubCommand> Build() {
+    ARGPARSE_DCHECK(cmd_);
+    return std::move(cmd_);
   }
-  std::unique_ptr<SubCommandInfo> info_;
+  std::unique_ptr<SubCommand> cmd_;
 };
 
 class SubParserGroup {
@@ -2545,18 +2568,16 @@ class SubParserGroup {
   explicit SubParserGroup(SubCommandGroup* group) : group_(group) {}
 
   // TODO: More precise signature.
-  SubParser add_parser(const char* name,
-                       const char* help = {},
+  SubParser add_parser(std::string name,
+                       std::string help = {},
                        std::vector<std::string> aliases = {}) {
-    auto info =
-        std::make_unique<SubCommandInfo>(name, help, std::move(aliases));
-    auto* sub = group_->AddSubCommand(std::move(info));
-    return SubParser(sub);
+    SubCommandBuilder builder(std::move(name));
+    builder.help(std::move(help)).aliases(std::move(aliases));
+    return add(builder);
   }
-  SubParser add(parser& p) {
-    auto info = p.Release();
-    auto* sub = group_->AddSubCommand(std::move(info));
-    return SubParser(sub);
+  SubParser add(SubCommandBuilder& builder) {
+    auto* cmd = group_->AddSubCommand(builder.Build());
+    return SubParser(cmd);
   }
 
  private:
