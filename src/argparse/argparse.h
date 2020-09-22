@@ -67,31 +67,48 @@ class StringView {
   StringView(const StringView&) = default;
   StringView& operator=(const StringView&) = default;
 
-  StringView(const char* data, std::size_t size) : data_(data), size_(size) {
-    ARGPARSE_DCHECK_F(data, "No matter what, data shouldn't be null");
-  }
+  StringView() = delete;
+  StringView(std::string&&) = delete;
+
+  // data should be non-null and null-terminated.
+  StringView(const char* data);
 
   StringView(const std::string& in) : StringView(in.data(), in.size()) {}
 
+  // Should be selected if data is a string literal.
   template <std::size_t N>
-  StringView(const char (&data)[N]) : StringView(data, N - 1) {
-    static_assert(N > 0);
-    ARGPARSE_DCHECK_F(data[N - 1] == '\0', "data must be null-terminated");
-  }
+  StringView(const char (&data)[N]) : StringView(data, N - 1) {}
 
   std::size_t size() const { return size_; }
-  const char* data() const { return data_; }
+  bool empty() const { return 0 == size(); }
+  const char* data() const {
+    ARGPARSE_DCHECK(data_);
+    return data_;
+  }
 
   std::string ToString() const { return std::string(data_, size_); }
-  const char* Strdup() const;
+  std::unique_ptr<char[]> ToCharArray() const;
 
-  bool operator<(const StringView& that) const;
-  bool operator==(const StringView& that) const;
+  static int Compare(const StringView& a, const StringView& b);
+  bool operator<(const StringView& that) const {
+    return Compare(*this, that) < 0;
+  }
+  bool operator==(const StringView& that) const {
+    return Compare(*this, that) == 0;
+  }
 
  private:
-  const char* data_ = nullptr;
-  std::size_t size_ = 0;
+  // data should be non-null and null-terminated.
+  StringView(const char* data, std::size_t size);
+
+  // Not default-constructible.
+  const char* data_;
+  std::size_t size_;
 };
+
+inline std::ostream& operator<<(std::ostream& os, const StringView& in) {
+  return os << in.data();
+}
 
 // Result<T> handles user' returned value and error using a union.
 template <typename T>

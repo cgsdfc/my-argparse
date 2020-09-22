@@ -21,12 +21,9 @@ struct NoMovable {
 namespace ap = argparse;
 
 int main(int argc, char const* argv[]) {
-  std::string e;
-  std::cerr << (void*) e.c_str() << std::endl;
+  std::string e = "aaaa";
+  std::cout << StringView(e);
 
-  std::string b;
-  std::cerr << (void*) b.c_str();
-  
   // ArgumentParser parser;
 
   // std::string output;
