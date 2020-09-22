@@ -836,7 +836,7 @@ class Operations {
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, OpenMode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
-  virtual const char* GetTypeName() = 0;
+  virtual StringView GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
   virtual const std::type_info& GetTypeInfo() = 0;
   virtual std::string FormatValue(const Any& val) = 0;
@@ -922,7 +922,7 @@ class NamesInfo {
   virtual void ForEachName(NameKind name_kind,
                            std::function<void(const std::string&)> callback) {}
 
-  virtual const char* GetName() = 0;
+  virtual StringView GetName() = 0;
 
   static std::unique_ptr<NamesInfo> CreatePositional(std::string in);
   static std::unique_ptr<NamesInfo> CreateOptional(
@@ -1005,8 +1005,8 @@ enum class HelpFormatPolicy {
 class Argument {
  public:
   virtual bool IsRequired() = 0;
-  virtual const char* GetHelpDoc() = 0;
-  virtual const char* GetMetaVar() = 0;
+  virtual StringView GetHelpDoc() = 0;
+  virtual StringView GetMetaVar() = 0;
   virtual ArgumentGroup* GetGroup() = 0;
   virtual NamesInfo* GetNamesInfo() = 0;
   virtual DestInfo* GetDest() = 0;
@@ -1037,7 +1037,7 @@ class Argument {
 
   // For positional, this will be PosName. For Option, this will be
   // the first long name or first short name (if no long name).
-  const char* GetName() {
+  StringView GetName() {
     ARGPARSE_DCHECK(GetNamesInfo());
     return GetNamesInfo()->GetName();
   }
@@ -1167,7 +1167,7 @@ class ArgArray {
 class ArgumentGroup {
  public:
   virtual ~ArgumentGroup() {}
-  virtual const char* GetHeader() = 0;
+  virtual StringView GetHeader() = 0;
   // Visit each arg.
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   // Add an arg to this group.
@@ -1218,8 +1218,8 @@ class SubCommand {
   virtual ArgumentHolder* GetHolder() = 0;
   virtual void SetAliases(std::vector<std::string> val) = 0;
   virtual void SetHelpDoc(std::string val) = 0;
-  virtual const char* GetName() = 0;
-  virtual const char* GetHelpDoc() = 0;
+  virtual StringView GetName() = 0;
+  virtual StringView GetHelpDoc() = 0;
   virtual void ForEachAlias(
       std::function<void(const std::string&)> callback) = 0;
   virtual void SetGroup(SubCommandGroup* group) = 0;
@@ -1242,13 +1242,13 @@ class SubCommandGroup {
   virtual void SetHelpDoc(std::string val) = 0;
   virtual void SetMetaVar(std::string val) = 0;
 
-  virtual const char* GetTitle() = 0;
-  virtual const char* GetDescription() = 0;
+  virtual StringView GetTitle() = 0;
+  virtual StringView GetDescription() = 0;
   virtual ActionInfo* GetAction() = 0;
   virtual DestInfo* GetDest() = 0;
   virtual bool IsRequired() = 0;
-  virtual const char* GetHelpDoc() = 0;
-  virtual const char* GetMetaVar() = 0;
+  virtual StringView GetHelpDoc() = 0;
+  virtual StringView GetMetaVar() = 0;
   // TODO: change all const char* to StringView..
 
   static std::unique_ptr<SubCommandGroup> Create();
@@ -1734,7 +1734,7 @@ class OperationsImpl : public Operations {
   bool IsSupported(OpsKind ops) override {
     return OpsIsSupportedImpl<T>(ops, std::make_index_sequence<kMaxOpsKind>{});
   }
-  const char* GetTypeName() override { return TypeName<T>(); }
+  StringView GetTypeName() override { return TypeName<T>(); }
   std::string GetTypeHint() override { return TypeHint<T>(); }
   std::string FormatValue(const Any& val) override {
     return FormatTraits<T>::Run(AnyCast<T>(val));
@@ -1795,11 +1795,11 @@ class ArgumentImpl : public Argument {
   NumArgsInfo* GetNumArgs() override { return num_args_.get(); }
   const Any* GetConstValue() override { return const_value_.get(); }
   const Any* GetDefaultValue() override { return default_value_.get(); }
-  const char* GetMetaVar() override { return meta_var_.c_str(); }
+  StringView GetMetaVar() override { return meta_var_; }
   ArgumentGroup* GetGroup() override { return group_; }
   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required_; }
-  const char* GetHelpDoc() override { return help_doc_.c_str(); }
+  StringView GetHelpDoc() override { return help_doc_; }
   void SetRequired(bool required) override { is_required_ = required; }
   void SetHelpDoc(std::string help_doc) override {
     help_doc_ = std::move(help_doc);
@@ -1970,8 +1970,8 @@ class SubCommandImpl : public SubCommand {
   ArgumentHolder* GetHolder() override { return holder_.get(); }
   void SetGroup(SubCommandGroup* group) override { group_ = group; }
   SubCommandGroup* GetGroup() override { return group_; }
-  const char* GetName() override { return name_.c_str(); }
-  const char* GetHelpDoc() override { return help_doc_.c_str(); }
+  StringView GetName() override { return name_; }
+  StringView GetHelpDoc() override { return help_doc_; }
   void SetAliases(std::vector<std::string> val) override {
     aliases_ = std::move(val);
   }
@@ -2055,13 +2055,13 @@ class SubCommandGroupImpl : public SubCommandGroup {
   void SetHelpDoc(std::string val) override { help_doc_ = std::move(val); }
   void SetMetaVar(std::string val) override { meta_var_ = std::move(val); }
 
-  const char* GetTitle() override { return title_.c_str(); }
-  const char* GetDescription() override { return description_.c_str(); }
+  StringView GetTitle() override { return title_; }
+  StringView GetDescription() override { return description_; }
   ActionInfo* GetAction() override { return action_info_.get(); }
   DestInfo* GetDest() override { return dest_info_.get(); }
   bool IsRequired() override { return required_; }
-  const char* GetHelpDoc() override { return help_doc_.c_str(); }
-  const char* GetMetaVar() override { return meta_var_.c_str(); }
+  StringView GetHelpDoc() override { return help_doc_; }
+  StringView GetMetaVar() override { return meta_var_; }
 
  private:
   bool required_ = false;
@@ -2201,7 +2201,7 @@ class PositionalName : public NamesInfo {
     if (name_kind == kPosName)
       callback(name_);
   }
-  const char* GetName() override { return name_.c_str(); }
+  StringView GetName() override { return name_; }
 
  private:
   std::string name_;
@@ -2260,10 +2260,10 @@ class OptionalNames : public NamesInfo {
     }
   }
 
-  const char* GetName() override {
+  StringView GetName() override {
     const auto& name =
         long_names_.empty() ? short_names_.front() : long_names_.front();
-    return name.c_str();
+    return name;
   }
 
  private:

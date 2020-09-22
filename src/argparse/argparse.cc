@@ -39,9 +39,7 @@ bool Argument::Less(Argument* a, Argument* b) {
 
   // positional compares on their names.
   if (!a->IsOption() && !b->IsOption()) {
-    ARGPARSE_DCHECK(a->GetName());
-    ARGPARSE_DCHECK(b->GetName());
-    return std::strcmp(a->GetName(), b->GetName()) < 0;
+    return a->GetName() < b->GetName();
   }
 
   // required option goes first.
@@ -53,8 +51,7 @@ bool Argument::Less(Argument* a, Argument* b) {
     return a->IsFlag();
 
   // a and b are both long options or both flags.
-  ARGPARSE_DCHECK(a->GetName() && b->GetName());
-  return std::strcmp(a->GetName(), b->GetName()) < 0;
+  return a->GetName() < b->GetName();
 }
 
 static OpsKind TypesToOpsKind(TypeKind in) {
@@ -697,7 +694,7 @@ void ArgpCompiler::CompileGroup(ArgumentGroup* group,
     return;
   argp_option opt{};
   opt.group = group_to_id_[group];
-  opt.doc = group->GetHeader();
+  opt.doc = group->GetHeader().data();
   out->push_back(opt);
 }
 
@@ -831,7 +828,7 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
     ++members_;
     holder_->AddArgumentToGroup(std::move(arg), this);
   }
-  const char* GetHeader() override { return header_.c_str(); }
+  StringView GetHeader() override { return header_; }
 
   unsigned GetArgumentCount() override { return members_; }
 
