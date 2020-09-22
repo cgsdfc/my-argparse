@@ -61,6 +61,38 @@ struct NoneType {};
 
 [[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
 
+// Like std::string_view, but may be more suit our needs.
+class StringView {
+ public:
+  StringView(const StringView&) = default;
+  StringView& operator=(const StringView&) = default;
+
+  StringView(const char* data, std::size_t size) : data_(data), size_(size) {
+    ARGPARSE_DCHECK_F(data, "No matter what, data shouldn't be null");
+  }
+
+  StringView(const std::string& in) : StringView(in.data(), in.size()) {}
+
+  template <std::size_t N>
+  StringView(const char (&data)[N]) : StringView(data, N - 1) {
+    static_assert(N > 0);
+    ARGPARSE_DCHECK_F(data[N - 1] == '\0', "data must be null-terminated");
+  }
+
+  std::size_t size() const { return size_; }
+  const char* data() const { return data_; }
+
+  std::string ToString() const { return std::string(data_, size_); }
+  const char* Strdup() const;
+
+  bool operator<(const StringView& that) const;
+  bool operator==(const StringView& that) const;
+
+ private:
+  const char* data_ = nullptr;
+  std::size_t size_ = 0;
+};
+
 // Result<T> handles user' returned value and error using a union.
 template <typename T>
 class Result {
@@ -1983,6 +2015,8 @@ class SubCommandHolderImpl : public SubCommandHolder {
 
 class SubCommandGroupImpl : public SubCommandGroup {
  public:
+  SubCommandGroupImpl() = default;
+
   SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd) override {
     auto* cmd_ptr = cmd.get();
     commands_.push_back(std::move(cmd));
@@ -2013,7 +2047,6 @@ class SubCommandGroupImpl : public SubCommandGroup {
   const char* GetMetaVar() override { return meta_var_.c_str(); }
 
  private:
-  SubCommandHolderImpl* impl_;
   bool required_ = false;
   std::string title_;
   std::string description_;
@@ -2023,6 +2056,10 @@ class SubCommandGroupImpl : public SubCommandGroup {
   std::unique_ptr<ActionInfo> action_info_;
   std::vector<std::unique_ptr<SubCommand>> commands_;
 };
+
+inline std::unique_ptr<SubCommandGroup> SubCommandGroup::Create() {
+  return std::make_unique<SubCommandGroupImpl>();
+}
 
 template <typename T>
 class TypeCallbackImpl : public TypeCallback {
@@ -2661,6 +2698,16 @@ class SubParsersBuilder {
     return *this;
   }
 
+  SubParsersBuilder& help(std::string val) {
+    group_->SetHelpDoc(std::move(val));
+    return *this;
+  }
+
+  SubParsersBuilder& dest(Dest val) {
+    group_->SetDest(std::move(val.info));
+    return *this;
+  }
+
   std::unique_ptr<SubCommandGroup> Build() { return std::move(group_); }
 
  private:
@@ -2693,8 +2740,10 @@ class MainParserHelper : public AddArgumentGroupHelper {
     return SubParserGroup(AddSubParsersImpl(std::move(group)));
   }
   // TODO: More precise signature.
-  SubParserGroup add_subparsers() {
-    return SubParserGroup(AddSubParsersImpl(nullptr));
+  SubParserGroup add_subparsers(Dest dest, std::string help = {}) {
+    SubParsersBuilder builder;
+    builder.dest(std::move(dest)).help(std::move(help));
+    return add_subparsers(builder.Build());
   }
 
  private:

@@ -871,8 +871,10 @@ std::unique_ptr<SubCommandHolder> SubCommandHolder::Create() {
   return std::make_unique<SubCommandHolderImpl>();
 }
 std::unique_ptr<ArgumentController> ArgumentController::Create() {
-  ARGPARSE_DCHECK(g_parser_factory_callback);
-  return std::make_unique<ArgumentControllerImpl>(g_parser_factory_callback());
+  if (g_parser_factory_callback)
+    return std::make_unique<ArgumentControllerImpl>(
+        g_parser_factory_callback());
+  return nullptr;
 }
 
 ArgumentControllerImpl::ArgumentControllerImpl(

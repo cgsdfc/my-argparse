@@ -21,26 +21,37 @@ struct NoMovable {
 namespace ap = argparse;
 
 int main(int argc, char const* argv[]) {
-  ArgumentParser parser;
+  std::string e;
+  std::cerr << (void*) e.c_str() << std::endl;
 
-  std::string output;
-  parser.add_argument(
-      ArgumentBuilder({"a", "b"})
-          .dest(&output)
-          .const_value(std::string("path"))
-          .type([](const std::string& in) -> std::string { return ""; })
-          .action("store_const")
-          .help("output to this file")
-          .meta_var("OUT")
-          .Build());
+  std::string b;
+  std::cerr << (void*) b.c_str();
+  
+  // ArgumentParser parser;
 
-  auto subparsers = parser.add_subparsers(SubParsersBuilder()
-                                              .description("blabal")
-                                              .title("xxx")
-                                              .help("sub-commands")
-                                              .Build());
+  // std::string output;
+  // parser.add_argument(
+  //     ArgumentBuilder({"a", "b"})
+  //         .dest(&output)
+  //         .const_value(std::string("path"))
+  //         .type([](const std::string& in) -> std::string { return ""; })
+  //         .action("store_const")
+  //         .help("output to this file")
+  //         .meta_var("OUT")
+  //         .Build());
 
-  auto create_parser = subparsers.add_parser("create");
+  // auto subparsers = parser.add_subparsers(SubParsersBuilder()
+  //                                             .description("blabal")
+  //                                             .title("xxx")
+  //                                             .help("sub-commands")
+  //                                             .Build());
+
+  // int cmd;
+  // parser.add_subparsers(&cmd, "cmds about ints");
+
+  // auto create_parser = subparsers.add_parser("create");
+  // subparsers.add_parser(SubCommandBuilder("add").Build());
+
   // create_parser.add_argument()
   // int input;
   // parser.add_argument("input", &input, "input");
