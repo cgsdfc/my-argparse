@@ -1179,15 +1179,30 @@ class SubCommand {
   static std::unique_ptr<SubCommand> Create(std::string name);
 };
 
-// The basic information of this group.
-struct SubCommandGroupInfo {};
-
 // A group of SubCommands, which can have things like description...
 class SubCommandGroup {
  public:
   virtual ~SubCommandGroup() {}
   virtual SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd) = 0;
-  virtual SubCommandGroupInfo* GetInfo() = 0;
+
+  virtual void SetTitle(std::string val) = 0;
+  virtual void SetDescription(std::string val) = 0;
+  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
+  virtual void SetDest(std::unique_ptr<DestInfo> info) =0;
+  virtual void SetRequired(bool val) = 0;
+  virtual void SetHelpDoc(std::string val) = 0;
+  virtual void SetMetaVar(std::string val) = 0;
+
+  virtual const char* GetTitle() = 0;
+  virtual const char* GetDescription() = 0;
+  virtual ActionInfo* GetAction() = 0;
+  virtual DestInfo* GetDest() = 0;
+  virtual bool IsRequired() = 0;
+  virtual const char* GetHelpDoc() = 0;
+  virtual const char* GetMetaVar() = 0;
+  // TODO: change all const char* to StringView..
+
+  static std::unique_ptr<SubCommandGroup> Create();
 };
 
 // Like ArgumentHolder, but holds subcommands.
@@ -1202,7 +1217,7 @@ class SubCommandHolder {
 
   virtual ~SubCommandHolder() {}
   virtual SubCommandGroup* AddSubCommandGroup(
-      std::unique_ptr<SubCommandGroupInfo> info) = 0;
+      std::unique_ptr<SubCommandGroup> group) = 0;
   virtual void ForEachSubCommand(std::function<void(SubCommand*)> callback) = 0;
   virtual void ForEachSubCommandGroup(
       std::function<void(SubCommandGroup*)> callback) = 0;
@@ -1943,17 +1958,17 @@ class SubCommandHolderImpl : public SubCommandHolder {
   }
 
   SubCommandGroup* AddSubCommandGroup(
-      std::unique_ptr<SubCommandGroupInfo> info) override {
-        return nullptr;
-      }
+      std::unique_ptr<SubCommandGroup> group) override {
+    auto* g = group.get();
+    groups_.push_back(std::move(group));
+    return g;
+  }
 
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
   }
 
  private:
-  class GroupImpl;
-
   SubCommand* AddSubCommandToGroup(SubCommandGroup* group,
                                    std::unique_ptr<SubCommand> cmd) {
     cmd->SetGroup(group);
@@ -1966,14 +1981,47 @@ class SubCommandHolderImpl : public SubCommandHolder {
   std::vector<std::unique_ptr<SubCommandGroup>> groups_;
 };
 
-class SubCommandHolderImpl::GroupImpl : public SubCommandGroup {
+class SubCommandGroupImpl : public SubCommandGroup {
  public:
   SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd) override {
-    return impl_->AddSubCommandToGroup(this, std::move(cmd));
+    auto* cmd_ptr = cmd.get();
+    commands_.push_back(std::move(cmd));
+    cmd_ptr->SetGroup(this);
+    return cmd_ptr;
   }
+
+  void SetTitle(std::string val) override { title_ = std::move(val); }
+  void SetDescription(std::string val) override {
+    description_ = std::move(val);
+  }
+  void SetAction(std::unique_ptr<ActionInfo> info) override {
+    action_info_ = std::move(info);
+  }
+  void SetDest(std::unique_ptr<DestInfo> info) override {
+    dest_info_ = std::move(info);
+  }
+  void SetRequired(bool val) override { required_ = val; }
+  void SetHelpDoc(std::string val) override { help_doc_ = std::move(val); }
+  void SetMetaVar(std::string val) override { meta_var_ = std::move(val); }
+
+  const char* GetTitle() override { return title_.c_str(); }
+  const char* GetDescription() override { return description_.c_str(); }
+  ActionInfo* GetAction() override { return action_info_.get(); }
+  DestInfo* GetDest() override { return dest_info_.get(); }
+  bool IsRequired() override { return required_; }
+  const char* GetHelpDoc() override { return help_doc_.c_str(); }
+  const char* GetMetaVar() override { return meta_var_.c_str(); }
 
  private:
   SubCommandHolderImpl* impl_;
+  bool required_ = false;
+  std::string title_;
+  std::string description_;
+  std::string help_doc_;
+  std::string meta_var_;
+  std::unique_ptr<DestInfo> dest_info_;
+  std::unique_ptr<ActionInfo> action_info_;
+  std::vector<std::unique_ptr<SubCommand>> commands_;
 };
 
 template <typename T>
@@ -2406,6 +2454,14 @@ struct Options {
 
 class AddArgumentHelper;
 
+// Creator of DestInfo. For those that need a DestInfo, just take Dest
+// as an arg.
+struct Dest {
+  std::unique_ptr<DestInfo> info;
+  template <typename T>
+  Dest(T* ptr) : info(DestInfo::CreateFromPtr(ptr)) {}
+};
+
 class ArgumentBuilder {
  public:
   explicit ArgumentBuilder(Names names) : factory_(ArgumentFactory::Create()) {
@@ -2414,9 +2470,8 @@ class ArgumentBuilder {
   }
 
   // TODO: Fix the typeinfo/actioninfo deduction.
-  template <typename T>
-  ArgumentBuilder& dest(T* ptr) {
-    factory_->SetDest(DestInfo::CreateFromPtr(ptr));
+  ArgumentBuilder& dest(Dest dest) {
+    factory_->SetDest(std::move(dest.info));
     return *this;
   }
   ArgumentBuilder& action(const char* str) {
@@ -2475,12 +2530,9 @@ class ArgumentBuilder {
     return *this;
   }
 
- private:
-  friend class AddArgumentHelper;
-  std::unique_ptr<Argument> CreateArgument() {
-    return factory_->CreateArgument();
-  }
+  std::unique_ptr<Argument> Build() { return factory_->CreateArgument(); }
 
+ private:
   std::unique_ptr<ArgumentFactory> factory_;
 };
 
@@ -2490,8 +2542,9 @@ using argument = ArgumentBuilder;
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
-  void add(ArgumentBuilder& builder) {
-    AddArgumentImpl(builder.CreateArgument());
+  // add_argument(ArgumentBuilder(...).Build());
+  void add_argument(std::unique_ptr<Argument> arg) {
+    return AddArgumentImpl(std::move(arg));
   }
   virtual ~AddArgumentHelper() {}
 
@@ -2554,12 +2607,12 @@ class SubCommandBuilder {
     return *this;
   }
 
- private:
-  friend class SubParserGroup;
   std::unique_ptr<SubCommand> Build() {
     ARGPARSE_DCHECK(cmd_);
     return std::move(cmd_);
   }
+
+ private:
   std::unique_ptr<SubCommand> cmd_;
 };
 
@@ -2567,25 +2620,52 @@ class SubParserGroup {
  public:
   explicit SubParserGroup(SubCommandGroup* group) : group_(group) {}
 
-  // TODO: More precise signature.
+  // Positional.
   SubParser add_parser(std::string name,
                        std::string help = {},
                        std::vector<std::string> aliases = {}) {
     SubCommandBuilder builder(std::move(name));
     builder.help(std::move(help)).aliases(std::move(aliases));
-    return add(builder);
+    return add_parser(builder.Build());
   }
-  SubParser add(SubCommandBuilder& builder) {
-    auto* cmd = group_->AddSubCommand(builder.Build());
-    return SubParser(cmd);
+
+  // Builder pattern.
+  SubParser add_parser(std::unique_ptr<SubCommand> cmd) {
+    auto* cmd_ptr = group_->AddSubCommand(std::move(cmd));
+    return SubParser(cmd_ptr);
   }
 
  private:
   SubCommandGroup* group_;
 };
 
+class MainParserHelper;
+
 // Support add(subparsers(...))
-class subparsers {};
+class SubParsersBuilder {
+ public:
+  explicit SubParsersBuilder() : group_(SubCommandGroup::Create()) {}
+
+  SubParsersBuilder& title(std::string val) {
+    group_->SetTitle(std::move(val));
+    return *this;
+  }
+
+  SubParsersBuilder& description(std::string val) {
+    group_->SetDescription(std::move(val));
+    return *this;
+  }
+
+  SubParsersBuilder& meta_var(std::string val) {
+    group_->SetMetaVar(std::move(val));
+    return *this;
+  }
+
+  std::unique_ptr<SubCommandGroup> Build() { return std::move(group_); }
+
+ private:
+  std::unique_ptr<SubCommandGroup> group_;
+};
 
 // Interface of ArgumentParser.
 class MainParserHelper : public AddArgumentGroupHelper {
@@ -2607,10 +2687,10 @@ class MainParserHelper : public AddArgumentGroupHelper {
   }
 
   using AddArgumentGroupHelper::add_argument_group;
-  using AddArgumentHelper::add;
+  using AddArgumentHelper::add_argument;
 
-  SubParserGroup add(subparsers& sub) {
-    return SubParserGroup(nullptr);
+  SubParserGroup add_subparsers(std::unique_ptr<SubCommandGroup> group) {
+    return SubParserGroup(AddSubParsersImpl(std::move(group)));
   }
   // TODO: More precise signature.
   SubParserGroup add_subparsers() {
@@ -2620,7 +2700,7 @@ class MainParserHelper : public AddArgumentGroupHelper {
  private:
   virtual bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) = 0;
   virtual SubCommandGroup* AddSubParsersImpl(
-      std::unique_ptr<SubCommandGroupInfo> info) = 0;
+      std::unique_ptr<SubCommandGroup> group) = 0;
 };
 
 class ArgumentParser : public MainParserHelper {
@@ -2644,9 +2724,9 @@ class ArgumentParser : public MainParserHelper {
     return controller_->GetMainHolder()->AddArgumentGroup(header);
   }
   SubCommandGroup* AddSubParsersImpl(
-      std::unique_ptr<SubCommandGroupInfo> info) override {
+      std::unique_ptr<SubCommandGroup> group) override {
     return controller_->GetSubCommandHolder()->AddSubCommandGroup(
-        std::move(info));
+        std::move(group));
   }
 
   std::unique_ptr<ArgumentController> controller_;
