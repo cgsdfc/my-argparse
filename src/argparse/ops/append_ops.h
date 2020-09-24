@@ -2,6 +2,7 @@
 
 #include <deque>
 #include <list>
+#include <type_traits>  // bool_constant
 #include <utility>  // move_if_noexcept()
 #include <vector>
 

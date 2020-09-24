@@ -3,6 +3,9 @@
 #include <cstdio>
 #include <fstream>
 
+#include "argparse/base/common.h"
+#include "argparse/base/result.h"
+
 namespace argparse {
 
 constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";

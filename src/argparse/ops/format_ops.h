@@ -1,5 +1,12 @@
 #pragma once
 
+#include <sstream>
+#ifdef ARGPARSE_USE_FMTLIB
+#include <fmt/core.h>
+#endif
+
+#include "argparse/base/common.h"
+
 namespace argparse {
 
 template <typename T>

@@ -1,5 +1,10 @@
 #pragma once
 
+#include <variant>
+#include <string>
+
+#include "argparse/base/common.h"
+
 namespace argparse {
 
 // Result<T> handles user' returned value and error using a union.

@@ -1,5 +1,10 @@
 #pragma once
 
+#include <type_traits>
+#include <typeindex>
+
+#include "argparse/base/common.h"
+
 namespace argparse {
 
 // This is a type-erased type-safe void* wrapper.

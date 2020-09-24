@@ -1,5 +1,10 @@
 #pragma once
 
+#include <ostream>
+#include <string>
+
+#include "argparse/base/common.h"
+
 namespace argparse {
 
 // Like std::string_view, but may be more suit our needs.

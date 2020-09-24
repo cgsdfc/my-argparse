@@ -1,18 +1,21 @@
 #pragma once
 
+#include <memory>
+#include <type_traits>
+#include <utility>
+
+#include "argparse/ops/operations.h"
+
+#include "argparse/base/any.h"
+#include "argparse/base/dest_ptr.h"
+
+#include "argparse/ops/format_ops.h"
+#include "argparse/ops/parse_ops.h"
+#include "argparse/ops/open_ops.h"
+#include "argparse/ops/parse_ops.h"
+#include "argparse/ops/typehint_ops.h"
+
 namespace argparse {
-
-enum class OpsKind {
-  kStore,
-  kStoreConst,
-  kAppend,
-  kAppendConst,
-  kCount,
-  kParse,
-  kOpen,
-};
-
-inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
 
 const char* OpsToString(OpsKind ops);
 

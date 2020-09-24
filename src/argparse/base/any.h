@@ -1,5 +1,11 @@
 #pragma once
 
+#include <memory>
+#include <typeindex>
+#include <utility>
+
+#include "argparse/base/common.h"
+
 namespace argparse {
 
 // Our version of any.

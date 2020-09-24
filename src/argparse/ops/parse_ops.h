@@ -1,5 +1,10 @@
 #pragma once
 
+#include <map>
+#include <string>
+
+#include "argparse/base/result.h"
+
 namespace argparse {
 
 // The default impl for the types we know (bulitin-types like int).

@@ -1,5 +1,9 @@
 #pragma once
 
+#include <vector>
+
+#include "argparse/base/common.h"
+
 namespace argparse {
 
 class ArgArray {
