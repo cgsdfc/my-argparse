@@ -1237,7 +1237,7 @@ class SubCommandGroup {
   virtual void SetTitle(std::string val) = 0;
   virtual void SetDescription(std::string val) = 0;
   virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
-  virtual void SetDest(std::unique_ptr<DestInfo> info) =0;
+  virtual void SetDest(std::unique_ptr<DestInfo> info) = 0;
   virtual void SetRequired(bool val) = 0;
   virtual void SetHelpDoc(std::string val) = 0;
   virtual void SetMetaVar(std::string val) = 0;
@@ -1880,6 +1880,8 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   unsigned GetArgumentCount() override { return arguments_.size(); }
 
+  // TODO: merge listener into one class about the events during argument
+  // adding.
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
   }
@@ -1901,7 +1903,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
     return groups_[kPositionalGroup].get();
   }
 
-  bool CheckNamesConflict( NamesInfo* names);
+  bool CheckNamesConflict(NamesInfo* names);
 
   std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
