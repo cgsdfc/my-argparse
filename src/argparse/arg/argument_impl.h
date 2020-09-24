@@ -2,6 +2,8 @@
 
 #include "argparse/arg/argument.h"
 
+#include <set>
+
 #include "argparse/base/common.h"
 
 namespace argparse {
@@ -79,5 +81,61 @@ inline std::unique_ptr<Argument> Argument::Create(
   ARGPARSE_DCHECK(info);
   return std::make_unique<ArgumentImpl>(std::move(info));
 }
+
+class ArgumentHolderImpl : public ArgumentHolder {
+ public:
+  ArgumentHolderImpl();
+
+  ArgumentGroup* AddArgumentGroup(const char* header) override;
+
+  void AddArgument(std::unique_ptr<Argument> arg) override {
+    auto* group =
+        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
+    return group->AddArgument(std::move(arg));
+  }
+
+  void ForEachArgument(std::function<void(Argument*)> callback) override {
+    for (auto& arg : arguments_)
+      callback(arg.get());
+  }
+  void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
+    for (auto& group : groups_)
+      callback(group.get());
+  }
+
+  unsigned GetArgumentCount() override { return arguments_.size(); }
+
+  // TODO: merge listener into one class about the events during argument
+  // adding.
+  void SetListener(std::unique_ptr<Listener> listener) override {
+    listener_ = std::move(listener);
+  }
+
+ private:
+  enum GroupID {
+    kOptionGroup = 0,
+    kPositionalGroup = 1,
+  };
+
+  class GroupImpl;
+
+  // Add an arg to a specific group.
+  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
+  ArgumentGroup* GetDefaultOptionGroup() const {
+    return groups_[kOptionGroup].get();
+  }
+  ArgumentGroup* GetDefaultPositionalGroup() const {
+    return groups_[kPositionalGroup].get();
+  }
+
+  bool CheckNamesConflict(NamesInfo* names);
+
+  std::unique_ptr<Listener> listener_;
+  // Hold the storage of all args.
+  std::vector<std::unique_ptr<Argument>> arguments_;
+  std::vector<std::unique_ptr<ArgumentGroup>> groups_;
+  // Conflicts checking.
+  std::set<std::string> name_set_;
+};
 
 }  // namespace argparse

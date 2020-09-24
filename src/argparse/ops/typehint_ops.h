@@ -1,5 +1,7 @@
 #pragma once
 
+#include <type_traits>
+
 namespace argparse {
 
 template <typename T>

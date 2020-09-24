@@ -1,6 +1,7 @@
 #pragma once
 
 #include "argparse/arg/info.h"
+#include "argparse/base/argument_error.h"
 
 namespace argparse {
 
@@ -202,6 +203,203 @@ inline std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
 inline std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
     std::unique_ptr<TypeCallback> cb) {
   return std::make_unique<TypeCallbackInfo>(std::move(cb));
+}
+
+template <typename T>
+class TypeCallbackImpl : public TypeCallback {
+ public:
+  using CallbackType = std::function<TypeCallbackPrototype<T>>;
+  explicit TypeCallbackImpl(CallbackType cb) : callback_(std::move(cb)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {
+    Result<T> result;
+    std::invoke(callback_, in, &result);
+    ConvertResults(&result, out);
+  }
+
+  std::string GetTypeHint() override { return TypeHint<T>(); }
+
+ private:
+  CallbackType callback_;
+};
+
+// Provided by user's callable obj.
+template <typename T, typename V>
+class CustomActionCallback : public ActionCallback {
+ public:
+  using CallbackType = std::function<ActionCallbackPrototype<T, V>>;
+  explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {
+    ARGPARSE_DCHECK(callback_);
+  }
+
+ private:
+  void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) override {
+    Result<V> result(AnyCast<V>(std::move(data)));
+    auto* obj = dest_ptr.template load_ptr<T>();
+    std::invoke(callback_, obj, std::move(result));
+  }
+
+  CallbackType callback_;
+};
+
+template <typename Callback, typename T>
+std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(Callback&& cb,
+                                                   TypeCallbackPrototype<T>*) {
+  return std::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
+}
+
+template <typename Callback, typename T>
+std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
+    Callback&& cb,
+    TypeCallbackPrototypeThrows<T>*) {
+  return std::make_unique<TypeCallbackImpl<T>>(
+      [cb](const std::string& in, Result<T>* out) {
+        try {
+          *out = std::invoke(cb, in);
+        } catch (const ArgumentError& e) {
+          out->set_error(e.what());
+        }
+      });
+}
+
+template <typename Callback>
+std::unique_ptr<TypeCallback> MakeTypeCallback(Callback&& cb) {
+  return MakeTypeCallbackImpl(std::forward<Callback>(cb),
+                              (detail::function_signature_t<Callback>*)nullptr);
+}
+
+template <typename Callback, typename T, typename V>
+std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
+    Callback&& cb,
+    ActionCallbackPrototype<T, V>*) {
+  return std::make_unique<CustomActionCallback<T, V>>(
+      std::forward<Callback>(cb));
+}
+
+template <typename Callback>
+std::unique_ptr<ActionCallback> MakeActionCallback(Callback&& cb) {
+  return MakeActionCallbackImpl(
+      std::forward<Callback>(cb),
+      (detail::function_signature_t<Callback>*)nullptr);
+}
+
+bool IsValidPositionalName(const std::string& name);
+
+// A valid option name is long or short option name and not '--', '-'.
+// This is only checked once and true for good.
+bool IsValidOptionName(const std::string& name);
+
+// These two predicates must be called only when IsValidOptionName() holds.
+inline bool IsLongOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() > 2;
+}
+
+inline bool IsShortOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() == 2;
+}
+
+inline std::string ToUpper(const std::string& in) {
+  std::string out(in);
+  std::transform(in.begin(), in.end(), out.begin(), ::toupper);
+  return out;
+}
+
+class PositionalName : public NamesInfo {
+ public:
+  explicit PositionalName(std::string name) : name_(std::move(name)) {}
+
+  bool IsOption() override { return false; }
+  std::string GetDefaultMetaVar() override { return ToUpper(name_); }
+  void ForEachName(NameKind name_kind,
+                   std::function<void(const std::string&)> callback) override {
+    if (name_kind == kPosName)
+      callback(name_);
+  }
+  StringView GetName() override { return name_; }
+
+ private:
+  std::string name_;
+};
+
+class OptionalNames : public NamesInfo {
+ public:
+  explicit OptionalNames(const std::vector<std::string>& names) {
+    for (auto& name : names) {
+      ARGPARSE_CHECK_F(IsValidOptionName(name), "Not a valid option name: %s",
+                       name.c_str());
+      if (IsLongOptionName(name)) {
+        long_names_.push_back(name);
+      } else {
+        ARGPARSE_DCHECK(IsShortOptionName(name));
+        short_names_.push_back(name);
+      }
+    }
+  }
+
+  bool IsOption() override { return true; }
+  unsigned GetLongNamesCount() override { return long_names_.size(); }
+  unsigned GetShortNamesCount() override { return short_names_.size(); }
+
+  std::string GetDefaultMetaVar() override {
+    std::string in =
+        long_names_.empty() ? short_names_.front() : long_names_.front();
+    std::replace(in.begin(), in.end(), '-', '_');
+    return ToUpper(in);
+  }
+
+  void ForEachName(NameKind name_kind,
+                   std::function<void(const std::string&)> callback) override {
+    switch (name_kind) {
+      case kPosName:
+        return;
+      case kLongName: {
+        for (auto& name : std::as_const(long_names_))
+          callback(name);
+        break;
+      }
+      case kShortName: {
+        for (auto& name : std::as_const(short_names_))
+          callback(name);
+        break;
+      }
+      case kAllNames: {
+        for (auto& name : std::as_const(long_names_))
+          callback(name);
+        for (auto& name : std::as_const(short_names_))
+          callback(name);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  StringView GetName() override {
+    const auto& name =
+        long_names_.empty() ? short_names_.front() : long_names_.front();
+    return name;
+  }
+
+ private:
+  std::vector<std::string> long_names_;
+  std::vector<std::string> short_names_;
+};
+
+inline std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
+  return std::make_unique<PositionalName>(std::move(in));
+}
+
+inline std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
+    const std::vector<std::string>& in) {
+  return std::make_unique<OptionalNames>(in);
+}
+
+template <typename T>
+std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
+  ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
+  return std::make_unique<DestInfoImpl>(DestPtr(ptr), CreateOpsFactory<T>());
 }
 
 }  // namespace argparse

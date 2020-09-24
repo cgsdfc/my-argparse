@@ -31,29 +31,6 @@ Names::Names(std::initializer_list<std::string> names)
   ARGPARSE_CHECK_F(names.size(), "At least one name must be provided");
 }
 
-// ArgumentImpl:
-bool Argument::Less(Argument* a, Argument* b) {
-  // options go before positionals.
-  if (a->IsOption() != b->IsOption())
-    return a->IsOption();
-
-  // positional compares on their names.
-  if (!a->IsOption() && !b->IsOption()) {
-    return a->GetName() < b->GetName();
-  }
-
-  // required option goes first.
-  if (a->IsRequired() != b->IsRequired())
-    return a->IsRequired();
-
-  // // short-only option (flag) goes before the rest.
-  if (a->IsFlag() != b->IsFlag())
-    return a->IsFlag();
-
-  // a and b are both long options or both flags.
-  return a->GetName() < b->GetName();
-}
-
 static OpsKind TypesToOpsKind(TypeKind in) {
   switch (in) {
     case TypeKind::kOpen:
@@ -414,31 +391,6 @@ error_t GNUArgpParser::DoParse(int key, char* arg, argp_state* state) {
 //   }
 // }
 
-void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
-                                            ArgumentGroup* group) {
-  // First check if this arg will conflict with existing ones.
-  ARGPARSE_CHECK_F(CheckNamesConflict(arg->GetNamesInfo()),
-                   "Names conflict with existing names!");
-  arg->SetGroup(group);
-  if (listener_)
-    listener_->OnAddArgument(arg.get());
-  arguments_.push_back(std::move(arg));
-}
-
-ArgumentHolderImpl::ArgumentHolderImpl() {
-  AddArgumentGroup("optional arguments");
-  AddArgumentGroup("positional arguments");
-}
-
-bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
-  bool ok = true;
-  names->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
-    if (!name_set_.insert(in).second)
-      ok = false;
-  });
-  return ok;
-}
-
 bool IsValidPositionalName(const std::string& name) {
   auto len = name.size();
   if (!len || !std::isalpha(name[0]))
@@ -485,41 +437,6 @@ ActionKind StringToActions(const std::string& str) {
   return iter->second;
 }
 
-void DefaultActionInfo::Run(CallbackClient* client) {
-  auto dest_ptr = client->GetDestPtr();
-  auto data = client->GetData();
-
-  switch (action_kind_) {
-    case ActionKind::kNoAction:
-      break;
-    case ActionKind::kStore:
-      ops_->Store(dest_ptr, std::move(data));
-      break;
-    case ActionKind::kStoreTrue:
-    case ActionKind::kStoreFalse:
-    case ActionKind::kStoreConst:
-      ops_->StoreConst(dest_ptr, *client->GetConstValue());
-      break;
-    case ActionKind::kAppend:
-      ops_->Append(dest_ptr, std::move(data));
-      break;
-    case ActionKind::kAppendConst:
-      ops_->AppendConst(dest_ptr, *client->GetConstValue());
-      break;
-    case ActionKind::kPrintHelp:
-      client->PrintHelp();
-      break;
-    case ActionKind::kPrintUsage:
-      client->PrintUsage();
-      break;
-    case ActionKind::kCustom:
-      break;
-    case ActionKind::kCount:
-      ops_->Count(dest_ptr);
-      break;
-  }
-}
-
 // TODO: extract action-related logic into one class, say ActionHelper.
 // void ArgumentImpl::RunAction(std::unique_ptr<Any> data,
 //                              CallbackRunner::Delegate* delegate) {
@@ -547,94 +464,6 @@ void DefaultActionInfo::Run(CallbackClient* client) {
 //   RunAction(std::move(result.value), delegate.get());
 // }
 
-std::string ModeToChars(OpenMode mode) {
-  std::string m;
-  if (mode & kModeRead)
-    m.append("r");
-  if (mode & kModeWrite)
-    m.append("w");
-  if (mode & kModeAppend)
-    m.append("a");
-  if (mode & kModeBinary)
-    m.append("b");
-  return m;
-}
-
-void CFileOpenTraits::Run(const std::string& in,
-                          OpenMode mode,
-                          Result<FILE*>* out) {
-  auto mode_str = ModeToChars(mode);
-  auto* file = std::fopen(in.c_str(), mode_str.c_str());
-  if (file)
-    return out->set_value(file);
-  if (int e = errno) {
-    errno = 0;
-    return out->set_error(std::strerror(e));
-  }
-  out->set_error(kDefaultOpenFailureMsg);
-}
-
-std::ios_base::openmode ModeToStreamMode(OpenMode m) {
-  std::ios_base::openmode out;
-  if (m & kModeRead)
-    out |= std::ios_base::in;
-  if (m & kModeWrite)
-    out |= std::ios_base::out;
-  if (m & kModeAppend)
-    out |= std::ios_base::app;
-  if (m & kModeTruncate)
-    out |= std::ios_base::trunc;
-  if (m & kModeBinary)
-    out |= std::ios_base::binary;
-  return out;
-}
-
-OpenMode StreamModeToMode(std::ios_base::openmode stream_mode) {
-  int m = kModeNoMode;
-  if (stream_mode & std::ios_base::in)
-    m |= kModeRead;
-  if (stream_mode & std::ios_base::out)
-    m |= kModeWrite;
-  if (stream_mode & std::ios_base::app)
-    m |= kModeAppend;
-  if (stream_mode & std::ios_base::trunc)
-    m |= kModeTruncate;
-  if (stream_mode & std::ios_base::binary)
-    m |= kModeBinary;
-  return static_cast<OpenMode>(m);
-}
-
-OpenMode CharsToMode(const char* str) {
-  ARGPARSE_DCHECK(str);
-  int m;
-  for (; *str; ++str) {
-    switch (*str) {
-      case 'r':
-        m |= kModeRead;
-        break;
-      case 'w':
-        m |= kModeWrite;
-        break;
-      case 'a':
-        m |= kModeAppend;
-        break;
-      case 'b':
-        m |= kModeBinary;
-        break;
-      case '+':
-        // Valid combs are a+, w+, r+.
-        if (m & kModeAppend)
-          m |= kModeRead;
-        else if (m & kModeWrite)
-          m |= kModeRead;
-        else if (m & kModeRead)
-          m |= kModeWrite;
-        break;
-    }
-  }
-  return static_cast<OpenMode>(m);
-}
-
 const char* OpsToString(OpsKind ops) {
   static const std::map<OpsKind, std::string> kOpsToStrings{
       {OpsKind::kStore, "Store"},   {OpsKind::kStoreConst, "StoreConst"},
@@ -644,48 +473,6 @@ const char* OpsToString(OpsKind ops) {
   auto iter = kOpsToStrings.find(ops);
   ARGPARSE_DCHECK(iter != kOpsToStrings.end());
   return iter->second.c_str();
-}
-
-static std::string Demangle(const char* mangled_name) {
-  std::size_t length;
-  int status;
-  const char* realname =
-      abi::__cxa_demangle(mangled_name, nullptr, &length, &status);
-
-  if (status) {
-    static constexpr const char kDemangleFailedSub[] =
-        "<error-type(demangle failed)>";
-    return kDemangleFailedSub;
-  }
-
-  ARGPARSE_DCHECK(realname);
-  std::string result(realname, length);
-  std::free((void*)realname);
-  return result;
-}
-
-const char* TypeNameImpl(const std::type_info& type) {
-  static std::map<std::type_index, std::string> g_typenames;
-  auto iter = g_typenames.find(type);
-  if (iter == g_typenames.end()) {
-    g_typenames.emplace(type, Demangle(type.name()));
-  }
-  return g_typenames[type].c_str();
-}
-
-void CheckFailed(SourceLocation loc, const char* fmt, ...) {
-  std::fprintf(stderr, "Error at %s:%d:%s: ", loc.filename, loc.line,
-               loc.function);
-
-  va_list ap;
-  va_start(ap, fmt);
-  std::vfprintf(stderr, fmt, ap);
-  va_end(ap);
-
-  std::fprintf(
-      stderr,
-      "\n\nPlease check your code and read the documents of argparse.\n\n");
-  std::abort();
 }
 
 void ArgpCompiler::CompileGroup(ArgumentGroup* group,
@@ -933,27 +720,6 @@ std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
 
 std::unique_ptr<ArgumentFactory> ArgumentFactory::Create() {
   return std::make_unique<ArgumentFactoryImpl>();
-}
-
-StringView::StringView(const char* data)
-    : StringView(data, std::strlen(data)) {}
-
-std::unique_ptr<char[]> StringView::ToCharArray() const {
-  auto dest = std::make_unique<char[]>(size() + 1);
-  std::char_traits<char>::copy(dest.get(), data(), size());
-  dest[size()] = 0;
-  return dest;
-}
-
-int StringView::Compare(const StringView& a, const StringView& b) {
-  return std::char_traits<char>::compare(a.data(), b.data(),
-                                         std::min(a.size(), b.size()));
-}
-
-StringView::StringView(const char* data, std::size_t size)
-    : data_(data), size_(size) {
-  ARGPARSE_DCHECK_F(data, "data shouldn't be null");
-  ARGPARSE_DCHECK(std::strlen(data) == size);
 }
 
 }  // namespace argparse

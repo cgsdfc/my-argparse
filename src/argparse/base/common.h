@@ -44,6 +44,13 @@ enum OpenMode {
   kModeBinary = 16,
 };
 
+// Control whether some extra info appear in the help doc.
+enum class HelpFormatPolicy {
+  kDefault,           // add nothing.
+  kTypeHint,          // add (type: <type-hint>) to help doc.
+  kDefaultValueHint,  // add (default: <default-value>) to help doc.
+};
+
 namespace detail {
 // clang-format off
 
@@ -95,7 +102,6 @@ template <typename T>
 const char* TypeName() {
   return TypeNameImpl(typeid(T));
 }
-
 
 template <typename T, typename SFINAE = void>
 struct has_insert_operator : std::false_type {};
