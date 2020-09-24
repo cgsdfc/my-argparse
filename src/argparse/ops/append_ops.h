@@ -1,5 +1,10 @@
 #pragma once
 
+#include <deque>
+#include <list>
+#include <utility>  // move_if_noexcept()
+#include <vector>
+
 namespace argparse {
 // This traits indicates whether T supports append operation and if it does,
 // tells us how to do the append.

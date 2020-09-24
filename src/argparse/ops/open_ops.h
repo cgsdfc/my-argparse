@@ -1,8 +1,17 @@
 #pragma once
 
+#include <cstdio>
+#include <fstream>
+
 namespace argparse {
 
 constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
+
+OpenMode CharsToMode(const char* str);
+std::string ModeToChars(OpenMode mode);
+
+OpenMode StreamModeToMode(std::ios_base::openmode stream_mode);
+std::ios_base::openmode ModeToStreamMode(OpenMode m);
 
 template <typename T>
 struct OpenTraits {
