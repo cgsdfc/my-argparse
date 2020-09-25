@@ -5,23 +5,12 @@
 #include <typeinfo>
 
 #include "argparse/base/common.h"
+#include "argparse/ops/opsfwd.h"
 
 // Some code only needs the abstract definition of Operations.
 namespace argparse {
 class Any;
 class DestPtr;
-
-enum class OpsKind {
-  kStore,
-  kStoreConst,
-  kAppend,
-  kAppendConst,
-  kCount,
-  kParse,
-  kOpen,
-};
-
-inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
 
 struct OpsResult {
   bool has_error = false;

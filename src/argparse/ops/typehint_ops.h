@@ -1,8 +1,12 @@
 #pragma once
 
 #include <type_traits>
+#include "argparse/ops/opsfwd.h"
 
 namespace argparse {
+
+// template <OpsKind Ops, typename T>
+// struct IsOpsSupported;
 
 template <typename T>
 struct TypeHintTraits;

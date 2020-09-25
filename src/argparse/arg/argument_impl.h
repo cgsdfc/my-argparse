@@ -4,6 +4,7 @@
 
 #include <set>
 
+#include "argparse/base/string_view.h"
 #include "argparse/base/common.h"
 
 namespace argparse {

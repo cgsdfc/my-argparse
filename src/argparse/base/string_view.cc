@@ -1,5 +1,7 @@
 #include "argparse/base/string_view.h"
 
+#include <cstring>
+
 namespace argparse {
 
 StringView::StringView(const char* data)

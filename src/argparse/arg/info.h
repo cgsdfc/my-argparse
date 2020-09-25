@@ -4,6 +4,12 @@
 #include <memory>
 #include <string>
 
+#include "argparse/base/any.h"
+#include "argparse/base/common.h"
+#include "argparse/base/dest_ptr.h"
+#include "argparse/base/result.h"
+#include "argparse/base/string_view.h"
+
 namespace argparse {
 class OpsFactory;
 class Operations;

@@ -1,5 +1,8 @@
 #pragma once
 
+#include "argparse/parser/argument_controller.h"
+#include "argparse/parser/parser.h"
+
 namespace argparse {
 
 class ArgumentControllerImpl : public ArgumentController {

@@ -1,6 +1,12 @@
 #pragma once
 
+#include <memory>
+
+#include "argparse/arg/argument.h"
+#include "argparse/arg/sub_command.h"
+
 namespace argparse {
+class Parser;
 
 // Main options passed to the parser.
 struct OptionsInfo {
@@ -12,8 +18,8 @@ struct OptionsInfo {
   const char* after_doc = {};
   const char* domain = {};
   const char* email = {};
-  ProgramVersionCallback program_version_callback;
-  HelpFilterCallback help_filter;
+  // ProgramVersionCallback program_version_callback;
+  // HelpFilterCallback help_filter;
 };
 
 // Combination of Holder and Parser. ArgumentParser should be impl'ed in terms

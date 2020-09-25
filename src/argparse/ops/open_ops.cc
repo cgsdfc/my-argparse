@@ -1,5 +1,7 @@
 #include "argparse/ops/open_ops.h"
 
+#include <cstring>
+
 namespace argparse {
 
 std::string ModeToChars(OpenMode mode) {

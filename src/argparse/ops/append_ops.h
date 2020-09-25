@@ -18,15 +18,15 @@ struct AppendTraits {
 
 // Extracted the bool value from AppendTraits.
 template <typename T>
-using IsAppendSupported = std::bool_constant<bool(AppendTraits<T>::Run)>;
+struct IsAppendSupported : std::bool_constant<bool(AppendTraits<T>::Run)> {};
 
 // Get the value-type for a appendable, only use it when IsAppendSupported<T>.
 template <typename T>
 using ValueTypeOf = typename AppendTraits<T>::ValueType;
 
 // 2 level spec here..
-template <typename T, bool = IsAppendSupported<T>{}>
-struct IsAppendConstSupported;
+// template <typename T, bool = IsAppendSupported<T>{}>
+// struct IsAppendConstSupported;
 template <typename T>
 struct IsAppendConstSupported<T, false> : std::false_type {};
 template <typename T>

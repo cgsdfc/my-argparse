@@ -1,5 +1,13 @@
 #pragma once
 
+#include <memory>
+#include <vector>
+#include <string>
+
+#include "argparse/base/arg_array.h"
+#include "argparse/arg/argument.h"
+#include "argparse/arg/sub_command.h"
+
 namespace argparse {
 
 // Parser contains everythings it needs to parse arguments.

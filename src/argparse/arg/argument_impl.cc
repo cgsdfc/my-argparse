@@ -49,4 +49,46 @@ bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
   return ok;
 }
 
+std::unique_ptr<ArgumentHolder> ArgumentHolder::Create() {
+  return std::make_unique<ArgumentHolderImpl>();
+}
+
+class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
+ public:
+  GroupImpl(ArgumentHolderImpl* holder, const char* header)
+      : holder_(holder), header_(header) {
+    ARGPARSE_DCHECK(header_.size());
+    if (header_.back() != ':')
+      header_.push_back(':');
+  }
+
+  void AddArgument(std::unique_ptr<Argument> arg) override {
+    ++members_;
+    holder_->AddArgumentToGroup(std::move(arg), this);
+  }
+  StringView GetHeader() override { return header_; }
+
+  unsigned GetArgumentCount() override { return members_; }
+
+  void ForEachArgument(std::function<void(Argument*)> callback) override {
+    for (auto& arg : holder_->arguments_) {
+      if (arg->GetGroup() == this)
+        callback(arg.get());
+    }
+  }
+
+ private:
+  ArgumentHolderImpl* holder_;
+  std::string header_;  // the text provided by user plus a ':'.
+  unsigned members_ = 0;
+};
+
+ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(const char* header) {
+  auto* group = new GroupImpl(this, header);
+  groups_.emplace_back(group);
+  if (listener_)
+    listener_->OnAddArgumentGroup(group);
+  return group;
+}
+
 }  // namespace argparse

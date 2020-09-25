@@ -5,11 +5,11 @@
 #include <string>
 
 #include "argparse/arg/info.h"
+#include "argparse/base/string_view.h"
 
 namespace argparse {
 class Any;
 class Argument;
-class StringView;
 
 class ArgumentGroup {
  public:

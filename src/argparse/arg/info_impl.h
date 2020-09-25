@@ -1,7 +1,17 @@
 #pragma once
 
 #include "argparse/arg/info.h"
+
+#include <sstream>
+
+#include "argparse/base/any.h"
 #include "argparse/base/argument_error.h"
+#include "argparse/base/common.h"
+#include "argparse/base/dest_ptr.h"
+#include "argparse/base/result.h"
+#include "argparse/base/string_view.h"
+#include "argparse/ops/operations_impl.h"
+#include "argparse/ops/typehint_ops.h"
 
 namespace argparse {
 
@@ -23,46 +33,8 @@ class NumberNumArgsInfo : public NumArgsInfo {
 
 class FlagNumArgsInfo : public NumArgsInfo {
  public:
-  explicit FlagNumArgsInfo(char flag) : flag_(flag) {
-    ARGPARSE_CHECK_F(IsValidNumArgsFlag(flag), "Not a valid flag to nargs: %c",
-                     flag);
-  }
-  bool Run(unsigned in, std::string* errmsg) override {
-    bool ok = false;
-    switch (flag_) {
-      case '+':
-        ok = in >= 1;
-        break;
-      case '?':
-        ok = in == 0 || in == 1;
-        break;
-      case '*':
-        ok = true;
-      default:
-        ARGPARSE_DCHECK(false);
-    }
-    if (ok)
-      return true;
-    std::ostringstream os;
-    os << "expected " << FlagToString(flag_) << " values, got " << in;
-    *errmsg = os.str();
-    return false;
-  }
-  static bool IsValidNumArgsFlag(char in) {
-    return in == '+' || in == '*' || in == '+';
-  }
-  static const char* FlagToString(char flag) {
-    switch (flag) {
-      case '+':
-        return "one or more";
-      case '?':
-        return "zero or one";
-      case '*':
-        return "zero or more";
-      default:
-        ARGPARSE_DCHECK(false);
-    }
-  }
+  explicit FlagNumArgsInfo(char flag);
+  bool Run(unsigned in, std::string* errmsg) override;
 
  private:
   const char flag_;

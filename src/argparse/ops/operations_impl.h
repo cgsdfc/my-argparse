@@ -9,15 +9,13 @@
 #include "argparse/base/any.h"
 #include "argparse/base/dest_ptr.h"
 
+#include "argparse/ops/append_ops.h"
 #include "argparse/ops/format_ops.h"
-#include "argparse/ops/parse_ops.h"
 #include "argparse/ops/open_ops.h"
 #include "argparse/ops/parse_ops.h"
 #include "argparse/ops/typehint_ops.h"
 
 namespace argparse {
-
-const char* OpsToString(OpsKind ops);
 
 template <OpsKind Ops, typename T>
 struct IsOpsSupported : std::false_type {};
@@ -46,10 +44,7 @@ struct IsOpsSupported<OpsKind::kParse, T>
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T>
     : std::bool_constant<bool(OpenTraits<T>::Run)> {};
-// wstring is not supported now.
-
-template <OpsKind Ops, typename T, bool Supported = IsOpsSupported<Ops, T>{}>
-struct OpsImpl;
+    
 
 template <typename T>
 void ConvertResults(Result<T>* in, OpsResult* out) {

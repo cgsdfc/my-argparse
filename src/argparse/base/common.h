@@ -1,5 +1,9 @@
 #pragma once
 
+#include <ostream>
+#include <type_traits>
+#include <typeinfo>
+
 #define ARGPARSE_CHECK_IMPL(condition, format, ...)                         \
   do {                                                                      \
     if (!static_cast<bool>(condition))                                      \
@@ -26,13 +30,13 @@ namespace argparse {
 // When an meaningless type is needed.
 struct NoneType {};
 
-[[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
-
 struct SourceLocation {
   int line;
   const char* filename;
   const char* function;
 };
+
+[[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
 
 // File open mode. This is not enum class since we do & | on it.
 enum OpenMode {

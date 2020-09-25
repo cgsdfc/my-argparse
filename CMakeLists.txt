@@ -14,8 +14,14 @@ endif()
 include_directories(src)
 
 add_library(argparse 
-    src/argparse/argparse.h 
-    src/argparse/argparse.cc
+    src/argparse/arg/argument_impl.cc
+    src/argparse/arg/info_impl.cc
+    src/argparse/base/common.cc
+    src/argparse/base/string_view.cc
+    src/argparse/ops/open_ops.cc
+    src/argparse/parser/argument_controller_impl.cc
+    # src/argparse/argparse.h 
+    # src/argparse/argparse.cc
 )
 
 add_executable(test_main test_main.cc)
