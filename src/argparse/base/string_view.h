@@ -1,7 +1,7 @@
 #pragma once
 
+#include <iosfwd>
 #include <memory>
-#include <ostream>
 #include <string>
 
 #include "argparse/base/common.h"
@@ -53,8 +53,6 @@ class StringView {
   std::size_t size_;
 };
 
-inline std::ostream& operator<<(std::ostream& os, const StringView& in) {
-  return os << in.data();
-}
+std::ostream& operator<<(std::ostream& os, const StringView& in);
 
 }  // namespace argparse

@@ -1,6 +1,7 @@
 #include "argparse/base/string_view.h"
 
 #include <cstring>
+#include <ostream>
 
 namespace argparse {
 
@@ -23,6 +24,10 @@ StringView::StringView(const char* data, std::size_t size)
     : data_(data), size_(size) {
   ARGPARSE_DCHECK_F(data, "data shouldn't be null");
   ARGPARSE_DCHECK(std::strlen(data) == size);
+}
+
+std::ostream& operator<<(std::ostream& os, const StringView& in) {
+  return os << in.data();
 }
 
 }  // namespace argparse
