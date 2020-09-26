@@ -442,48 +442,4 @@ static bool ActionNeedsValueType(ActionKind in) {
   return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
 }
 
-std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
-  ARGPARSE_DCHECK(arg_);
-  arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
-                             : arg_->GetNamesInfo()->GetDefaultMetaVar());
-
-  // Put a bool if needed.
-  if (ActionNeedsBool(action_kind_)) {
-    const bool kStoreTrue = action_kind_ == ActionKind::kStoreTrue;
-    arg_->SetDefaultValue(MakeAny<bool>(!kStoreTrue));
-    arg_->SetConstValue(MakeAny<bool>(kStoreTrue));
-  }
-
-  // Important phrase..
-  auto* dest = arg_->GetDest();
-  OpsFactory* factory = dest ? dest->GetOpsFactory() : nullptr;
-
-  if (!arg_->GetAction()) {
-    // We assume a default store action but only if has dest.
-    if (action_kind_ == ActionKind::kNoAction && dest)
-      action_kind_ = ActionKind::kStore;
-    // Some action don't need an ops, like print_help, we perhaps need to
-    // distinct that..
-    auto ops = factory ? factory->CreateOps() : nullptr;
-    arg_->SetAction(ActionInfo::CreateDefault(action_kind_, std::move(ops)));
-  }
-
-  if (!arg_->GetType()) {
-    std::unique_ptr<Operations> ops = nullptr;
-    if (factory)
-      ops = ActionNeedsValueType(action_kind_) ? factory->CreateValueTypeOps()
-                                               : factory->CreateOps();
-    auto info = open_mode_ == kModeNoMode
-                    ? TypeInfo::CreateDefault(std::move(ops))
-                    : TypeInfo::CreateFileType(std::move(ops), open_mode_);
-    arg_->SetType(std::move(info));
-  }
-
-  return std::move(arg_);
-}
-
-std::unique_ptr<ArgumentFactory> ArgumentFactory::Create() {
-  return std::make_unique<ArgumentFactoryImpl>();
-}
-
 }  // namespace argparse
