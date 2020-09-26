@@ -25,8 +25,9 @@
 #define ARGPARSE_DCHECK_F(expr, format, ...) \
   ARGPARSE_CHECK_F(expr, format, ##__VA_ARGS__)
 #endif
-
+// Basic things
 namespace argparse {
+
 // When an meaningless type is needed.
 struct NoneType {};
 
@@ -37,16 +38,6 @@ struct SourceLocation {
 };
 
 [[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
-
-// File open mode. This is not enum class since we do & | on it.
-enum OpenMode {
-  kModeNoMode = 0x0,
-  kModeRead = 1,
-  kModeWrite = 2,
-  kModeAppend = 4,
-  kModeTruncate = 8,
-  kModeBinary = 16,
-};
 
 // Control whether some extra info appear in the help doc.
 enum class HelpFormatPolicy {

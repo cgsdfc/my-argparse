@@ -1,5 +1,6 @@
 #pragma once
 
+// Holds public things
 namespace argparse {
 
 class Argument;
