@@ -263,6 +263,7 @@ class Result {
   Result(Result&&) = default;
   Result& operator=(Result&&) = default;
 
+  bool empty() const { return kEmptyIndex == data_.index(); }
   bool has_value() const { return data_.index() == kValueIndex; }
   bool has_error() const { return data_.index() == kErrorMsgIndex; }
 
@@ -292,22 +293,24 @@ class Result {
     return *this;
   }
 
-  // Release the err-msg (if any). Keep in error state.
+  // Release the err-msg (if any). Go back to empty state.
   std::string release_error() {
     ARGPARSE_DCHECK(has_error());
-    // We know that std::string is moveable.
-    return std::get<kErrorMsgIndex>(std::move(data_));
+    auto str = std::get<kErrorMsgIndex>(std::move(data_));
+    reset();
+    return str;
   }
   const std::string& get_error() const {
     ARGPARSE_DCHECK(has_error());
     return std::get<kErrorMsgIndex>(data_);
   }
 
-  // Release the value, Keep in value state.
+  // Release the value, go back to empty state.
   T release_value() {
     ARGPARSE_DCHECK(has_value());
-    // But we don't know T is moveable or not.
-    return std::get<kValueIndex>(std::move_if_noexcept(data_));
+    auto val = std::get<kValueIndex>(std::move_if_noexcept(data_));
+    reset();
+    return val;
   }
   const T& get_value() const {
     ARGPARSE_DCHECK(has_value());
@@ -320,7 +323,6 @@ class Result {
   }
 
  private:
-  bool empty() const { return kEmptyIndex == data_.index(); }
   enum Indices {
     kEmptyIndex,
     kErrorMsgIndex,
