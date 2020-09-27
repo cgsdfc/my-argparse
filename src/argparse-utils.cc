@@ -78,4 +78,32 @@ void CheckFailed(SourceLocation loc, const char* fmt, ...) {
   std::abort();
 }
 
+bool IsValidPositionalName(const std::string& name) {
+  auto len = name.size();
+  if (!len || !std::isalpha(name[0]))
+    return false;
+
+  return std::all_of(name.begin() + 1, name.end(), [](char c) {
+    return std::isalnum(c) || c == '-' || c == '_';
+  });
+}
+
+bool IsValidOptionName(const std::string& name) {
+  auto len = name.size();
+  if (len < 2 || name[0] != '-')
+    return false;
+  if (len == 2)  // This rules out -?, -* -@ -= --
+    return std::isalnum(name[1]);
+  // check for long-ness.
+  // TODO: fixthis.
+  ARGPARSE_CHECK_F(
+      name[1] == '-',
+      "Single-dash long option (i.e., -jar) is not supported. Please use "
+      "GNU-style long option (double-dash)");
+
+  return std::all_of(name.begin() + 2, name.end(), [](char c) {
+    return c == '-' || c == '_' || std::isalnum(c);
+  });
+}
+
 }  // namespace argparse

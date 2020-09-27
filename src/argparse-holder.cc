@@ -303,7 +303,23 @@ class SubCommandGroupImpl : public SubCommandGroup {
   std::vector<std::unique_ptr<SubCommand>> commands_;
 };
 
-ActionKind StringToActions(const std::string& str);
+static ActionKind StringToActions(const std::string& str) {
+  static const std::map<std::string, ActionKind> kStringToActions{
+      {"store", ActionKind::kStore},
+      {"store_const", ActionKind::kStoreConst},
+      {"store_true", ActionKind::kStoreTrue},
+      {"store_false", ActionKind::kStoreFalse},
+      {"append", ActionKind::kAppend},
+      {"append_const", ActionKind::kAppendConst},
+      {"count", ActionKind::kCount},
+      {"print_help", ActionKind::kPrintHelp},
+      {"print_usage", ActionKind::kPrintUsage},
+  };
+  auto iter = kStringToActions.find(str);
+  ARGPARSE_CHECK_F(iter != kStringToActions.end(),
+                   "Unknown action string '%s' passed in", str.c_str());
+  return iter->second;
+}
 
 class ArgumentFactoryImpl : public ArgumentFactory {
  public:
@@ -629,29 +645,6 @@ void DefaultActionInfo::Run(CallbackClient* client) {
   }
 }
 
-
-bool IsValidPositionalName(const std::string& name);
-
-// A valid option name is long or short option name and not '--', '-'.
-// This is only checked once and true for good.
-bool IsValidOptionName(const std::string& name);
-
-// These two predicates must be called only when IsValidOptionName() holds.
-inline bool IsLongOptionName(const std::string& name) {
-  ARGPARSE_DCHECK(IsValidOptionName(name));
-  return name.size() > 2;
-}
-
-inline bool IsShortOptionName(const std::string& name) {
-  ARGPARSE_DCHECK(IsValidOptionName(name));
-  return name.size() == 2;
-}
-
-inline std::string ToUpper(const std::string& in) {
-  std::string out(in);
-  std::transform(in.begin(), in.end(), out.begin(), ::toupper);
-  return out;
-}
 
 class PositionalName : public NamesInfo {
  public:

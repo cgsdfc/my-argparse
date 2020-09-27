@@ -12,8 +12,8 @@
 #include <fmt/core.h>
 #endif
 
-#include "argparse/argparse-base.h"
 #include "argparse/argparse-utils.h"
+#include "argparse/internal/numeric-parser.h"
 
 // Type-erasure operations
 namespace argparse {
@@ -66,16 +66,6 @@ std::string TypeHint();
 
 const char* OpsToString(OpsKind ops);
 
-struct OpsResult {
-  bool has_error = false;
-  std::unique_ptr<Any> value;  // null if error.
-  std::string errmsg;
-};
-
-class Any;
-class DestPtr;
-class StringView;
-
 // A handle to the function table.
 class Operations {
  public:
@@ -112,6 +102,7 @@ class OpsFactory {
 template <typename T>
 struct AppendTraits {
   static constexpr bool Run = false;
+  using ValueType = void;
 };
 
 // Extracted the bool value from AppendTraits.
@@ -134,7 +125,7 @@ struct IsAppendConstSupported<T, true>
 // For STL-compatible T, by default use the push_back() method of T.
 template <typename T>
 struct DefaultAppendTraits {
-  using ValueType = ValueTypeOf<T>;
+  using ValueType = typename T::value_type;
   static void Run(T* obj, ValueType item) {
     obj->push_back(std::move_if_noexcept(item));
   }
@@ -302,67 +293,13 @@ struct DefaultParseTraits<bool> {
   }
 };
 
-// For std::stof,stod,stold.
-template <typename T, T (*func)(const std::string&, std::size_t*)>
-using stl_floating_point_parser_t =
-    std::integral_constant<decltype(func), func>;
-
-// For std::stoi,stol,stoll,etc.
-template <typename T, T (*func)(const std::string&, std::size_t*, int)>
-using stl_integral_parser_t = std::integral_constant<decltype(func), func>;
-
 template <typename T>
-struct stl_number_parser : std::false_type {};
-
-template <>
-struct stl_number_parser<float>
-    : stl_floating_point_parser_t<float, std::stof> {};
-template <>
-struct stl_number_parser<double>
-    : stl_floating_point_parser_t<double, std::stod> {};
-template <>
-struct stl_number_parser<long double>
-    : stl_floating_point_parser_t<long double, std::stold> {};
-
-template <>
-struct stl_number_parser<int> : stl_integral_parser_t<int, std::stoi> {};
-template <>
-struct stl_number_parser<long> : stl_integral_parser_t<long, std::stol> {};
-template <>
-struct stl_number_parser<long long>
-    : stl_integral_parser_t<long long, std::stoll> {};
-
-template <>
-struct stl_number_parser<unsigned long>
-    : stl_integral_parser_t<unsigned long, std::stoul> {};
-template <>
-struct stl_number_parser<unsigned long long>
-    : stl_integral_parser_t<unsigned long long, std::stoull> {};
-
-template <typename T>
-using has_stl_number_parser_t =
-    std::bool_constant<bool(stl_number_parser<T>{})>;
-
-template <typename T, typename stl_number_parser<T>::value_type func>
-T StlParseNumberImpl(const std::string& in, std::false_type) {
-  return func(in, nullptr, 0);
-}
-template <typename T, typename stl_number_parser<T>::value_type func>
-T StlParseNumberImpl(const std::string& in, std::true_type) {
-  return func(in, nullptr);
-}
-template <typename T>
-T StlParseNumber(const std::string& in) {
-  static_assert(has_stl_number_parser_t<T>{});
-  return StlParseNumberImpl<T, stl_number_parser<T>{}>(
-      in, std::is_floating_point<T>{});
-}
-
-template <typename T>
-struct DefaultParseTraits<T, std::enable_if_t<has_stl_number_parser_t<T>{}>> {
+struct DefaultParseTraits<
+    T,
+    std::enable_if_t<internal::has_stl_number_parser_t<T>{}>> {
   static void Run(const std::string& in, Result<T>* out) {
     try {
-      *out = StlParseNumber<T>(in);
+      *out = internal::StlParseNumber<T>(in);
     } catch (std::invalid_argument&) {
       out->set_error("invalid numeric format");
     } catch (std::out_of_range&) {
@@ -440,7 +377,8 @@ struct MetaTypeOf<T, std::enable_if_t<IsOpsSupported<OpsKind::kAppend, T>{}>>
 
 // Number.
 template <typename T>
-struct MetaTypeOf<T, std::enable_if_t<has_stl_number_parser_t<T>{}>>
+// TODO: replace with is_numeric_type
+struct MetaTypeOf<T, std::enable_if_t<internal::has_stl_number_parser_t<T>{}>>
     : MetaTypeContant<MetaTypes::kNumber> {};
 
 // If you get unhappy with this default handling, for example,

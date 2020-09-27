@@ -4,7 +4,6 @@
 #include <memory>      // unique_ptr
 #include <vector>      // vector
 
-#include "argparse/argparse-base.h"  // ARGPARSE_DCHECK
 #include "argparse/argparse-utils.h"
 
 // This holds various kind of information.
@@ -14,13 +13,6 @@ namespace argparse {
 class OpsFactory;
 class Operations;
 class OpsResult;
-
-// argparse-utils.h
-class DestPtr;
-class Any;
-class StringView;
-class TypeCallback;
-class ActionCallback;
 
 // argparse-holder.h
 class Argument;
