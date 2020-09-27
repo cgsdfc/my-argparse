@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ostream>
+#include <stdexcept>
 #include <type_traits>
 #include <typeinfo>
 
@@ -39,11 +40,27 @@ struct SourceLocation {
 
 [[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
 
+// Throw this exception will cause an error msg to be printed (via what()).
+class ArgumentError final : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
+
 // Control whether some extra info appear in the help doc.
 enum class HelpFormatPolicy {
   kDefault,           // add nothing.
   kTypeHint,          // add (type: <type-hint>) to help doc.
   kDefaultValueHint,  // add (default: <default-value>) to help doc.
+};
+
+// File open mode. This is not enum class since we do & | on it.
+enum OpenMode {
+  kModeNoMode = 0x0,
+  kModeRead = 1,
+  kModeWrite = 2,
+  kModeAppend = 4,
+  kModeTruncate = 8,
+  kModeBinary = 16,
 };
 
 namespace detail {

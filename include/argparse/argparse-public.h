@@ -42,8 +42,6 @@ using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
 // End of interfaces. Begin of Impls. //
 ////////////////////////////////////////
 
-ActionKind StringToActions(const std::string& str);
-
 class FileType {
  public:
   explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}

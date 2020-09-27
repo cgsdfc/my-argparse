@@ -434,12 +434,4 @@ void ParserFactory::RegisterCallback(Callback callback) {
   }
 }
 
-static bool ActionNeedsBool(ActionKind in) {
-  return in == ActionKind::kStoreFalse || in == ActionKind::kStoreTrue;
-}
-
-static bool ActionNeedsValueType(ActionKind in) {
-  return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
-}
-
 }  // namespace argparse

@@ -1,7 +1,19 @@
 #pragma once
 
+#include <functional>
+#include <memory>
+#include <string>
+#include <typeindex>
+#include <variant>
+
+#include "argparse/argparse-base.h"
+
 // Utility classes
 namespace argparse {
+class OpsResult;
+
+template <typename T>
+std::string TypeHint();
 
 // Our version of any.
 class Any {
@@ -265,5 +277,114 @@ class StringView {
 };
 
 std::ostream& operator<<(std::ostream& os, const StringView& in);
+
+template <typename T>
+using TypeCallbackPrototype = void(const std::string&, Result<T>*);
+
+// There is an alternative for those using exception.
+// You convert string into T and throw ArgumentError if something bad happened.
+template <typename T>
+using TypeCallbackPrototypeThrows = T(const std::string&);
+
+// The prototype for action. An action normally does not report errors.
+template <typename T, typename V>
+using ActionCallbackPrototype = void(T*, Result<V>);
+
+// Can only take a Result without dest.
+// template <typename T, typename V>
+// using ActionCallbackPrototypeNoDest = void(Result<V>);
+
+// This is the type eraser of user's callback to the type() option.
+class TypeCallback {
+ public:
+  virtual ~TypeCallback() {}
+  virtual void Run(const std::string& in, OpsResult* out) = 0;
+  virtual std::string GetTypeHint() = 0;
+};
+
+// Similar to TypeCallback, but is for action().
+class ActionCallback {
+ public:
+  virtual ~ActionCallback() {}
+  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
+};
+
+template <typename T>
+class TypeCallbackImpl : public TypeCallback {
+ public:
+  using CallbackType = std::function<TypeCallbackPrototype<T>>;
+  explicit TypeCallbackImpl(CallbackType cb) : callback_(std::move(cb)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {
+    Result<T> result;
+    std::invoke(callback_, in, &result);
+    ConvertResults(&result, out);
+  }
+
+  std::string GetTypeHint() override { return TypeHint<T>(); }
+
+ private:
+  CallbackType callback_;
+};
+
+// Provided by user's callable obj.
+template <typename T, typename V>
+class CustomActionCallback : public ActionCallback {
+ public:
+  using CallbackType = std::function<ActionCallbackPrototype<T, V>>;
+  explicit CustomActionCallback(CallbackType cb) : callback_(std::move(cb)) {
+    ARGPARSE_DCHECK(callback_);
+  }
+
+ private:
+  void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) override {
+    Result<V> result(AnyCast<V>(std::move(data)));
+    auto* obj = dest_ptr.template load_ptr<T>();
+    std::invoke(callback_, obj, std::move(result));
+  }
+
+  CallbackType callback_;
+};
+
+template <typename Callback, typename T>
+std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(Callback&& cb,
+                                                   TypeCallbackPrototype<T>*) {
+  return std::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
+}
+
+template <typename Callback, typename T>
+std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
+    Callback&& cb,
+    TypeCallbackPrototypeThrows<T>*) {
+  return std::make_unique<TypeCallbackImpl<T>>(
+      [cb](const std::string& in, Result<T>* out) {
+        try {
+          *out = std::invoke(cb, in);
+        } catch (const ArgumentError& e) {
+          out->set_error(e.what());
+        }
+      });
+}
+
+template <typename Callback>
+std::unique_ptr<TypeCallback> MakeTypeCallback(Callback&& cb) {
+  return MakeTypeCallbackImpl(std::forward<Callback>(cb),
+                              (detail::function_signature_t<Callback>*)nullptr);
+}
+
+template <typename Callback, typename T, typename V>
+std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
+    Callback&& cb,
+    ActionCallbackPrototype<T, V>*) {
+  return std::make_unique<CustomActionCallback<T, V>>(
+      std::forward<Callback>(cb));
+}
+
+template <typename Callback>
+std::unique_ptr<ActionCallback> MakeActionCallback(Callback&& cb) {
+  return MakeActionCallbackImpl(
+      std::forward<Callback>(cb),
+      (detail::function_signature_t<Callback>*)nullptr);
+}
 
 }  // namespace argparse

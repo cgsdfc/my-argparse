@@ -11,22 +11,20 @@ if (NOT HAVE_ARGP_H)
     message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
 endif()
 
-include_directories(src)
+include_directories(include)
 
 add_library(argparse 
-    src/argparse/arg/argument_impl.cc
-    src/argparse/arg/info_impl.cc
-    src/argparse/base/common.cc
-    src/argparse/base/string_view.cc
-    src/argparse/ops/open_ops.cc
-    src/argparse/parser/argument_controller_impl.cc
-    # src/argparse/argparse.h 
-    # src/argparse/argparse.cc
+    src/argparse-holder.cc
+    src/argparse-ops.cc
+    src/argparse-utils.cc
 )
 
 add_executable(test_main test_main.cc)
 target_link_libraries(test_main argparse)
 
 find_package(GTest)
-add_executable(argparse_unittests src/argparse/argparse_unittests.cc)
+add_executable(argparse_unittests 
+    test/argparse-utils_test.cc
+)
+
 target_link_libraries(argparse_unittests gtest_main)

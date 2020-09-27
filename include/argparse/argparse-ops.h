@@ -1,9 +1,19 @@
 #pragma once
 
+#include <deque>
+#include <list>
+#include <map>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <vector>
+
 #ifdef ARGPARSE_USE_FMTLIB
 #include <fmt/core.h>
 #endif
+
+#include "argparse/argparse-base.h"
+#include "argparse/argparse-utils.h"
 
 // Type-erasure operations
 namespace argparse {
@@ -16,16 +26,6 @@ enum class OpsKind {
   kCount,
   kParse,
   kOpen,
-};
-
-// File open mode. This is not enum class since we do & | on it.
-enum OpenMode {
-  kModeNoMode = 0x0,
-  kModeRead = 1,
-  kModeWrite = 2,
-  kModeAppend = 4,
-  kModeTruncate = 8,
-  kModeBinary = 16,
 };
 
 inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
@@ -61,6 +61,8 @@ template <typename T>
 std::string Format(const T& val);
 template <typename T>
 std::string TypeName();
+template <typename T>
+std::string TypeHint();
 
 const char* OpsToString(OpsKind ops);
 

@@ -1,7 +1,13 @@
 // Impl argparse-holder.h
+#include "argparse/argparse-holder.h"
+
+#include "argparse/argparse-ops.h"
+#include "argparse/argparse-parser.h"
+
+#include <set>
 
 namespace argparse {
-namespace internal {
+// namespace internal {
 
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
@@ -297,6 +303,8 @@ class SubCommandGroupImpl : public SubCommandGroup {
   std::vector<std::unique_ptr<SubCommand>> commands_;
 };
 
+ActionKind StringToActions(const std::string& str);
+
 class ArgumentFactoryImpl : public ArgumentFactory {
  public:
   void SetNames(std::unique_ptr<NamesInfo> info) override {
@@ -367,6 +375,14 @@ class ArgumentFactoryImpl : public ArgumentFactory {
   OpenMode open_mode_ = kModeNoMode;
 };
 
+static bool ActionNeedsBool(ActionKind in) {
+  return in == ActionKind::kStoreFalse || in == ActionKind::kStoreTrue;
+}
+
+static bool ActionNeedsValueType(ActionKind in) {
+  return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
+}
+
 std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
   ARGPARSE_DCHECK(arg_);
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
@@ -407,7 +423,379 @@ std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
   return std::move(arg_);
 }
 
-}  // namespace internal
+class NumberNumArgsInfo : public NumArgsInfo {
+ public:
+  explicit NumberNumArgsInfo(unsigned num) : num_(num) {}
+  bool Run(unsigned in, std::string* errmsg) override {
+    if (in == num_)
+      return true;
+    std::ostringstream os;
+    os << "expected " << num_ << " values, got " << in;
+    *errmsg = os.str();
+    return false;
+  }
+
+ private:
+  const unsigned num_;
+};
+
+class FlagNumArgsInfo : public NumArgsInfo {
+ public:
+  explicit FlagNumArgsInfo(char flag);
+  bool Run(unsigned in, std::string* errmsg) override;
+
+ private:
+  const char flag_;
+};
+
+class DestInfoImpl : public DestInfo {
+ public:
+  DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
+      : dest_ptr_(d), ops_factory_(std::move(f)) {
+    ops_ = ops_factory_->CreateOps();
+  }
+
+  DestPtr GetDestPtr() override { return dest_ptr_; }
+  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
+  std::string FormatValue(const Any& in) override {
+    return ops_->FormatValue(in);
+  }
+
+ private:
+  DestPtr dest_ptr_;
+  std::unique_ptr<OpsFactory> ops_factory_;
+  std::unique_ptr<Operations> ops_;
+};
+
+// ActionInfo for builtin actions like store and append.
+class DefaultActionInfo : public ActionInfo {
+ public:
+  DefaultActionInfo(ActionKind action_kind, std::unique_ptr<Operations> ops)
+      : action_kind_(action_kind), ops_(std::move(ops)) {}
+
+  void Run(CallbackClient* client) override;
+
+ private:
+  // Since kind of action is too much, we use a switch instead of subclasses.
+  ActionKind action_kind_;
+  std::unique_ptr<Operations> ops_;
+};
+
+// class TypeLessActionInfo : public
+
+// Adapt an ActionCallback to ActionInfo.
+class ActionCallbackInfo : public ActionInfo {
+ public:
+  explicit ActionCallbackInfo(std::unique_ptr<ActionCallback> cb)
+      : action_callback_(std::move(cb)) {}
+
+  void Run(CallbackClient* client) override {
+    return action_callback_->Run(client->GetDestPtr(), client->GetData());
+  }
+
+ private:
+  std::unique_ptr<ActionCallback> action_callback_;
+};
+
+// The default of TypeInfo: parse a single string into a value
+// using ParseTraits.
+class DefaultTypeInfo : public TypeInfo {
+ public:
+  explicit DefaultTypeInfo(std::unique_ptr<Operations> ops)
+      : ops_(std::move(ops)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {
+    return ops_->Parse(in, out);
+  }
+
+  std::string GetTypeHint() override { return ops_->GetTypeHint(); }
+
+ private:
+  std::unique_ptr<Operations> ops_;
+};
+
+// TypeInfo that opens a file according to some mode.
+class FileTypeInfo : public TypeInfo {
+ public:
+  // TODO: set up cache of Operations objs..
+  FileTypeInfo(std::unique_ptr<Operations> ops, OpenMode mode)
+      : ops_(std::move(ops)), mode_(mode) {
+    ARGPARSE_DCHECK(mode != kModeNoMode);
+  }
+
+  void Run(const std::string& in, OpsResult* out) override {
+    return ops_->Open(in, mode_, out);
+  }
+
+  std::string GetTypeHint() override { return ops_->GetTypeHint(); }
+
+ private:
+  std::unique_ptr<Operations> ops_;
+  OpenMode mode_;
+};
+
+// TypeInfo that runs user's callback.
+class TypeCallbackInfo : public TypeInfo {
+ public:
+  explicit TypeCallbackInfo(std::unique_ptr<TypeCallback> cb)
+      : type_callback_(std::move(cb)) {}
+
+  void Run(const std::string& in, OpsResult* out) override {
+    return type_callback_->Run(in, out);
+  }
+
+  std::string GetTypeHint() override { return type_callback_->GetTypeHint(); }
+
+ private:
+  std::unique_ptr<TypeCallback> type_callback_;
+};
+
+static bool IsValidNumArgsFlag(char in) {
+  return in == '+' || in == '*' || in == '+';
+}
+
+static const char* FlagToString(char flag) {
+  switch (flag) {
+    case '+':
+      return "one or more";
+    case '?':
+      return "zero or one";
+    case '*':
+      return "zero or more";
+    default:
+      ARGPARSE_DCHECK(false);
+  }
+}
+
+bool FlagNumArgsInfo::Run(unsigned in, std::string* errmsg) {
+  bool ok = false;
+  switch (flag_) {
+    case '+':
+      ok = in >= 1;
+      break;
+    case '?':
+      ok = in == 0 || in == 1;
+      break;
+    case '*':
+      ok = true;
+    default:
+      ARGPARSE_DCHECK(false);
+  }
+  if (ok)
+    return true;
+  std::ostringstream os;
+  os << "expected " << FlagToString(flag_) << " values, got " << in;
+  *errmsg = os.str();
+  return false;
+}
+
+FlagNumArgsInfo::FlagNumArgsInfo(char flag) : flag_(flag) {
+  ARGPARSE_CHECK_F(IsValidNumArgsFlag(flag), "Not a valid flag to nargs: %c",
+                   flag);
+}
+
+void DefaultActionInfo::Run(CallbackClient* client) {
+  auto dest_ptr = client->GetDestPtr();
+  auto data = client->GetData();
+
+  switch (action_kind_) {
+    case ActionKind::kNoAction:
+      break;
+    case ActionKind::kStore:
+      ops_->Store(dest_ptr, std::move(data));
+      break;
+    case ActionKind::kStoreTrue:
+    case ActionKind::kStoreFalse:
+    case ActionKind::kStoreConst:
+      ops_->StoreConst(dest_ptr, *client->GetConstValue());
+      break;
+    case ActionKind::kAppend:
+      ops_->Append(dest_ptr, std::move(data));
+      break;
+    case ActionKind::kAppendConst:
+      ops_->AppendConst(dest_ptr, *client->GetConstValue());
+      break;
+    case ActionKind::kPrintHelp:
+      client->PrintHelp();
+      break;
+    case ActionKind::kPrintUsage:
+      client->PrintUsage();
+      break;
+    case ActionKind::kCustom:
+      break;
+    case ActionKind::kCount:
+      ops_->Count(dest_ptr);
+      break;
+  }
+}
+
+
+bool IsValidPositionalName(const std::string& name);
+
+// A valid option name is long or short option name and not '--', '-'.
+// This is only checked once and true for good.
+bool IsValidOptionName(const std::string& name);
+
+// These two predicates must be called only when IsValidOptionName() holds.
+inline bool IsLongOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() > 2;
+}
+
+inline bool IsShortOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() == 2;
+}
+
+inline std::string ToUpper(const std::string& in) {
+  std::string out(in);
+  std::transform(in.begin(), in.end(), out.begin(), ::toupper);
+  return out;
+}
+
+class PositionalName : public NamesInfo {
+ public:
+  explicit PositionalName(std::string name) : name_(std::move(name)) {}
+
+  bool IsOption() override { return false; }
+  std::string GetDefaultMetaVar() override { return ToUpper(name_); }
+  void ForEachName(NameKind name_kind,
+                   std::function<void(const std::string&)> callback) override {
+    if (name_kind == kPosName)
+      callback(name_);
+  }
+  StringView GetName() override { return name_; }
+
+ private:
+  std::string name_;
+};
+
+class OptionalNames : public NamesInfo {
+ public:
+  explicit OptionalNames(const std::vector<std::string>& names) {
+    for (auto& name : names) {
+      ARGPARSE_CHECK_F(IsValidOptionName(name), "Not a valid option name: %s",
+                       name.c_str());
+      if (IsLongOptionName(name)) {
+        long_names_.push_back(name);
+      } else {
+        ARGPARSE_DCHECK(IsShortOptionName(name));
+        short_names_.push_back(name);
+      }
+    }
+  }
+
+  bool IsOption() override { return true; }
+  unsigned GetLongNamesCount() override { return long_names_.size(); }
+  unsigned GetShortNamesCount() override { return short_names_.size(); }
+
+  std::string GetDefaultMetaVar() override {
+    std::string in =
+        long_names_.empty() ? short_names_.front() : long_names_.front();
+    std::replace(in.begin(), in.end(), '-', '_');
+    return ToUpper(in);
+  }
+
+  void ForEachName(NameKind name_kind,
+                   std::function<void(const std::string&)> callback) override {
+    switch (name_kind) {
+      case kPosName:
+        return;
+      case kLongName: {
+        for (auto& name : std::as_const(long_names_))
+          callback(name);
+        break;
+      }
+      case kShortName: {
+        for (auto& name : std::as_const(short_names_))
+          callback(name);
+        break;
+      }
+      case kAllNames: {
+        for (auto& name : std::as_const(long_names_))
+          callback(name);
+        for (auto& name : std::as_const(short_names_))
+          callback(name);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  StringView GetName() override {
+    const auto& name =
+        long_names_.empty() ? short_names_.front() : long_names_.front();
+    return name;
+  }
+
+ private:
+  std::vector<std::string> long_names_;
+  std::vector<std::string> short_names_;
+};
+
+class ArgumentControllerImpl : public ArgumentController {
+ public:
+  explicit ArgumentControllerImpl(
+      std::unique_ptr<ParserFactory> parser_factory);
+
+  ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
+  SubCommandHolder* GetSubCommandHolder() override {
+    return subcmd_holder_.get();
+  }
+
+  void SetOptions(std::unique_ptr<OptionsInfo> info) override {
+    SetDirty(true);
+    options_info_ = std::move(info);
+  }
+
+ private:
+  // Listen to events of argumentholder and subcommand holder.
+  class ListenerImpl;
+
+  void SetDirty(bool dirty) { dirty_ = dirty; }
+  bool dirty() const { return dirty_; }
+  Parser* GetParser() override {
+    if (dirty() || !parser_) {
+      SetDirty(false);
+      parser_ = parser_factory_->CreateParser(nullptr);
+    }
+    return parser_.get();
+  }
+
+  bool dirty_ = false;
+  std::unique_ptr<ParserFactory> parser_factory_;
+  std::unique_ptr<Parser> parser_;
+  std::unique_ptr<OptionsInfo> options_info_;
+  std::unique_ptr<ArgumentHolder> main_holder_;
+  std::unique_ptr<SubCommandHolder> subcmd_holder_;
+};
+
+class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
+                                             public SubCommandHolder::Listener {
+ public:
+  explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
+
+ private:
+  void MarkDirty() { impl_->SetDirty(true); }
+  void OnAddArgument(Argument*) override { MarkDirty(); }
+  void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
+  void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
+  void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
+
+  ArgumentControllerImpl* impl_;
+};
+
+ArgumentControllerImpl::ArgumentControllerImpl(
+    std::unique_ptr<ParserFactory> parser_factory)
+    : parser_factory_(std::move(parser_factory)),
+      main_holder_(ArgumentHolder::Create()),
+      subcmd_holder_(SubCommandHolder::Create()) {
+  main_holder_->SetListener(std::make_unique<ListenerImpl>(this));
+  subcmd_holder_->SetListener(std::make_unique<ListenerImpl>(this));
+}
+
+// }  // namespace internal
 
 bool Argument::Less(Argument* a, Argument* b) {
   // options go before positionals.
@@ -455,5 +843,57 @@ std::unique_ptr<SubCommand> SubCommand::Create(std::string name) {
 std::unique_ptr<SubCommandHolder> SubCommandHolder::Create() {
   return std::make_unique<SubCommandHolderImpl>();
 }
+
+std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(
+    std::unique_ptr<Operations> ops) {
+  return std::make_unique<DefaultTypeInfo>(std::move(ops));
+}
+std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
+    std::unique_ptr<Operations> ops,
+    OpenMode mode) {
+  return std::make_unique<FileTypeInfo>(std::move(ops), mode);
+}
+// Invoke user's callback.
+std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
+    std::unique_ptr<TypeCallback> cb) {
+  return std::make_unique<TypeCallbackInfo>(std::move(cb));
+}
+
+std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
+  return std::make_unique<FlagNumArgsInfo>(flag);
+}
+
+std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
+  ARGPARSE_CHECK_F(num >= 0, "nargs number must be >= 0");
+  return std::make_unique<NumberNumArgsInfo>(num);
+}
+
+std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(
+    ActionKind action_kind,
+    std::unique_ptr<Operations> ops) {
+  return std::make_unique<DefaultActionInfo>(action_kind, std::move(ops));
+}
+
+std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(
+    std::unique_ptr<ActionCallback> cb) {
+  return std::make_unique<ActionCallbackInfo>(std::move(cb));
+}
+
+std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
+  return std::make_unique<PositionalName>(std::move(in));
+}
+
+std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
+    const std::vector<std::string>& in) {
+  return std::make_unique<OptionalNames>(in);
+}
+
+std::unique_ptr<ArgumentController> ArgumentController::Create() {
+  // if (g_parser_factory_callback)
+  //   return std::make_unique<ArgumentControllerImpl>(
+  //       g_parser_factory_callback());
+  return nullptr;
+}
+
 
 }  // namespace argparse

@@ -1,14 +1,35 @@
 #pragma once
 
+#include <functional>  // function
+#include <memory>      // unique_ptr
+#include <vector>      // vector
+
+#include "argparse/argparse-base.h"  // ARGPARSE_DCHECK
+#include "argparse/argparse-utils.h"
+
 // This holds various kind of information.
 namespace argparse {
 
+// argparse-ops.h
 class OpsFactory;
 class Operations;
 class OpsResult;
 
+// argparse-utils.h
 class DestPtr;
 class Any;
+class StringView;
+class TypeCallback;
+class ActionCallback;
+
+// argparse-holder.h
+class Argument;
+class ArgumentGroup;
+class SubCommandGroup;
+
+// argparse-parser.h
+class Parser;
+class OptionsInfo;
 
 enum class ActionKind {
   kNoAction,
@@ -29,37 +50,6 @@ enum class TypeKind {
   kParse,
   kOpen,
   kCustom,
-};
-
-template <typename T>
-using TypeCallbackPrototype = void(const std::string&, Result<T>*);
-
-// There is an alternative for those using exception.
-// You convert string into T and throw ArgumentError if something bad happened.
-template <typename T>
-using TypeCallbackPrototypeThrows = T(const std::string&);
-
-// The prototype for action. An action normally does not report errors.
-template <typename T, typename V>
-using ActionCallbackPrototype = void(T*, Result<V>);
-
-// Can only take a Result without dest.
-// template <typename T, typename V>
-// using ActionCallbackPrototypeNoDest = void(Result<V>);
-
-// This is the type eraser of user's callback to the type() option.
-class TypeCallback {
- public:
-  virtual ~TypeCallback() {}
-  virtual void Run(const std::string& in, OpsResult* out) = 0;
-  virtual std::string GetTypeHint() = 0;
-};
-
-// Similar to TypeCallback, but is for action().
-class ActionCallback {
- public:
-  virtual ~ActionCallback() {}
-  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
 };
 
 class NamesInfo {
@@ -156,9 +146,6 @@ class TypeInfo {
   static std::unique_ptr<TypeInfo> CreateFromCallback(
       std::unique_ptr<TypeCallback> cb);
 };
-
-class Any;
-class Argument;
 
 class ArgumentGroup {
  public:
@@ -269,8 +256,6 @@ class ArgumentHolder {
     std::sort(out->begin(), out->end(), std::move(cmp));
   }
 };
-
-class SubCommandGroup;
 
 class SubCommand {
  public:
@@ -397,22 +382,6 @@ class ArgumentFactory {
   static std::unique_ptr<ArgumentFactory> Create();
 };
 
-class Parser;
-
-// Main options passed to the parser.
-struct OptionsInfo {
-  int flags = 0;
-  // TODO: may change some of these to std::string to allow dynamic generated
-  // content.
-  const char* program_version = {};
-  const char* description = {};
-  const char* after_doc = {};
-  const char* domain = {};
-  const char* email = {};
-  // ProgramVersionCallback program_version_callback;
-  // HelpFilterCallback help_filter;
-};
-
 // Combination of Holder and Parser. ArgumentParser should be impl'ed in terms
 // of this.
 class ArgumentController {
@@ -424,5 +393,12 @@ class ArgumentController {
   virtual Parser* GetParser() = 0;
   static std::unique_ptr<ArgumentController> Create();
 };
+
+// TODO: fixthis;
+// template <typename T>
+// std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
+//   ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
+//   return std::make_unique<DestInfoImpl>(DestPtr(ptr), CreateOpsFactory<T>());
+// }
 
 }  // namespace argparse

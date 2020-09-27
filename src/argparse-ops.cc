@@ -1,4 +1,4 @@
-#include "argparse/ops/open_ops.h"
+#include "argparse/argparse-ops.h"
 
 #include <cstring>
 
@@ -92,4 +92,4 @@ OpenMode CharsToMode(const char* str) {
   return static_cast<OpenMode>(m);
 }
 
-}  // namespace argparse
+}
