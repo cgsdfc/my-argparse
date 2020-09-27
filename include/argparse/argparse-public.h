@@ -1,42 +1,46 @@
 #pragma once
 
+#include "argparse/argparse-holder.h"
+#include "argparse/argparse-ops.h"
+#include "argparse/argparse-parser.h"
+
 // Holds public things
 namespace argparse {
 
-class Argument;
-class ArgumentGroup;
-class AddArgumentHelper;
+// class Argument;
+// class ArgumentGroup;
+// class AddArgumentHelper;
 
-class CallbackRunner {
- public:
-  // Communicate with outside when callback is fired.
-  class Delegate {
-   public:
-    virtual ~Delegate() {}
-    virtual bool GetValue(std::string* out) = 0;
-    virtual void OnCallbackError(const std::string& errmsg) = 0;
-    virtual void OnPrintUsage() = 0;
-    virtual void OnPrintHelp() = 0;
-  };
-  // Before the callback is run, allow default value to be set.
-  virtual void InitCallback() {}
-  virtual void RunCallback(std::unique_ptr<Delegate> delegate) = 0;
-  virtual ~CallbackRunner() {}
-};
+// class CallbackRunner {
+//  public:
+//   // Communicate with outside when callback is fired.
+//   class Delegate {
+//    public:
+//     virtual ~Delegate() {}
+//     virtual bool GetValue(std::string* out) = 0;
+//     virtual void OnCallbackError(const std::string& errmsg) = 0;
+//     virtual void OnPrintUsage() = 0;
+//     virtual void OnPrintHelp() = 0;
+//   };
+//   // Before the callback is run, allow default value to be set.
+//   virtual void InitCallback() {}
+//   virtual void RunCallback(std::unique_ptr<Delegate> delegate) = 0;
+//   virtual ~CallbackRunner() {}
+// };
 
-// Return value of help filter function.
-enum class HelpFilterResult {
-  kKeep,
-  kDrop,
-  kReplace,
-};
+// // Return value of help filter function.
+// enum class HelpFilterResult {
+//   kKeep,
+//   kDrop,
+//   kReplace,
+// };
 
-using HelpFilterCallback =
-    std::function<HelpFilterResult(const Argument&, std::string* text)>;
+// using HelpFilterCallback =
+//     std::function<HelpFilterResult(const Argument&, std::string* text)>;
 
-// XXX: this depends on argp and is not general.
-// In fact, people only need to pass in a std::string.
-using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
+// // XXX: this depends on argp and is not general.
+// // In fact, people only need to pass in a std::string.
+// using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
 
 ////////////////////////////////////////
 // End of interfaces. Begin of Impls. //
@@ -291,8 +295,6 @@ class SubParserGroup {
  private:
   SubCommandGroup* group_;
 };
-
-class MainParserHelper;
 
 // Support add(subparsers(...))
 class SubParsersBuilder {
