@@ -10,10 +10,14 @@
 #include <typeinfo>
 #include <variant>
 
-#define ARGPARSE_CHECK_IMPL(condition, format, ...)                         \
-  do {                                                                      \
-    if (!static_cast<bool>(condition))                                      \
-      CheckFailed({__LINE__, __FILE__, __func__}, (format), ##__VA_ARGS__); \
+#define ARGPARSE_SOURCE_LOCATION_CURRENT() \
+  (SourceLocation{__LINE__, __FILE__, __func__})
+
+#define ARGPARSE_CHECK_IMPL(condition, format, ...)             \
+  do {                                                          \
+    if (!static_cast<bool>(condition))                          \
+      CheckFailed(ARGPARSE_SOURCE_LOCATION_CURRENT(), (format), \
+                  ##__VA_ARGS__);                               \
   } while (0)
 
 // Perform a runtime check for user's error.
@@ -37,9 +41,6 @@ namespace argparse {
 
 template <typename T>
 std::string TypeHint();
-
-template <typename T>
-const char* TypeName();
 
 const char* TypeNameImpl(const std::type_info& type);
 
@@ -119,11 +120,6 @@ struct is_callback
     : std::bool_constant<is_function_pointer<F>{} || is_functor<F>{}> {};
 
 }  // namespace detail
-
-template <typename T>
-const char* TypeName() {
-  return TypeNameImpl(typeid(T));
-}
 
 bool IsValidPositionalName(const std::string& name);
 
@@ -432,6 +428,11 @@ class StringView {
 };
 
 std::ostream& operator<<(std::ostream& os, const StringView& in);
+
+template <typename T>
+StringView TypeName() {
+  return TypeNameImpl(typeid(T));
+}
 
 template <typename T>
 using TypeCallbackPrototype = void(const std::string&, Result<T>*);
