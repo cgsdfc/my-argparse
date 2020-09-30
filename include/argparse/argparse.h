@@ -1,56 +1,53 @@
+// Copyright (c) 2020 Feng Cong
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 #pragma once
 
-#include "argparse/argparse-holder.h"
-#include "argparse/argparse-ops.h"
-#include "argparse/argparse-parser.h"
+#include "argparse/argparse-traits.h"
+#include "argparse/internal/argparse-internal.h"
 
 // Holds public things
 namespace argparse {
 
-// class Argument;
-// class ArgumentGroup;
-// class AddArgumentHelper;
+struct AnyValue {
+  std::unique_ptr<internal::Any> value;
+  template <typename T,
+            std::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = 0>
+  AnyValue(T&& val)
+      : value(internal::MakeAny<std::decay_t<T>>(std::forward<T>(val))) {}
+};
 
-// class CallbackRunner {
-//  public:
-//   // Communicate with outside when callback is fired.
-//   class Delegate {
-//    public:
-//     virtual ~Delegate() {}
-//     virtual bool GetValue(std::string* out) = 0;
-//     virtual void OnCallbackError(const std::string& errmsg) = 0;
-//     virtual void OnPrintUsage() = 0;
-//     virtual void OnPrintHelp() = 0;
-//   };
-//   // Before the callback is run, allow default value to be set.
-//   virtual void InitCallback() {}
-//   virtual void RunCallback(std::unique_ptr<Delegate> delegate) = 0;
-//   virtual ~CallbackRunner() {}
-// };
+struct TypeCallback {
+  std::unique_ptr<internal::TypeCallback> cb;
+  template <typename Callback,
+            std::enable_if_t<!std::is_convertible<T, TypeCallback>{}>* = 0>
+  TypeCallback(Callback&& cb)
+      : cb(internal::MakeTypeCallback(std::forward<Callback>(cb))) {}
+}
 
-// // Return value of help filter function.
-// enum class HelpFilterResult {
-//   kKeep,
-//   kDrop,
-//   kReplace,
-// };
+struct ActionCallback {
+  std::unique_ptr<internal::ActionCallback> cb;
+  template <typename Callback,
+            std::enable_if_t<!std::is_convertible<T, ActionCallback>{}>* = 0>
+  ActionCallback(Callback&& cb)
+      : cb(internal::MakeActionCallback(std::forward<Callback>(cb))) {}
+}
 
-// using HelpFilterCallback =
-//     std::function<HelpFilterResult(const Argument&, std::string* text)>;
-
-// // XXX: this depends on argp and is not general.
-// // In fact, people only need to pass in a std::string.
-// using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
-
-////////////////////////////////////////
-// End of interfaces. Begin of Impls. //
-////////////////////////////////////////
+// Creator of DestInfo. For those that need a DestInfo, just take Dest
+// as an arg.
+struct Dest {
+  std::unique_ptr<internal::DestInfo> info;
+  template <typename T>
+  Dest(T* ptr) : info(internal::DestInfo::CreateFromPtr(ptr)) {}
+};
 
 class FileType {
  public:
-  explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
+  explicit FileType(const char* mode) : mode_(internal::CharsToMode(mode)) {}
   explicit FileType(std::ios_base::openmode mode)
-      : mode_(StreamModeToMode(mode)) {}
+      : mode_(internal::StreamModeToMode(mode)) {}
   OpenMode mode() const { return mode_; }
 
  private:
@@ -58,7 +55,7 @@ class FileType {
 };
 
 struct Names {
-  std::unique_ptr<NamesInfo> info;
+  std::unique_ptr<internal::NamesInfo> info;
   Names(const char* name) : Names(std::string(name)) { ARGPARSE_DCHECK(name); }
   Names(std::string name);
   Names(std::initializer_list<std::string> names);
@@ -106,94 +103,79 @@ struct Options {
     info->flags |= f;
     return *this;
   }
-  Options& help_filter(HelpFilterCallback cb) {
-    info->help_filter = std::move(cb);
-    return *this;
-  }
 
-  std::unique_ptr<OptionsInfo> info;
+  std::unique_ptr<internal::OptionsInfo> info;
 };
 
-// Creator of DestInfo. For those that need a DestInfo, just take Dest
-// as an arg.
-struct Dest {
-  std::unique_ptr<DestInfo> info;
-  template <typename T>
-  Dest(T* ptr) : info(DestInfo::CreateFromPtr(ptr)) {}
-};
-
-class ArgumentBuilder {
+class Argument {
  public:
-  explicit ArgumentBuilder(Names names) : factory_(ArgumentFactory::Create()) {
+  explicit Argument(Names names)
+      : factory_(internal::ArgumentFactory::Create()) {
     ARGPARSE_DCHECK(names.info);
     factory_->SetNames(std::move(names.info));
   }
 
   // TODO: Fix the typeinfo/actioninfo deduction.
-  ArgumentBuilder& dest(Dest dest) {
+  Argument& dest(Dest dest) {
     factory_->SetDest(std::move(dest.info));
     return *this;
   }
-  ArgumentBuilder& action(const char* str) {
+  Argument& action(const char* str) {
     factory_->SetActionString(str);
     return *this;
   }
-  template <typename Callback>
-  ArgumentBuilder& action(Callback&& cb) {
-    factory_->SetActionCallback(MakeActionCallback(std::forward<Callback>(cb)));
+  Argument& action(ActionCallback cb) {
+    factory_->SetActionCallback(std::move(cb.cb));
     return *this;
   }
-  template <typename Callback>
-  ArgumentBuilder& type(Callback&& cb) {
-    factory_->SetTypeCallback(MakeTypeCallback(std::forward<Callback>(cb)));
+  Argument& type(TypeCallback cb) {
+    factory_->SetTypeCallback(std::move(cb.cb));
     return *this;
   }
   template <typename T>
-  ArgumentBuilder& type() {
-    factory_->SetTypeOperations(CreateOperations<T>());
+  Argument& type() {
+    factory_->SetTypeOperations(internal::CreateOperations<T>());
     return *this;
   }
-  ArgumentBuilder& type(FileType file_type) {
+  Argument& type(FileType file_type) {
     factory_->SetTypeFileType(file_type.mode());
     return *this;
   }
-  template <typename T>
-  ArgumentBuilder& const_value(T&& val) {
-    using Type = std::decay_t<T>;
-    factory_->SetConstValue(MakeAny<Type>(std::forward<T>(val)));
+  Argument& const_value(AnyValue val) {
+    factory_->SetConstValue(std::move(val.value));
     return *this;
   }
-  template <typename T>
-  ArgumentBuilder& default_value(T&& val) {
-    using Type = std::decay_t<T>;
-    factory_->SetDefaultValue(MakeAny<Type>(std::forward<T>(val)));
+  Argument& default_value(AnyValue val) {
+    factory_->SetDefaultValue(std::move(val.value));
     return *this;
   }
-  ArgumentBuilder& help(std::string val) {
+  Argument& help(std::string val) {
     factory_->SetHelp(std::move(val));
     return *this;
   }
-  ArgumentBuilder& required(bool val) {
+  Argument& required(bool val) {
     factory_->SetRequired(val);
     return *this;
   }
-  ArgumentBuilder& meta_var(std::string val) {
+  Argument& meta_var(std::string val) {
     factory_->SetMetaVar(std::move(val));
     return *this;
   }
-  ArgumentBuilder& nargs(int num) {
+  Argument& nargs(int num) {
     factory_->SetNumArgsNumber(num);
     return *this;
   }
-  ArgumentBuilder& nargs(char flag) {
+  Argument& nargs(char flag) {
     factory_->SetNumArgsFlag(flag);
     return *this;
   }
 
-  std::unique_ptr<Argument> Build() { return factory_->CreateArgument(); }
+  std::unique_ptr<internal::Argument> Build() {
+    return factory_->CreateArgument();
+  }
 
  private:
-  std::unique_ptr<ArgumentFactory> factory_;
+  std::unique_ptr<internal::ArgumentFactory> factory_;
 };
 
 // This is a helper that provides add_argument().
@@ -209,24 +191,24 @@ class AddArgumentHelper {
   virtual void AddArgumentImpl(std::unique_ptr<Argument> arg) {}
 };
 
-class argument_group : public AddArgumentHelper {
+class ArgumentGroup : public AddArgumentHelper {
  public:
-  explicit argument_group(ArgumentGroup* group) : group_(group) {}
+  explicit ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
 
  private:
-  void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
     return group_->AddArgument(std::move(arg));
   }
 
-  ArgumentGroup* group_;
+  internal::ArgumentGroup* group_;
 };
 
 // If we can do add_argument_group(), add_argument() is always possible.
 class AddArgumentGroupHelper : public AddArgumentHelper {
  public:
-  argument_group add_argument_group(const char* header) {
+  ArgumentGroup add_argument_group(const char* header) {
     ARGPARSE_DCHECK(header);
-    return argument_group(AddArgumentGroupImpl(header));
+    return ArgumentGroup(AddArgumentGroupImpl(header));
   }
 
  private:
@@ -246,8 +228,6 @@ class SubParser : public AddArgumentGroupHelper {
   }
   SubCommand* sub_;
 };
-
-class SubParserGroup;
 
 // Support add(parser("something").aliases({...}).help("..."))
 class SubCommandBuilder {

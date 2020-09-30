@@ -1,27 +1,41 @@
-#include "argparse/argparse.h"
+#pragma once
 
-#include <cxxabi.h>  // demangle().
-#include <cstdlib>   // malloc()
-#include <cstring>   // strlen()
+// Holds commented-out code for the time being.
 
-namespace argparse {
+// class Argument;
+// class ArgumentGroup;
+// class AddArgumentHelper;
 
-Names::Names(std::string name) {
-  if (name[0] == '-') {
-    // This is in fact an option.
-    std::vector<std::string> names{std::move(name)};
-    info = NamesInfo::CreateOptional(std::move(names));
-    return;
-  }
-  ARGPARSE_CHECK_F(IsValidPositionalName(name),
-                   "Not a valid positional name: %s", name.c_str());
-  info = NamesInfo::CreatePositional(std::move(name));
-}
+// class CallbackRunner {
+//  public:
+//   // Communicate with outside when callback is fired.
+//   class Delegate {
+//    public:
+//     virtual ~Delegate() {}
+//     virtual bool GetValue(std::string* out) = 0;
+//     virtual void OnCallbackError(const std::string& errmsg) = 0;
+//     virtual void OnPrintUsage() = 0;
+//     virtual void OnPrintHelp() = 0;
+//   };
+//   // Before the callback is run, allow default value to be set.
+//   virtual void InitCallback() {}
+//   virtual void RunCallback(std::unique_ptr<Delegate> delegate) = 0;
+//   virtual ~CallbackRunner() {}
+// };
 
-Names::Names(std::initializer_list<std::string> names)
-    : info(NamesInfo::CreateOptional(names)) {
-  ARGPARSE_CHECK_F(names.size(), "At least one name must be provided");
-}
+// // Return value of help filter function.
+// enum class HelpFilterResult {
+//   kKeep,
+//   kDrop,
+//   kReplace,
+// };
+
+// using HelpFilterCallback =
+//     std::function<HelpFilterResult(const Argument&, std::string* text)>;
+
+// // XXX: this depends on argp and is not general.
+// // In fact, people only need to pass in a std::string.
+// using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
 
 static OpsKind TypesToOpsKind(TypeKind in) {
   switch (in) {
@@ -238,4 +252,3 @@ void ParserFactory::RegisterCallback(Callback callback) {
   }
 }
 
-}  // namespace argparse
