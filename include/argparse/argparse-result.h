@@ -5,8 +5,6 @@
 
 #pragma once
 
-#include <variant>
-
 #include "argparse/internal/argparse-port.h"
 
 namespace argparse {
@@ -17,36 +15,31 @@ class Result {
  public:
   // Default is empty (!has_value && !has_error).
   Result() = default;
-  // To hold a value.
-  explicit Result(T&& val) : data_(std::move(val)) {
-    ARGPARSE_DCHECK(has_value());
+
+  template <typename ... Args>
+  explicit Result(std::in_place_t, Args&&... args) {
+    AdvanceToValueStateFromEmpty(std::in_place, std::forward<Args>(args)...);
   }
-  explicit Result(const T& val) : data_(val) { ARGPARSE_DCHECK(has_value()); }
+  // To hold a value.
+  explicit Result(T&& val) {
+    AdvanceToValueStateFromEmpty(std::move(val));
+  }
+  explicit Result(const T& val) {
+    AdvanceToValueStateFromEmpty(val);
+  }
 
   // For now just use default. If T can't be moved, will it still work?
   Result(Result&&) = default;
   Result& operator=(Result&&) = default;
 
-  bool empty() const { return kEmptyIndex == data_.index(); }
-  bool has_value() const { return data_.index() == kValueIndex; }
-  bool has_error() const { return data_.index() == kErrorMsgIndex; }
+  bool empty() const { return IsEmptyState(); }
+  bool has_value() const { return IsValueState(); }
+  bool has_error() const { return IsErrorState(); }
 
-  void set_error(const std::string& msg) {
-    data_.template emplace<kErrorMsgIndex>(msg);
-    ARGPARSE_DCHECK(has_error());
-  }
-  void set_error(std::string&& msg) {
-    data_.template emplace<kErrorMsgIndex>(std::move(msg));
-    ARGPARSE_DCHECK(has_error());
-  }
-  void set_value(const T& val) {
-    data_.template emplace<kValueIndex>(val);
-    ARGPARSE_DCHECK(has_value());
-  }
-  void set_value(T&& val) {
-    data_.template emplace<kValueIndex>(std::move(val));
-    ARGPARSE_DCHECK(has_value());
-  }
+  void set_error(const std::string& msg) { AdvanceToErrorState(msg); }
+  void set_error(std::string&& msg) { AdvanceToErrorState(std::move(msg)); }
+  void set_value(const T& val) { AdvanceToValueState(val); }
+  void set_value(T&& val) { AdvanceToValueState(std::move(val)); }
 
   Result& operator=(const T& val) {
     set_value(val);
@@ -58,41 +51,81 @@ class Result {
   }
 
   // Release the err-msg (if any). Go back to empty state.
-  std::string release_error() {
-    ARGPARSE_DCHECK(has_error());
-    auto str = std::get<kErrorMsgIndex>(std::move(data_));
-    reset();
-    return str;
-  }
+  std::string release_error() { return AdvanceToEmptyStateFromError(); }
   const std::string& get_error() const {
     ARGPARSE_DCHECK(has_error());
-    return std::get<kErrorMsgIndex>(data_);
+    return *error_;
   }
 
   // Release the value, go back to empty state.
-  T release_value() {
-    ARGPARSE_DCHECK(has_value());
-    auto val = std::get<kValueIndex>(std::move_if_noexcept(data_));
-    reset();
-    return val;
-  }
+  T release_value() { return AdvanceToEmptyStateFromValue(); }
   const T& get_value() const {
     ARGPARSE_DCHECK(has_value());
-    return std::get<kValueIndex>(data_);
+    return *value_;
   }
   // Goes back to empty state.
-  void reset() {
-    data_.template emplace<kEmptyIndex>(internal::NoneType{});
-    ARGPARSE_DCHECK(empty());
-  }
+  void reset() { AdvanceToEmptyState(); }
 
  private:
-  enum Indices {
-    kEmptyIndex,
-    kErrorMsgIndex,
-    kValueIndex,
-  };
-  std::variant<internal::NoneType, std::string, T> data_;
+  void AdvanceToEmptyState() {
+    ARGPARSE_DCHECK(IsValidState());
+    error_.reset();
+    value_.reset();
+  }
+  std::string AdvanceToEmptyStateFromError() {
+    ARGPARSE_DCHECK(IsErrorState());
+    std::string str(std::move(*error_));
+    error_.reset();
+    return str;
+  }
+  T AdvanceToEmptyStateFromValue() {
+    ARGPARSE_DCHECK(IsValueState());
+    T val(std::move_if_noexcept(*value_));
+    value_.reset();
+    return val;
+  }
+  void AdvanceToValueState(T value) {
+    AdvanceToEmptyState();
+    AdvanceToValueStateFromEmpty(std::move(value));
+  }
+  void AdvanceToValueStateFromEmpty(T value) {
+    ARGPARSE_DCHECK(IsEmptyState());
+    value_.reset(new T(std::move_if_noexcept(value)));
+  }
+  template <typename... Args>
+  void AdvanceToValueState(std::in_place_t, Args&&... args) {
+    AdvanceToEmptyState();
+    AdvanceToValueStateFromEmpty(std::in_place, std::forward<Args>(args)...);
+  }
+  template <typename... Args>
+  void AdvanceToValueStateFromEmpty(std::in_place_t, Args&&... args) {
+    ARGPARSE_DCHECK(IsEmptyState());
+    value_.reset(new T{std::forward<Args>(args)...});
+  }
+  void AdvanceToErrorStateFromEmpty(std::string err) {
+    ARGPARSE_DCHECK(IsEmptyState());
+    error_.reset(new std::string(std::move(err)));
+  }
+  void AdvanceToErrorState(std::string err) {
+    AdvanceToEmptyState();
+    AdvanceToErrorStateFromEmpty(std::move(err));
+  }
+  bool IsValidState() const { return !(error_ && value_); }
+  bool IsValueState() const {
+    ARGPARSE_DCHECK(IsValidState());
+    return value_ != nullptr;
+  }
+  bool IsErrorState() const {
+    ARGPARSE_DCHECK(IsValidState());
+    return error_ != nullptr;
+  }
+  bool IsEmptyState() const {
+    ARGPARSE_DCHECK(IsValidState());
+    return error_ == nullptr && value_ == nullptr;
+  }
+
+  std::unique_ptr<std::string> error_;
+  std::unique_ptr<T> value_;
 };
 
-}
+}  // namespace argparse

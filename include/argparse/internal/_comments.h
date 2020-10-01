@@ -37,6 +37,13 @@
 // // In fact, people only need to pass in a std::string.
 // using ProgramVersionCallback = void (*)(std::FILE*, argp_state*);
 
+// TEST(TypeName, WorksForTypicalTypes) {
+//   EXPECT_TRUE(TypeName<int>() == "int");
+//   EXPECT_TRUE(TypeName<double>() == "double");
+//   EXPECT_TRUE(TypeName<char>() == "char");
+// }
+
+
 static OpsKind TypesToOpsKind(TypeKind in) {
   switch (in) {
     case TypeKind::kOpen:

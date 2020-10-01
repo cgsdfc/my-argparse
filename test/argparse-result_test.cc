@@ -75,11 +75,5 @@ TEST(Result, WorksForMoveOnlyType) {
   EXPECT_TRUE(res.get_value() == MoveOnlyType(1));
 }
 
-// TEST(TypeName, WorksForTypicalTypes) {
-//   EXPECT_TRUE(TypeName<int>() == "int");
-//   EXPECT_TRUE(TypeName<double>() == "double");
-//   EXPECT_TRUE(TypeName<char>() == "char");
-// }
-
 }  // namespace
 }  // namespace argparse

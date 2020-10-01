@@ -1,9 +1,5 @@
 #include "argparse/argparse.h"
 
-// #include <cxxabi.h>  // demangle().
-// #include <cstdlib>   // malloc()
-// #include <cstring>   // strlen()
-
 namespace argparse {
 
 using internal::NamesInfo;
