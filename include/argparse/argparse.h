@@ -109,97 +109,99 @@ struct Options {
 
 class Argument {
  public:
-  explicit Argument(Names names)
-      : factory_(internal::ArgumentFactory::Create()) {
+  explicit Argument(Names names, Dest dest = {}, const char* help = {})
+      : builder_(internal::ArgumentBuilder::Create()) {
     ARGPARSE_DCHECK(names.info);
-    factory_->SetNames(std::move(names.info));
+    builder_->SetNames(std::move(names.info));
+    if (dest.info)
+      builder_->SetDest(std::move(dest.info));
+    if (help)
+      builder_->SetHelpDoc(help);
   }
 
-  // TODO: Fix the typeinfo/actioninfo deduction.
   Argument& dest(Dest dest) {
-    factory_->SetDest(std::move(dest.info));
+    builder_->SetDest(std::move(dest.info));
     return *this;
   }
   Argument& action(const char* str) {
-    factory_->SetActionString(str);
+    builder_->SetActionString(str);
     return *this;
   }
   Argument& action(ActionCallback cb) {
-    factory_->SetActionCallback(std::move(cb.cb));
+    builder_->SetActionCallback(std::move(cb.cb));
     return *this;
   }
   Argument& type(TypeCallback cb) {
-    factory_->SetTypeCallback(std::move(cb.cb));
+    builder_->SetTypeCallback(std::move(cb.cb));
     return *this;
   }
   template <typename T>
   Argument& type() {
-    factory_->SetTypeOperations(internal::CreateOperations<T>());
+    builder_->SetTypeOperations(internal::CreateOperations<T>());
     return *this;
   }
   Argument& type(FileType file_type) {
-    factory_->SetTypeFileType(file_type.mode());
+    builder_->SetTypeFileType(file_type.mode());
     return *this;
   }
   Argument& const_value(AnyValue val) {
-    factory_->SetConstValue(std::move(val.value));
+    builder_->SetConstValue(std::move(val.value));
     return *this;
   }
   Argument& default_value(AnyValue val) {
-    factory_->SetDefaultValue(std::move(val.value));
+    builder_->SetDefaultValue(std::move(val.value));
     return *this;
   }
   Argument& help(std::string val) {
-    factory_->SetHelp(std::move(val));
+    builder_->SetHelp(std::move(val));
     return *this;
   }
   Argument& required(bool val) {
-    factory_->SetRequired(val);
+    builder_->SetRequired(val);
     return *this;
   }
   Argument& meta_var(std::string val) {
-    factory_->SetMetaVar(std::move(val));
+    builder_->SetMetaVar(std::move(val));
     return *this;
   }
   Argument& nargs(int num) {
-    factory_->SetNumArgsNumber(num);
+    builder_->SetNumArgsNumber(num);
     return *this;
   }
   Argument& nargs(char flag) {
-    factory_->SetNumArgsFlag(flag);
+    builder_->SetNumArgsFlag(flag);
     return *this;
   }
 
   std::unique_ptr<internal::Argument> Build() {
-    return factory_->CreateArgument();
+    return builder_->CreateArgument();
   }
 
  private:
-  std::unique_ptr<internal::ArgumentFactory> factory_;
+  std::unique_ptr<internal::ArgumentBuilder> builder_;
 };
 
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
-  // add_argument(ArgumentBuilder(...).Build());
-  void add_argument(std::unique_ptr<Argument> arg) {
-    return AddArgumentImpl(std::move(arg));
+  void add_argument(Argument& arg) {
+    return add_argument(std::move(arg));
+  }
+  void add_argument(Argument&& arg) {
+    return AddArgumentImpl(arg.Build());
   }
   virtual ~AddArgumentHelper() {}
 
  private:
-  virtual void AddArgumentImpl(std::unique_ptr<Argument> arg) {}
+  virtual void AddArgumentImpl(std::unique_ptr<Argument> arg) = 0;
 };
 
 class ArgumentGroup : public AddArgumentHelper {
  public:
   explicit ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
+  void add_argument(Argument arg) { group_->AddArgument(arg.Build()); }
 
  private:
-  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
-    return group_->AddArgument(std::move(arg));
-  }
-
   internal::ArgumentGroup* group_;
 };
 

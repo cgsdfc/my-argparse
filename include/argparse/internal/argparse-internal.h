@@ -317,9 +317,9 @@ class SubCommandHolder {
 // can choose to ignore some of user's options if the parser don't support it
 // and create their own impl of Argument to fit their parser. In a word, this
 // abstraction is right needed.
-class ArgumentFactory {
+class ArgumentBuilder {
  public:
-  virtual ~ArgumentFactory() {}
+  virtual ~ArgumentBuilder() {}
 
   // Accept things from argument.
 
@@ -368,7 +368,7 @@ class ArgumentFactory {
   // Finally..
   virtual std::unique_ptr<Argument> CreateArgument() = 0;
 
-  static std::unique_ptr<ArgumentFactory> Create();
+  static std::unique_ptr<ArgumentBuilder> Create();
 };
 
 // Main options passed to the parser.

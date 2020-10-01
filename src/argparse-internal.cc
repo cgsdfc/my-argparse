@@ -322,7 +322,7 @@ static ActionKind StringToActions(const std::string& str) {
   return iter->second;
 }
 
-class ArgumentFactoryImpl : public ArgumentFactory {
+class ArgumentBuilderImpl : public ArgumentBuilder {
  public:
   void SetNames(std::unique_ptr<NamesInfo> info) override {
     ARGPARSE_DCHECK_F(!arg_, "SetNames should only be called once");
@@ -400,7 +400,7 @@ static bool ActionNeedsValueType(ActionKind in) {
   return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
 }
 
-std::unique_ptr<Argument> ArgumentFactoryImpl::CreateArgument() {
+std::unique_ptr<Argument> ArgumentBuilderImpl::CreateArgument() {
   ARGPARSE_DCHECK(arg_);
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
                              : arg_->GetNamesInfo()->GetDefaultMetaVar());
@@ -815,8 +815,8 @@ std::unique_ptr<SubCommandGroup> SubCommandGroup::Create() {
   return std::make_unique<SubCommandGroupImpl>();
 }
 
-std::unique_ptr<ArgumentFactory> ArgumentFactory::Create() {
-  return std::make_unique<ArgumentFactoryImpl>();
+std::unique_ptr<ArgumentBuilder> ArgumentBuilder::Create() {
+  return std::make_unique<ArgumentBuilderImpl>();
 }
 
 std::unique_ptr<Argument> Argument::Create(std::unique_ptr<NamesInfo> info) {

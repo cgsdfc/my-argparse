@@ -1,55 +1,14 @@
-#include <argparse/argparse.h>
+// #include <argparse/argparse.h>
 #include <iostream>
 
-using namespace argparse;
-
-struct Appendable {};
-
-template <>
-struct AppendTraits<Appendable> {
-  using ValueType = int;
-  static void Append(Appendable*, int i);
+struct A {
+  // A&& foo() && {
+  //   return std::move(*this);
+  // }
 };
 
-
-struct NoMovable {
-  NoMovable(NoMovable&&) = delete;
-  NoMovable(const NoMovable&) { std::cout << "copy"; }
-  NoMovable() {}
-};
-
-namespace ap = argparse;
+void bar(A);
 
 int main(int argc, char const* argv[]) {
-  std::string e = "aaaa";
-  std::cout << StringView(e);
-
-  // ArgumentParser parser;
-
-  // std::string output;
-  // parser.add_argument(
-  //     Argument({"a", "b"})
-  //         .dest(&output)
-  //         .const_value(std::string("path"))
-  //         .type([](const std::string& in) -> std::string { return ""; })
-  //         .action("store_const")
-  //         .help("output to this file")
-  //         .meta_var("OUT")
-  //         .Build());
-
-  // auto subparsers = parser.add_subparsers(SubParsersBuilder()
-  //                                             .description("blabal")
-  //                                             .title("xxx")
-  //                                             .help("sub-commands")
-  //                                             .Build());
-
-  // int cmd;
-  // parser.add_subparsers(&cmd, "cmds about ints");
-
-  // auto create_parser = subparsers.add_parser("create");
-  // subparsers.add_parser(SubCommandBuilder("add").Build());
-
-  // create_parser.add_argument()
-  // int input;
-  // parser.add_argument("input", &input, "input");
+  bar(A{});
 }
