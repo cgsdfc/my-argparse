@@ -3,6 +3,7 @@
 #include <deque>
 #include <fstream>
 #include <list>
+#include <map>
 #include <sstream>
 #include <type_traits>
 #include <vector>
@@ -19,6 +20,40 @@
 // Defines various traits that users can specialize to meet their needs.
 namespace argparse {
 
+// The purpose of MetaTypes is to provide a mechanism to summerize types as
+// metatype so that they can have the same typehint. For example, different
+// types of file object, like C FILE* and C++ streams, can all have the same
+// metatype -- file. And different types of integers can all be summerized as
+// 'int'. Our policy is to:
+// 1. If T is specialized, use TypeHintTraits<T>.
+// 2. If T's metatype is not unknown, use MetaTypeHint.
+// 3. fall back to demangle.
+// Note: number such as float, double and int, long use their own typename as
+// metatype, since it will confuse user if not.
+// As user, you can:
+// 1. Be pleasant with the default setting for your type, such std::string and
+// bool.
+// 2. Want to use a metatype, tell us by MetaTypeOf<T>.
+// 3. Want a completey new type hint, tell us by TypeHintTraits<T>.
+enum class MetaTypes {
+  kString,
+  kFile,
+  kList,
+  kNumber,
+  kBool,
+  kChar,
+  kUnknown,
+};
+
+template <MetaTypes M>
+using MetaTypeContant = std::integral_constant<MetaTypes, M>;
+
+template <typename T, typename SFINAE = void>
+struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
+
+template <typename T>
+struct AppendTraits;
+
 // Keep these impl here. This makes the code more coherent.
 namespace internal {
 
@@ -28,6 +63,11 @@ template <typename T>
 struct IsAppendSupported;
 template <typename T>
 struct IsNumericType;
+template <typename T>
+std::string TypeHint();
+// Helper typedef to get ValueType of AppendTraits.
+template <typename T>
+using ValueTypeOf = typename AppendTraits<T>::ValueType;
 
 // OpenTraits
 constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
@@ -80,6 +120,14 @@ struct DefaultFormatTraits<char, void> {
   // For char, this is 'c'.
   static std::string Run(char in) { return std::string{'\'', in, '\''}; }
 };
+
+template <typename T, typename SFINAE = void>
+struct has_insert_operator : std::false_type {};
+template <typename T>
+struct has_insert_operator<T,
+                           std::void_t<decltype(std::declval<std::ostream&>()
+                                                << std::declval<const T&>())>>
+    : std::true_type {};
 
 #if ARGPARSE_USE_FMTLIB
 template <typename T>
@@ -138,9 +186,7 @@ struct DefaultParseTraits<bool> {
 };
 
 template <typename T>
-struct DefaultParseTraits<
-    T,
-    std::enable_if_t<internal::IsNumericType<T>{}>> {
+struct DefaultParseTraits<T, std::enable_if_t<internal::IsNumericType<T>{}>> {
   static void Run(const std::string& in, Result<T>* out) {
     try {
       *out = internal::StlParseNumber<T>(in);
@@ -259,37 +305,6 @@ struct FormatTraits : internal::DefaultFormatTraits<T> {};
 // or override global (existing) types.
 template <typename T>
 struct ParseTraits : internal::DefaultParseTraits<T> {};
-
-// The purpose of MetaTypes is to provide a mechanism to summerize types as
-// metatype so that they can have the same typehint. For example, different
-// types of file object, like C FILE* and C++ streams, can all have the same
-// metatype -- file. And different types of integers can all be summerized as
-// 'int'. Our policy is to:
-// 1. If T is specialized, use TypeHintTraits<T>.
-// 2. If T's metatype is not unknown, use MetaTypeHint.
-// 3. fall back to demangle.
-// Note: number such as float, double and int, long use their own typename as
-// metatype, since it will confuse user if not.
-// As user, you can:
-// 1. Be pleasant with the default setting for your type, such std::string and
-// bool.
-// 2. Want to use a metatype, tell us by MetaTypeOf<T>.
-// 3. Want a completey new type hint, tell us by TypeHintTraits<T>.
-enum class MetaTypes {
-  kString,
-  kFile,
-  kList,
-  kNumber,
-  kBool,
-  kChar,
-  kUnknown,
-};
-
-template <MetaTypes M>
-using MetaTypeContant = std::integral_constant<MetaTypes, M>;
-
-template <typename T, typename SFINAE = void>
-struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
 
 // String.
 template <>

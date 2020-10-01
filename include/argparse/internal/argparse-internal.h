@@ -4,11 +4,14 @@
 #include <memory>      // unique_ptr
 #include <vector>      // vector
 
+#include "argparse/argparse-arg-array.h"
 #include "argparse/internal/argparse-operations.h"
 #include "argparse/internal/argparse-port.h"
 
 // For now, this file should only hold interfaces of core classes.
 namespace argparse {
+class ArgArray;
+
 namespace internal {
 
 // argparse-holder.h
@@ -19,6 +22,29 @@ class SubCommandGroup;
 // argparse-parser.h
 class Parser;
 class OptionsInfo;
+
+bool IsValidPositionalName(const std::string& name);
+
+// A valid option name is long or short option name and not '--', '-'.
+// This is only checked once and true for good.
+bool IsValidOptionName(const std::string& name);
+
+// These two predicates must be called only when IsValidOptionName() holds.
+inline bool IsLongOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() > 2;
+}
+
+inline bool IsShortOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() == 2;
+}
+
+inline std::string ToUpper(const std::string& in) {
+  std::string out(in);
+  std::transform(in.begin(), in.end(), out.begin(), ::toupper);
+  return out;
+}
 
 enum class ActionKind {
   kNoAction,

@@ -15,7 +15,7 @@ Names::Names(std::string name) {
     info = NamesInfo::CreateOptional(std::move(names));
     return;
   }
-  ARGPARSE_CHECK_F(IsValidPositionalName(name),
+  ARGPARSE_CHECK_F(internal::IsValidPositionalName(name),
                    "Not a valid positional name: %s", name.c_str());
   info = NamesInfo::CreatePositional(std::move(name));
 }

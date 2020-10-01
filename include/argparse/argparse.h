@@ -11,34 +11,52 @@
 // Holds public things
 namespace argparse {
 
-struct AnyValue {
-  std::unique_ptr<internal::Any> value;
+template <typename T>
+class ImplicitConstructor {
+ public:
+  ImplicitConstructor() = default;
+  explicit ImplicitConstructor(std::unique_ptr<T> value)
+      : value_(std::move(value)) {}
+  std::unique_ptr<T> Release() { return std::move(value_); }
+
+ private:
+  std::unique_ptr<T> value_;
+};
+
+class AnyValue : public ImplicitConstructor<internal::Any> {
+  using ImplicitConstructor::ImplicitConstructor;
+
+ public:
   template <typename T,
             std::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = 0>
   AnyValue(T&& val)
-      : value(internal::MakeAny<std::decay_t<T>>(std::forward<T>(val))) {}
+      : ImplicitConstructor(
+            internal::MakeAny<std::decay_t<T>>(std::forward<T>(val))) {}
 };
 
 struct TypeCallback {
   std::unique_ptr<internal::TypeCallback> cb;
-  template <typename Callback,
-            std::enable_if_t<!std::is_convertible<T, TypeCallback>{}>* = 0>
+  template <
+      typename Callback,
+      std::enable_if_t<!std::is_convertible<Callback, TypeCallback>{}>* = 0>
   TypeCallback(Callback&& cb)
       : cb(internal::MakeTypeCallback(std::forward<Callback>(cb))) {}
-}
+};
 
 struct ActionCallback {
   std::unique_ptr<internal::ActionCallback> cb;
-  template <typename Callback,
-            std::enable_if_t<!std::is_convertible<T, ActionCallback>{}>* = 0>
+  template <
+      typename Callback,
+      std::enable_if_t<!std::is_convertible<Callback, ActionCallback>{}>* = 0>
   ActionCallback(Callback&& cb)
       : cb(internal::MakeActionCallback(std::forward<Callback>(cb))) {}
-}
+};
 
 // Creator of DestInfo. For those that need a DestInfo, just take Dest
 // as an arg.
 struct Dest {
   std::unique_ptr<internal::DestInfo> info;
+  Dest() = default;
   template <typename T>
   Dest(T* ptr) : info(internal::DestInfo::CreateFromPtr(ptr)) {}
 };
@@ -65,22 +83,18 @@ struct Names {
 // passed to argp_parse().
 enum Flags {
   kNoFlags = 0,            // The default.
-  kNoHelp = ARGP_NO_HELP,  // Don't produce --help.
-  kLongOnly = ARGP_LONG_ONLY,
-  kNoExit = ARGP_NO_EXIT,
+  // kNoHelp = ARGP_NO_HELP,  // Don't produce --help.
+  // kLongOnly = ARGP_LONG_ONLY,
+  // kNoExit = ARGP_NO_EXIT,
 };
 
 // Options to ArgumentParser constructor.
 // TODO: rename to OptionsBuilder and typedef.
 struct Options {
   // Only the most common options are listed in this list.
-  Options() : info(new OptionsInfo) {}
+  Options() : info(new internal::OptionsInfo) {}
   Options& version(const char* v) {
     info->program_version = v;
-    return *this;
-  }
-  Options& version(ProgramVersionCallback callback) {
-    info->program_version_callback = callback;
     return *this;
   }
   Options& description(const char* d) {
@@ -116,7 +130,7 @@ class Argument {
     if (dest.info)
       builder_->SetDest(std::move(dest.info));
     if (help)
-      builder_->SetHelpDoc(help);
+      builder_->SetHelp(help);
   }
 
   Argument& dest(Dest dest) {
@@ -145,11 +159,11 @@ class Argument {
     return *this;
   }
   Argument& const_value(AnyValue val) {
-    builder_->SetConstValue(std::move(val.value));
+    builder_->SetConstValue(val.Release());
     return *this;
   }
   Argument& default_value(AnyValue val) {
-    builder_->SetDefaultValue(std::move(val.value));
+    builder_->SetDefaultValue(val.Release());
     return *this;
   }
   Argument& help(std::string val) {
@@ -193,15 +207,15 @@ class AddArgumentHelper {
   virtual ~AddArgumentHelper() {}
 
  private:
-  virtual void AddArgumentImpl(std::unique_ptr<Argument> arg) = 0;
+  virtual void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) = 0;
 };
 
 class ArgumentGroup : public AddArgumentHelper {
  public:
   explicit ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
-  void add_argument(Argument arg) { group_->AddArgument(arg.Build()); }
 
  private:
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {}
   internal::ArgumentGroup* group_;
 };
 
@@ -214,28 +228,28 @@ class AddArgumentGroupHelper : public AddArgumentHelper {
   }
 
  private:
-  virtual ArgumentGroup* AddArgumentGroupImpl(const char* header) = 0;
+  virtual internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) = 0;
 };
 
 class SubParser : public AddArgumentGroupHelper {
  public:
-  explicit SubParser(SubCommand* sub) : sub_(sub) {}
+  explicit SubParser(internal::SubCommand* sub) : sub_(sub) {}
 
  private:
-  void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
     return sub_->GetHolder()->AddArgument(std::move(arg));
   }
-  ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
+  internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return sub_->GetHolder()->AddArgumentGroup(header);
   }
-  SubCommand* sub_;
+  internal::SubCommand* sub_;
 };
 
 // Support add(parser("something").aliases({...}).help("..."))
 class SubCommandBuilder {
  public:
   explicit SubCommandBuilder(std::string name)
-      : cmd_(SubCommand::Create(std::move(name))) {}
+      : cmd_(internal::SubCommand::Create(std::move(name))) {}
 
   SubCommandBuilder& aliases(std::vector<std::string> als) {
     cmd_->SetAliases(std::move(als));
@@ -246,18 +260,18 @@ class SubCommandBuilder {
     return *this;
   }
 
-  std::unique_ptr<SubCommand> Build() {
+  std::unique_ptr<internal::SubCommand> Build() {
     ARGPARSE_DCHECK(cmd_);
     return std::move(cmd_);
   }
 
  private:
-  std::unique_ptr<SubCommand> cmd_;
+  std::unique_ptr<internal::SubCommand> cmd_;
 };
 
 class SubParserGroup {
  public:
-  explicit SubParserGroup(SubCommandGroup* group) : group_(group) {}
+  explicit SubParserGroup(internal::SubCommandGroup* group) : group_(group) {}
 
   // Positional.
   SubParser add_parser(std::string name,
@@ -269,19 +283,19 @@ class SubParserGroup {
   }
 
   // Builder pattern.
-  SubParser add_parser(std::unique_ptr<SubCommand> cmd) {
+  SubParser add_parser(std::unique_ptr<internal::SubCommand> cmd) {
     auto* cmd_ptr = group_->AddSubCommand(std::move(cmd));
     return SubParser(cmd_ptr);
   }
 
  private:
-  SubCommandGroup* group_;
+  internal::SubCommandGroup* group_;
 };
 
 // Support add(subparsers(...))
 class SubParsersBuilder {
  public:
-  explicit SubParsersBuilder() : group_(SubCommandGroup::Create()) {}
+  explicit SubParsersBuilder() : group_(internal::SubCommandGroup::Create()) {}
 
   SubParsersBuilder& title(std::string val) {
     group_->SetTitle(std::move(val));
@@ -308,10 +322,10 @@ class SubParsersBuilder {
     return *this;
   }
 
-  std::unique_ptr<SubCommandGroup> Build() { return std::move(group_); }
+  std::unique_ptr<internal:: SubCommandGroup> Build() { return std::move(group_); }
 
  private:
-  std::unique_ptr<SubCommandGroup> group_;
+  std::unique_ptr<internal::SubCommandGroup> group_;
 };
 
 // Interface of ArgumentParser.
@@ -336,10 +350,9 @@ class MainParserHelper : public AddArgumentGroupHelper {
   using AddArgumentGroupHelper::add_argument_group;
   using AddArgumentHelper::add_argument;
 
-  SubParserGroup add_subparsers(std::unique_ptr<SubCommandGroup> group) {
+  SubParserGroup add_subparsers(std::unique_ptr<internal::SubCommandGroup> group) {
     return SubParserGroup(AddSubParsersImpl(std::move(group)));
   }
-  // TODO: More precise signature.
   SubParserGroup add_subparsers(Dest dest, std::string help = {}) {
     SubParsersBuilder builder;
     builder.dest(std::move(dest)).help(std::move(help));
@@ -348,13 +361,13 @@ class MainParserHelper : public AddArgumentGroupHelper {
 
  private:
   virtual bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) = 0;
-  virtual SubCommandGroup* AddSubParsersImpl(
-      std::unique_ptr<SubCommandGroup> group) = 0;
+  virtual internal::SubCommandGroup* AddSubParsersImpl(
+      std::unique_ptr<internal::SubCommandGroup> group) = 0;
 };
 
 class ArgumentParser : public MainParserHelper {
  public:
-  ArgumentParser() : controller_(ArgumentController::Create()) {}
+  ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
 
   explicit ArgumentParser(Options options) : ArgumentParser() {
     if (options.info)
@@ -366,19 +379,19 @@ class ArgumentParser : public MainParserHelper {
     ARGPARSE_DCHECK(out);
     return controller_->GetParser()->ParseKnownArgs(args, out);
   }
-  void AddArgumentImpl(std::unique_ptr<Argument> arg) override {
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
     return controller_->GetMainHolder()->AddArgument(std::move(arg));
   }
-  ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
+  internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return controller_->GetMainHolder()->AddArgumentGroup(header);
   }
-  SubCommandGroup* AddSubParsersImpl(
-      std::unique_ptr<SubCommandGroup> group) override {
+internal::  SubCommandGroup* AddSubParsersImpl(
+      std::unique_ptr<internal::SubCommandGroup> group) override {
     return controller_->GetSubCommandHolder()->AddSubCommandGroup(
         std::move(group));
   }
 
-  std::unique_ptr<ArgumentController> controller_;
+  std::unique_ptr<internal::ArgumentController> controller_;
 };
 
 }  // namespace argparse

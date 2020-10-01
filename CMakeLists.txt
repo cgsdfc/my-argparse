@@ -35,9 +35,7 @@ endif()
 include_directories(include)
 
 add_library(argparse 
-    src/argparse-holder.cc
-    src/argparse-ops.cc
-    src/argparse-utils.cc
+   src/argparse.cc 
 )
 
 add_executable(test_main test_main.cc)

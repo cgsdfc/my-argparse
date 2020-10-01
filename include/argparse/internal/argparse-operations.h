@@ -97,10 +97,6 @@ class ActionCallback {
 template <typename T>
 struct IsAppendSupported : std::bool_constant<bool(AppendTraits<T>::Run)> {};
 
-// Helper typedef to get ValueType of AppendTraits.
-template <typename T>
-using ValueTypeOf = typename AppendTraits<T>::ValueType;
-
 template <typename T, bool = IsAppendSupported<T>{}>
 struct IsAppendConstSupportedImpl;
 template <typename T>
@@ -113,7 +109,7 @@ template <typename T>
 struct IsAppendConstSupported : IsAppendConstSupportedImpl<T> {};
 
 template <typename T>
-struct IsOpenSupported : std::bool_constant<bool(OpenTraits::Run)> {};
+struct IsOpenSupported : std::bool_constant<bool(OpenTraits<T>::Run)> {};
 
 template <OpsKind Ops, typename T>
 struct IsOpsSupported : std::false_type {};
@@ -151,6 +147,9 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
     out->value = MakeAny<T>(in->release_value());
   }
 }
+
+template <OpsKind Ops, typename T, bool = IsOpsSupported<Ops, T>{}>
+struct OpsImpl;
 
 template <OpsKind Ops, typename T>
 struct OpsImpl<Ops, T, false> {

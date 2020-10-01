@@ -16,7 +16,7 @@ template <typename T>
 class Result {
  public:
   // Default is empty (!has_value && !has_error).
-  Result() { ARGPARSE_DCHECK(empty()); }
+  Result() = default;
   // To hold a value.
   explicit Result(T&& val) : data_(std::move(val)) {
     ARGPARSE_DCHECK(has_value());
@@ -82,7 +82,7 @@ class Result {
   }
   // Goes back to empty state.
   void reset() {
-    data_.template emplace<kEmptyIndex>(NoneType{});
+    data_.template emplace<kEmptyIndex>(internal::NoneType{});
     ARGPARSE_DCHECK(empty());
   }
 
@@ -92,7 +92,7 @@ class Result {
     kErrorMsgIndex,
     kValueIndex,
   };
-  std::variant<NoneType, std::string, T> data_;
+  std::variant<internal::NoneType, std::string, T> data_;
 };
 
 }
