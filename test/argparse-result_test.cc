@@ -5,6 +5,7 @@
 
 #include "argparse/argparse-result.h"
 
+#include "argparse-test-helper.h"
 #include <gtest/gtest.h>
 
 namespace argparse {

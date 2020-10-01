@@ -9,6 +9,8 @@
 #include <typeindex>
 #include <utility>
 
+#include "argparse/internal/argparse-port.h"
+
 namespace argparse {
 namespace internal {
 

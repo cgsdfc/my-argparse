@@ -1,10 +1,10 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
 namespace argparse {
-namespace testing {
+namespace {
 
 struct MoveOnlyType {
   explicit MoveOnlyType(int val) { this->val = val; }
@@ -16,5 +16,5 @@ struct MoveOnlyType {
 static_assert(std::is_move_constructible<MoveOnlyType>{});
 static_assert(!std::is_copy_constructible<MoveOnlyType>{});
 
-}  // namespace testing
+}  // namespace
 }  // namespace argparse

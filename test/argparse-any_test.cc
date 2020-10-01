@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -10,7 +10,7 @@
 #include <gtest/gtest.h>
 
 namespace argparse {
-namespace testing {
+namespace internal {
 
 struct CtorOverload {
   enum {
@@ -50,5 +50,5 @@ TEST(Any, AnyCanWrapMoveOnlyType) {
   EXPECT_TRUE(AnyCast<MoveOnlyType>(std::move(val)).val == 1);
 }
 
-}  // namespace testing
+}  // namespace internal
 }  // namespace argparse
