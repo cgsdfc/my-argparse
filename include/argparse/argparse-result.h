@@ -21,12 +21,8 @@ class Result {
     AdvanceToValueStateFromEmpty(std::in_place, std::forward<Args>(args)...);
   }
   // To hold a value.
-  explicit Result(T&& val) {
-    AdvanceToValueStateFromEmpty(std::move(val));
-  }
-  explicit Result(const T& val) {
-    AdvanceToValueStateFromEmpty(val);
-  }
+  explicit Result(T&& val) { AdvanceToValueStateFromEmpty(std::move(val)); }
+  explicit Result(const T& val) { AdvanceToValueStateFromEmpty(val); }
 
   // For now just use default. If T can't be moved, will it still work?
   Result(Result&&) = default;
@@ -48,6 +44,11 @@ class Result {
   Result& operator=(T&& val) {
     set_value(std::move(val));
     return *this;
+  }
+
+  template <typename ... Args>
+  void emplace(Args&&... args) {
+    AdvanceToValueState(std::in_place, std::forward<Args>(args)...);
   }
 
   // Release the err-msg (if any). Go back to empty state.

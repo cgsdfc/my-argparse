@@ -75,5 +75,17 @@ TEST(Result, WorksForMoveOnlyType) {
   EXPECT_TRUE(res.get_value() == MoveOnlyType(1));
 }
 
+TEST(Result, InPlaceConstructorWorks) {
+  Result<CtorOverload> res(std::in_place, double());
+  EXPECT_TRUE(res.has_value());
+  EXPECT_TRUE(res.get_value().called_ctor == CtorOverload::kDouble);
+}
+
+TEST(Result, EmplaceWorks) {
+  Result<CtorOverload> res;
+  res.emplace(int());
+  EXPECT_TRUE(res.get_value().called_ctor == CtorOverload::kInt);
+}
+
 }  // namespace
 }  // namespace argparse

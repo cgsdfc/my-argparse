@@ -12,22 +12,10 @@
 namespace argparse {
 namespace internal {
 
-struct CtorOverload {
-  enum {
-    kCtorDouble,
-    kCtorInt,
-    kCtorChar,
-  };
-  int called_ctor;
-  explicit CtorOverload(double) : called_ctor(kCtorDouble) {}
-  explicit CtorOverload(int) : called_ctor(kCtorInt) {}
-  explicit CtorOverload(char) : called_ctor(kCtorChar) {}
-};
-
 TEST(Any, MakeAnyCallsTheCorrectCtor) {
   auto val = MakeAny<CtorOverload>(double());
   EXPECT_TRUE(AnyCast<CtorOverload>(*val).called_ctor ==
-              CtorOverload::kCtorDouble);
+              CtorOverload::kDouble);
 }
 
 TEST(Any, AnyImplHasCorrectType) {

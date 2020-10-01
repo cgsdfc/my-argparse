@@ -16,5 +16,17 @@ struct MoveOnlyType {
 static_assert(std::is_move_constructible<MoveOnlyType>{});
 static_assert(!std::is_copy_constructible<MoveOnlyType>{});
 
+struct CtorOverload {
+  enum {
+    kDouble,
+    kInt,
+    kChar,
+  };
+  int called_ctor;
+  explicit CtorOverload(double) : called_ctor(kDouble) {}
+  explicit CtorOverload(int) : called_ctor(kInt) {}
+  explicit CtorOverload(char) : called_ctor(kChar) {}
+};
+
 }  // namespace
 }  // namespace argparse
