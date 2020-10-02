@@ -6,6 +6,8 @@
 namespace argparse {
 namespace {
 
+struct PlainType {};
+
 struct MoveOnlyType {
   explicit MoveOnlyType(int val) { this->val = val; }
   MoveOnlyType(MoveOnlyType&&) = default;

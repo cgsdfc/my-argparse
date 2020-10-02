@@ -11,56 +11,6 @@
 // Holds public things
 namespace argparse {
 
-template <typename T>
-class ImplicitConstructor {
- public:
-  ImplicitConstructor() = default;
-  explicit ImplicitConstructor(std::unique_ptr<T> value)
-      : value_(std::move(value)) {}
-  std::unique_ptr<T> Release() { return std::move(value_); }
-
- private:
-  std::unique_ptr<T> value_;
-};
-
-class AnyValue : public ImplicitConstructor<internal::Any> {
-  using ImplicitConstructor::ImplicitConstructor;
-
- public:
-  template <typename T,
-            std::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = 0>
-  AnyValue(T&& val)
-      : ImplicitConstructor(
-            internal::MakeAny<std::decay_t<T>>(std::forward<T>(val))) {}
-};
-
-struct TypeCallback {
-  std::unique_ptr<internal::TypeCallback> cb;
-  template <
-      typename Callback,
-      std::enable_if_t<!std::is_convertible<Callback, TypeCallback>{}>* = 0>
-  TypeCallback(Callback&& cb)
-      : cb(internal::MakeTypeCallback(std::forward<Callback>(cb))) {}
-};
-
-struct ActionCallback {
-  std::unique_ptr<internal::ActionCallback> cb;
-  template <
-      typename Callback,
-      std::enable_if_t<!std::is_convertible<Callback, ActionCallback>{}>* = 0>
-  ActionCallback(Callback&& cb)
-      : cb(internal::MakeActionCallback(std::forward<Callback>(cb))) {}
-};
-
-// Creator of DestInfo. For those that need a DestInfo, just take Dest
-// as an arg.
-struct Dest {
-  std::unique_ptr<internal::DestInfo> info;
-  Dest() = default;
-  template <typename T>
-  Dest(T* ptr) : info(internal::DestInfo::CreateFromPtr(ptr)) {}
-};
-
 class FileType {
  public:
   explicit FileType(const char* mode) : mode_(internal::CharsToMode(mode)) {}
@@ -70,13 +20,6 @@ class FileType {
 
  private:
   OpenMode mode_;
-};
-
-struct Names {
-  std::unique_ptr<internal::NamesInfo> info;
-  Names(const char* name) : Names(std::string(name)) { ARGPARSE_DCHECK(name); }
-  Names(std::string name);
-  Names(std::initializer_list<std::string> names);
 };
 
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
@@ -133,56 +76,56 @@ class Argument {
       builder_->SetHelp(help);
   }
 
-  Argument& dest(Dest dest) {
+  Argument& Dest(Dest dest) {
     builder_->SetDest(std::move(dest.info));
     return *this;
   }
-  Argument& action(const char* str) {
+  Argument& Action(const char* str) {
     builder_->SetActionString(str);
     return *this;
   }
-  Argument& action(ActionCallback cb) {
+  Argument& Action(ActionCallback cb) {
     builder_->SetActionCallback(std::move(cb.cb));
     return *this;
   }
-  Argument& type(TypeCallback cb) {
+  Argument& Type(TypeCallback cb) {
     builder_->SetTypeCallback(std::move(cb.cb));
     return *this;
   }
   template <typename T>
-  Argument& type() {
+  Argument& Type() {
     builder_->SetTypeOperations(internal::CreateOperations<T>());
     return *this;
   }
-  Argument& type(FileType file_type) {
+  Argument& Type(FileType file_type) {
     builder_->SetTypeFileType(file_type.mode());
     return *this;
   }
-  Argument& const_value(AnyValue val) {
+  Argument& ConstValue(AnyValue val) {
     builder_->SetConstValue(val.Release());
     return *this;
   }
-  Argument& default_value(AnyValue val) {
+  Argument& DefaultValue(AnyValue val) {
     builder_->SetDefaultValue(val.Release());
     return *this;
   }
-  Argument& help(std::string val) {
+  Argument& Help(std::string val) {
     builder_->SetHelp(std::move(val));
     return *this;
   }
-  Argument& required(bool val) {
+  Argument& Required(bool val) {
     builder_->SetRequired(val);
     return *this;
   }
-  Argument& meta_var(std::string val) {
+  Argument& MetaVar(std::string val) {
     builder_->SetMetaVar(std::move(val));
     return *this;
   }
-  Argument& nargs(int num) {
+  Argument& NumArgs(int num) {
     builder_->SetNumArgsNumber(num);
     return *this;
   }
-  Argument& nargs(char flag) {
+  Argument& NumArgs(char flag) {
     builder_->SetNumArgsFlag(flag);
     return *this;
   }
@@ -198,10 +141,10 @@ class Argument {
 // This is a helper that provides add_argument().
 class AddArgumentHelper {
  public:
-  void add_argument(Argument& arg) {
-    return add_argument(std::move(arg));
+  void Add(Argument& arg) {
+    return Add(std::move(arg));
   }
-  void add_argument(Argument&& arg) {
+  void Add(Argument&& arg) {
     return AddArgumentImpl(arg.Build());
   }
   virtual ~AddArgumentHelper() {}
@@ -222,7 +165,7 @@ class ArgumentGroup : public AddArgumentHelper {
 // If we can do add_argument_group(), add_argument() is always possible.
 class AddArgumentGroupHelper : public AddArgumentHelper {
  public:
-  ArgumentGroup add_argument_group(const char* header) {
+  ArgumentGroup Add(const char* header) {
     ARGPARSE_DCHECK(header);
     return ArgumentGroup(AddArgumentGroupImpl(header));
   }
@@ -245,17 +188,19 @@ class SubParser : public AddArgumentGroupHelper {
   internal::SubCommand* sub_;
 };
 
-// Support add(parser("something").aliases({...}).help("..."))
-class SubCommandBuilder {
+class SubCommand {
  public:
-  explicit SubCommandBuilder(std::string name)
-      : cmd_(internal::SubCommand::Create(std::move(name))) {}
+  explicit SubCommand(std::string name, const char* help = {})
+      : cmd_(internal::SubCommand::Create(std::move(name))) {
+    if (help)
+      cmd_->SetHelpDoc(help);
+  }
 
-  SubCommandBuilder& aliases(std::vector<std::string> als) {
+  SubCommand& Aliases(std::vector<std::string> als) {
     cmd_->SetAliases(std::move(als));
     return *this;
   }
-  SubCommandBuilder& help(std::string val) {
+  SubCommand& Help(std::string val) {
     cmd_->SetHelpDoc(std::move(val));
     return *this;
   }
@@ -274,18 +219,18 @@ class SubParserGroup {
   explicit SubParserGroup(internal::SubCommandGroup* group) : group_(group) {}
 
   // Positional.
-  SubParser add_parser(std::string name,
-                       std::string help = {},
-                       std::vector<std::string> aliases = {}) {
-    SubCommandBuilder builder(std::move(name));
-    builder.help(std::move(help)).aliases(std::move(aliases));
-    return add_parser(builder.Build());
-  }
+  // SubParser add_parser(std::string name,
+  //                      std::string help = {},
+  //                      std::vector<std::string> aliases = {}) {
+  //   SubCommand builder(std::move(name));
+  //   builder.help(std::move(help)).aliases(std::move(aliases));
+  //   return add_parser(builder.Build());
+  // }
 
   // Builder pattern.
-  SubParser add_parser(std::unique_ptr<internal::SubCommand> cmd) {
-    auto* cmd_ptr = group_->AddSubCommand(std::move(cmd));
-    return SubParser(cmd_ptr);
+  SubParser Add(SubCommand cmd) {
+    // auto* cmd_ptr = group_->AddSubCommand(std::move(cmd));
+    // return SubParser(cmd_ptr);
   }
 
  private:
@@ -297,12 +242,12 @@ class SubParsersBuilder {
  public:
   explicit SubParsersBuilder() : group_(internal::SubCommandGroup::Create()) {}
 
-  SubParsersBuilder& title(std::string val) {
+  SubParsersBuilder& Title(std::string val) {
     group_->SetTitle(std::move(val));
     return *this;
   }
 
-  SubParsersBuilder& description(std::string val) {
+  SubParsersBuilder& Description(std::string val) {
     group_->SetDescription(std::move(val));
     return *this;
   }
@@ -312,7 +257,7 @@ class SubParsersBuilder {
     return *this;
   }
 
-  SubParsersBuilder& help(std::string val) {
+  SubParsersBuilder& Help(std::string val) {
     group_->SetHelpDoc(std::move(val));
     return *this;
   }
