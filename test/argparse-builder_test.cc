@@ -5,13 +5,16 @@
 
 #include <gtest/gtest.h>
 
-#include "argparse/argparse.h"
+#include "argparse/argparse-builder.h"
+#include "argparse-test-helper.h"
 
 namespace argparse {
 namespace {
 
 TEST(AnyValue, CtorShouldCreateAny) {
-  auto val = AnyValue(PlainType{}).Release();
+  AnyValue any_value(PlainType{});
+  auto val = GetBuiltObject(&any_value);
+  EXPECT_TRUE(val);
   EXPECT_TRUE(val->GetType() == typeid(PlainType));
 }
 

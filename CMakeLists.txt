@@ -45,7 +45,7 @@ target_link_libraries(test_main argparse)
 add_executable(argparse_test
     test/argparse-any_test.cc
     test/argparse-result_test.cc
-    test/argparse-implicit-ctor_test.cc
+    test/argparse-builder_test.cc
 )
 
 target_link_libraries(argparse_test argparse gtest gtest_main)

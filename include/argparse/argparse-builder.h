@@ -5,21 +5,28 @@
 
 #pragma once
 
+#include "argparse/internal/argparse-internal.h"
+
 namespace argparse {
+class BuilderAccessor;
 
 // Base class of builders for some kind of object T.
 template <typename T>
 class BuilderOf {
  protected:
+  // Derived can override this.
   using ObjectType = T;
   BuilderOf() = default;
   explicit BuilderOf(std::unique_ptr<T> obj) : object_(std::move(obj)) {}
   void SetObject(std::unique_ptr<T> obj) { object_ = std::move(obj); }
   T* GetObject() { return object_.get(); }
-  // Default impl of Build().
-  std::unique_ptr<T> Build() { return std::move(object_); }
+
+  // Default impl of Build(). Derived can override this.
+  std::unique_ptr<ObjectType> Build() { return std::move(object_); }
+  bool HasObject() const { return object_ != nullptr; }
 
  private:
+  friend class BuilderAccessor;
   std::unique_ptr<T> object_;
 };
 
@@ -31,10 +38,15 @@ struct BuilderAccessor {
   }
 };
 
+template <typename Builder>
+auto GetBuiltObject(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
+  return BuilderAccessor::Build(b);
+}
+
 class AnyValue : private BuilderOf<internal::Any> {
  public:
   template <typename T,
-            std::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = 0>
+            std::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = nullptr>
   AnyValue(T&& val) {
     auto obj = internal::MakeAny<std::decay_t<T>>(std::forward<T>(val));
     this->SetObject(std::move(obj));
@@ -46,7 +58,7 @@ class AnyValue : private BuilderOf<internal::Any> {
 
 class TypeCallback : private BuilderOf<internal::TypeCallback> {
  public:
-  template <typename T, std::enable_if_t<internal::IsCallback<T>{}>* = 0>
+  template <typename T, std::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
   TypeCallback(T&& cb) {
     this->SetObject(internal::MakeTypeCallback(std::forward<T>(cb)));
   }
@@ -57,7 +69,7 @@ class TypeCallback : private BuilderOf<internal::TypeCallback> {
 
 class ActionCallback : private BuilderOf<internal::ActionCallback> {
  public:
-  template <typename T, std::enable_if_t<internal::IsCallback<T>{}>* = 0>
+  template <typename T, std::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
   ActionCallback(T&& cb) {
     this->SetObject(internal::MakeActionCallback(std::forward<T>(cb)));
   }
@@ -75,6 +87,7 @@ class Dest : private BuilderOf<internal::DestInfo> {
     this->SetObject(internal::DestInfo::CreateFromPtr(ptr));
   }
   Dest() = default;
+  using BuilderOf<internal::DestInfo>::HasObject;
 
  private:
   friend class BuilderAccessor;

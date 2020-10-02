@@ -5,8 +5,8 @@
 
 #pragma once
 
+#include "argparse/argparse-builder.h"
 #include "argparse/argparse-traits.h"
-#include "argparse/internal/argparse-internal.h"
 
 // Holds public things
 namespace argparse {
@@ -68,16 +68,14 @@ class Argument {
  public:
   explicit Argument(Names names, Dest dest = {}, const char* help = {})
       : builder_(internal::ArgumentBuilder::Create()) {
-    ARGPARSE_DCHECK(names.info);
-    builder_->SetNames(std::move(names.info));
-    if (dest.info)
-      builder_->SetDest(std::move(dest.info));
+    builder_->SetNames(GetBuiltObject(&names));
+    builder_->SetDest(GetBuiltObject(&dest));
     if (help)
       builder_->SetHelp(help);
   }
 
   Argument& Dest(Dest dest) {
-    builder_->SetDest(std::move(dest.info));
+    builder_->SetDest(GetBuiltObject(&dest));
     return *this;
   }
   Argument& Action(const char* str) {
@@ -85,11 +83,11 @@ class Argument {
     return *this;
   }
   Argument& Action(ActionCallback cb) {
-    builder_->SetActionCallback(std::move(cb.cb));
+    builder_->SetActionCallback(GetBuiltObject(&cb));
     return *this;
   }
   Argument& Type(TypeCallback cb) {
-    builder_->SetTypeCallback(std::move(cb.cb));
+    builder_->SetTypeCallback(GetBuiltObject(&cb));
     return *this;
   }
   template <typename T>
@@ -102,11 +100,11 @@ class Argument {
     return *this;
   }
   Argument& ConstValue(AnyValue val) {
-    builder_->SetConstValue(val.Release());
+    builder_->SetConstValue(GetBuiltObject(&val));
     return *this;
   }
   Argument& DefaultValue(AnyValue val) {
-    builder_->SetDefaultValue(val.Release());
+    builder_->SetDefaultValue(GetBuiltObject(&val));
     return *this;
   }
   Argument& Help(std::string val) {
@@ -263,7 +261,7 @@ class SubParsersBuilder {
   }
 
   SubParsersBuilder& dest(Dest val) {
-    group_->SetDest(std::move(val.info));
+    group_->SetDest(GetBuiltObject(&val));
     return *this;
   }
 
@@ -292,16 +290,15 @@ class MainParserHelper : public AddArgumentGroupHelper {
     return ParseArgsImpl(args, out);
   }
 
-  using AddArgumentGroupHelper::add_argument_group;
-  using AddArgumentHelper::add_argument;
+  // using AddArgumentGroupHelper::add_argument_group;
+  // using AddArgumentHelper::add_argument;
 
-  SubParserGroup add_subparsers(std::unique_ptr<internal::SubCommandGroup> group) {
-    return SubParserGroup(AddSubParsersImpl(std::move(group)));
-  }
-  SubParserGroup add_subparsers(Dest dest, std::string help = {}) {
-    SubParsersBuilder builder;
-    builder.dest(std::move(dest)).help(std::move(help));
-    return add_subparsers(builder.Build());
+  // SubParserGroup add_subparsers(std::unique_ptr<internal::SubCommandGroup> group) {
+  //   return SubParserGroup(AddSubParsersImpl(std::move(group)));
+  // }
+
+  SubParserGroup add_subparsers(SubParsersBuilder& subparsers) {
+    
   }
 
  private:

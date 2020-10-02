@@ -8,7 +8,8 @@ Names::Names(std::string name) {
   if (name[0] == '-') {
     // This is in fact an option.
     std::vector<std::string> names{std::move(name)};
-    return this->SetObject(NamesInfo::CreateOptional(std::move(names)));
+    this->SetObject(NamesInfo::CreateOptional(std::move(names)));
+    return;
   }
   ARGPARSE_CHECK_F(internal::IsValidPositionalName(name),
                    "Not a valid positional name: %s", name.c_str());
