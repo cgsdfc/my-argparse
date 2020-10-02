@@ -9,11 +9,11 @@ namespace argparse {
 namespace internal {
 
 // This is a type-erased type-safe void* wrapper.
-class DestPtr {
+class OpaquePtr {
  public:
   template <typename T>
-  explicit DestPtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {}
-  DestPtr() = default;
+  explicit OpaquePtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {}
+  OpaquePtr() = default;
 
   // Copy content to out.
   template <typename T>
@@ -45,11 +45,11 @@ class DestPtr {
 
   template <typename T>
   void reset(T* ptr) {
-    DestPtr that(ptr);
+    OpaquePtr that(ptr);
     swap(that);
   }
 
-  void swap(DestPtr& that) {
+  void swap(OpaquePtr& that) {
     std::swap(this->type_, that.type_);
     std::swap(this->ptr_, that.ptr_);
   }
@@ -63,9 +63,6 @@ class DestPtr {
   std::type_index type_ = typeid(NoneType);
   void* ptr_ = nullptr;
 };
-
-// TODO: Rename.
-using OpaquePtr = DestPtr;
 
 }  // namespace internal
 }  // namespace argparse

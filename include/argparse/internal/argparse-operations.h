@@ -37,11 +37,11 @@ const char* OpsToString(OpsKind ops);
 class Operations {
  public:
   // For actions:
-  virtual void Store(DestPtr dest, std::unique_ptr<Any> data) = 0;
-  virtual void StoreConst(DestPtr dest, const Any& data) = 0;
-  virtual void Append(DestPtr dest, std::unique_ptr<Any> data) = 0;
-  virtual void AppendConst(DestPtr dest, const Any& data) = 0;
-  virtual void Count(DestPtr dest) = 0;
+  virtual void Store(OpaquePtr dest, std::unique_ptr<Any> data) = 0;
+  virtual void StoreConst(OpaquePtr dest, const Any& data) = 0;
+  virtual void Append(OpaquePtr dest, std::unique_ptr<Any> data) = 0;
+  virtual void AppendConst(OpaquePtr dest, const Any& data) = 0;
+  virtual void Count(OpaquePtr dest) = 0;
   // For types:
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, OpenMode, OpsResult* out) = 0;
@@ -90,7 +90,7 @@ class TypeCallback {
 class ActionCallback {
  public:
   virtual ~ActionCallback() {}
-  virtual void Run(DestPtr dest, std::unique_ptr<Any> data) = 0;
+  virtual void Run(OpaquePtr dest, std::unique_ptr<Any> data) = 0;
 };
 
 // Extracted the bool value from AppendTraits.
@@ -165,7 +165,7 @@ struct OpsImpl<Ops, T, false> {
 
 template <typename T>
 struct OpsImpl<OpsKind::kStore, T, true> {
-  static void Run(DestPtr dest, std::unique_ptr<Any> data) {
+  static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto value = AnyCast<T>(std::move(data));
       dest.store(std::move_if_noexcept(value));
@@ -175,14 +175,14 @@ struct OpsImpl<OpsKind::kStore, T, true> {
 
 template <typename T>
 struct OpsImpl<OpsKind::kStoreConst, T, true> {
-  static void Run(DestPtr dest, const Any& data) {
+  static void Run(OpaquePtr dest, const Any& data) {
     dest.store(AnyCast<T>(data));
   }
 };
 
 template <typename T>
 struct OpsImpl<OpsKind::kAppend, T, true> {
-  static void Run(DestPtr dest, std::unique_ptr<Any> data) {
+  static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto* ptr = dest.load_ptr<T>();
       auto value = AnyCast<ValueTypeOf<T>>(std::move(data));
@@ -193,7 +193,7 @@ struct OpsImpl<OpsKind::kAppend, T, true> {
 
 template <typename T>
 struct OpsImpl<OpsKind::kAppendConst, T, true> {
-  static void Run(DestPtr dest, const Any& data) {
+  static void Run(OpaquePtr dest, const Any& data) {
     auto* ptr = dest.load_ptr<T>();
     auto value = AnyCast<ValueTypeOf<T>>(data);
     AppendTraits<T>::Run(ptr, value);
@@ -202,7 +202,7 @@ struct OpsImpl<OpsKind::kAppendConst, T, true> {
 
 template <typename T>
 struct OpsImpl<OpsKind::kCount, T, true> {
-  static void Run(DestPtr dest) {
+  static void Run(OpaquePtr dest) {
     auto* ptr = dest.load_ptr<T>();
     ++(*ptr);
   }
@@ -239,19 +239,19 @@ bool OpsIsSupportedImpl(OpsKind ops, std::index_sequence<OpsIndices...>) {
 template <typename T>
 class OperationsImpl : public Operations {
  public:
-  void Store(DestPtr dest, std::unique_ptr<Any> data) override {
+  void Store(OpaquePtr dest, std::unique_ptr<Any> data) override {
     OpsImpl<OpsKind::kStore, T>::Run(dest, std::move(data));
   }
-  void StoreConst(DestPtr dest, const Any& data) override {
+  void StoreConst(OpaquePtr dest, const Any& data) override {
     OpsImpl<OpsKind::kStoreConst, T>::Run(dest, data);
   }
-  void Append(DestPtr dest, std::unique_ptr<Any> data) override {
+  void Append(OpaquePtr dest, std::unique_ptr<Any> data) override {
     OpsImpl<OpsKind::kAppend, T>::Run(dest, std::move(data));
   }
-  void AppendConst(DestPtr dest, const Any& data) override {
+  void AppendConst(OpaquePtr dest, const Any& data) override {
     OpsImpl<OpsKind::kAppendConst, T>::Run(dest, data);
   }
-  void Count(DestPtr dest) override { OpsImpl<OpsKind::kCount, T>::Run(dest); }
+  void Count(OpaquePtr dest) override { OpsImpl<OpsKind::kCount, T>::Run(dest); }
   void Parse(const std::string& in, OpsResult* out) override {
     OpsImpl<OpsKind::kParse, T>::Run(in, out);
   }
@@ -332,7 +332,7 @@ class CustomActionCallback : public ActionCallback {
   }
 
  private:
-  void Run(DestPtr dest_ptr, std::unique_ptr<Any> data) override {
+  void Run(OpaquePtr dest_ptr, std::unique_ptr<Any> data) override {
     Result<V> result(AnyCast<V>(std::move(data)));
     auto* obj = dest_ptr.template load_ptr<T>();
     std::invoke(callback_, obj, std::move(result));
