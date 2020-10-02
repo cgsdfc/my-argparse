@@ -452,12 +452,30 @@ class ArgumentController {
   static std::unique_ptr<ArgumentController> Create();
 };
 
-// TODO: fixthis;
-// template <typename T>
-// std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
-//   ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
-//   return std::make_unique<DestInfoImpl>(DestPtr(ptr), CreateOpsFactory<T>());
-// }
+class DestInfoImpl : public DestInfo {
+ public:
+  DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
+      : dest_ptr_(d), ops_factory_(std::move(f)) {
+    ops_ = ops_factory_->CreateOps();
+  }
+
+  DestPtr GetDestPtr() override { return dest_ptr_; }
+  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
+  std::string FormatValue(const Any& in) override {
+    return ops_->FormatValue(in);
+  }
+
+ private:
+  DestPtr dest_ptr_;
+  std::unique_ptr<OpsFactory> ops_factory_;
+  std::unique_ptr<Operations> ops_;
+};
+
+template <typename T>
+std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
+  ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
+  return std::make_unique<DestInfoImpl>(DestPtr(ptr), CreateOpsFactory<T>());
+}
 
 }  // namespace internal
 }  // namespace argparse

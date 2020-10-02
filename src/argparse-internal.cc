@@ -467,25 +467,6 @@ class FlagNumArgsInfo : public NumArgsInfo {
   const char flag_;
 };
 
-class DestInfoImpl : public DestInfo {
- public:
-  DestInfoImpl(DestPtr d, std::unique_ptr<OpsFactory> f)
-      : dest_ptr_(d), ops_factory_(std::move(f)) {
-    ops_ = ops_factory_->CreateOps();
-  }
-
-  DestPtr GetDestPtr() override { return dest_ptr_; }
-  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
-  std::string FormatValue(const Any& in) override {
-    return ops_->FormatValue(in);
-  }
-
- private:
-  DestPtr dest_ptr_;
-  std::unique_ptr<OpsFactory> ops_factory_;
-  std::unique_ptr<Operations> ops_;
-};
-
 // ActionInfo for builtin actions like store and append.
 class DefaultActionInfo : public ActionInfo {
  public:
