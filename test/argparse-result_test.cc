@@ -23,26 +23,26 @@ TEST(Result, WhenValueConstructedTheStateIsCorrect) {
   EXPECT_TRUE(res.has_value());
   EXPECT_TRUE(!res.has_error());
   EXPECT_TRUE(!res.empty());
-  EXPECT_TRUE(res.get_value() == 1);
+  EXPECT_TRUE(res.value() == 1);
 }
 
 TEST(Result, DefaultConstructedAndThenMutateTheState) {
   Result<int> res;
   EXPECT_TRUE(res.empty());
 
-  res.set_value(1);
+  res.SetValue(1);
   EXPECT_TRUE(res.has_value());
   EXPECT_TRUE(!res.has_error());
   EXPECT_TRUE(!res.empty());
-  EXPECT_TRUE(res.get_value() == 1);
+  EXPECT_TRUE(res.value() == 1);
 
-  res.set_error("err");
+  res.SetError("err");
   EXPECT_TRUE(res.has_error());
   EXPECT_TRUE(!res.has_value());
   EXPECT_TRUE(!res.empty());
-  EXPECT_TRUE(res.get_error() == "err");
+  EXPECT_TRUE(res.error() == "err");
 
-  res.reset();
+  res.Reset();
   EXPECT_TRUE(res.empty());
   EXPECT_TRUE(!res.has_value());
   EXPECT_TRUE(!res.has_error());
@@ -50,14 +50,14 @@ TEST(Result, DefaultConstructedAndThenMutateTheState) {
 
 TEST(Result, AfterReleasingValueTheStateIsEmpty) {
   Result<int> res(1);
-  EXPECT_TRUE(res.release_value() == 1);
+  EXPECT_TRUE(res.ReleaseValue() == 1);
   EXPECT_TRUE(res.empty());
 }
 
 TEST(Result, AfterReleasingErrMsgTheStateIsEmpty) {
   Result<int> res;
-  res.set_error("err");
-  EXPECT_TRUE(res.release_error() == "err");
+  res.SetError("err");
+  EXPECT_TRUE(res.ReleaseError() == "err");
   EXPECT_TRUE(res.empty());
 }
 
@@ -65,26 +65,26 @@ TEST(Result, AssignmentWorksAsSetValue) {
   Result<int> res;
   res = 1;
   EXPECT_TRUE(res.has_value());
-  EXPECT_TRUE(res.get_value() == 1);
+  EXPECT_TRUE(res.value() == 1);
 }
 
 TEST(Result, WorksForMoveOnlyType) {
   Result<MoveOnlyType> res;
-  res.set_value(MoveOnlyType(1));
+  res.SetValue(MoveOnlyType(1));
   EXPECT_TRUE(res.has_value());
-  EXPECT_TRUE(res.get_value() == MoveOnlyType(1));
+  EXPECT_TRUE(res.value() == MoveOnlyType(1));
 }
 
 TEST(Result, InPlaceConstructorWorks) {
   Result<CtorOverload> res(std::in_place, double());
   EXPECT_TRUE(res.has_value());
-  EXPECT_TRUE(res.get_value().called_ctor == CtorOverload::kDouble);
+  EXPECT_TRUE(res.value().called_ctor == CtorOverload::kDouble);
 }
 
 TEST(Result, EmplaceWorks) {
   Result<CtorOverload> res;
   res.emplace(int());
-  EXPECT_TRUE(res.get_value().called_ctor == CtorOverload::kInt);
+  EXPECT_TRUE(res.value().called_ctor == CtorOverload::kInt);
 }
 
 }  // namespace

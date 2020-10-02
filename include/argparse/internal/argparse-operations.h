@@ -142,9 +142,9 @@ template <typename T>
 void ConvertResults(Result<T>* in, OpsResult* out) {
   out->has_error = in->has_error();
   if (out->has_error) {
-    out->errmsg = in->release_error();
+    out->errmsg = in->ReleaseError();
   } else if (in->has_value()) {
-    out->value = MakeAny<T>(in->release_value());
+    out->value = MakeAny<T>(in->ReleaseValue());
   }
 }
 
@@ -396,7 +396,7 @@ std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
     try {
       *out = std::invoke(cb, in);
     } catch (const ArgumentError& e) {
-      out->set_error(e.what());
+      out->SetError(e.what());
     }
   };
   return std::make_unique<TypeCallbackImpl<T>>(std::move(wrapped_cb));

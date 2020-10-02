@@ -11,13 +11,19 @@
 namespace argparse {
 namespace {
 
-TEST(AnyValue, CtorShouldCreateAny) {
+TEST(AnyValue, Build) {
   AnyValue any_value(PlainType{});
   auto val = GetBuiltObject(&any_value);
   EXPECT_TRUE(val);
   EXPECT_TRUE(val->GetType() == typeid(PlainType));
 }
 
-}  // namespace
+TEST(TypeCallback, BuildFromLambda) {
+  TypeCallback cb([](const std::string& in, Result<int>* out) {});
+  auto val = GetBuiltObject(&cb);
+  EXPECT_TRUE(val);
+  EXPECT_TRUE(val->GetTypeHint() == "int");
+}
 
+}  // namespace
 }  // namespace argparse

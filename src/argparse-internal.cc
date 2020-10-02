@@ -882,12 +882,12 @@ void CFileOpenTraits::Run(const std::string& in,
   auto mode_str = ModeToChars(mode);
   auto* file = std::fopen(in.c_str(), mode_str.c_str());
   if (file)
-    return out->set_value(file);
+    return out->SetValue(file);
   if (int e = errno) {
     errno = 0;
-    return out->set_error(std::strerror(e));
+    return out->SetError(std::strerror(e));
   }
-  out->set_error(kDefaultOpenFailureMsg);
+  out->SetError(kDefaultOpenFailureMsg);
 }
 
 std::ios_base::openmode ModeToStreamMode(OpenMode m) {

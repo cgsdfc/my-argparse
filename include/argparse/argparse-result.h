@@ -32,17 +32,17 @@ class Result {
   bool has_value() const { return IsValueState(); }
   bool has_error() const { return IsErrorState(); }
 
-  void set_error(const std::string& msg) { AdvanceToErrorState(msg); }
-  void set_error(std::string&& msg) { AdvanceToErrorState(std::move(msg)); }
-  void set_value(const T& val) { AdvanceToValueState(val); }
-  void set_value(T&& val) { AdvanceToValueState(std::move(val)); }
+  void SetError(const std::string& msg) { AdvanceToErrorState(msg); }
+  void SetError(std::string&& msg) { AdvanceToErrorState(std::move(msg)); }
+  void SetValue(const T& val) { AdvanceToValueState(val); }
+  void SetValue(T&& val) { AdvanceToValueState(std::move(val)); }
 
   Result& operator=(const T& val) {
-    set_value(val);
+    SetValue(val);
     return *this;
   }
   Result& operator=(T&& val) {
-    set_value(std::move(val));
+    SetValue(std::move(val));
     return *this;
   }
 
@@ -52,20 +52,20 @@ class Result {
   }
 
   // Release the err-msg (if any). Go back to empty state.
-  std::string release_error() { return AdvanceToEmptyStateFromError(); }
-  const std::string& get_error() const {
+  std::string ReleaseError() { return AdvanceToEmptyStateFromError(); }
+  const std::string& error() const {
     ARGPARSE_DCHECK(has_error());
     return *error_;
   }
 
   // Release the value, go back to empty state.
-  T release_value() { return AdvanceToEmptyStateFromValue(); }
-  const T& get_value() const {
+  T ReleaseValue() { return AdvanceToEmptyStateFromValue(); }
+  const T& value() const {
     ARGPARSE_DCHECK(has_value());
     return *value_;
   }
   // Goes back to empty state.
-  void reset() { AdvanceToEmptyState(); }
+  void Reset() { AdvanceToEmptyState(); }
 
  private:
   void AdvanceToEmptyState() {

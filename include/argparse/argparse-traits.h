@@ -82,8 +82,8 @@ struct StreamOpenTraits {
     auto ios_mode = ModeToStreamMode(mode);
     T stream(in, ios_mode);
     if (stream.is_open())
-      return out->set_value(std::move(stream));
-    out->set_error(kDefaultOpenFailureMsg);
+      return out->SetValue(std::move(stream));
+    out->SetError(kDefaultOpenFailureMsg);
   }
 };
 
@@ -165,9 +165,9 @@ template <>
 struct DefaultParseTraits<char> {
   static void Run(const std::string& in, Result<char>* out) {
     if (in.size() != 1)
-      return out->set_error("char must be exactly one character");
+      return out->SetError("char must be exactly one character");
     if (!std::isprint(in[0]))
-      return out->set_error("char must be printable");
+      return out->SetError("char must be printable");
     *out = in[0];
   }
 };
@@ -180,7 +180,7 @@ struct DefaultParseTraits<bool> {
     };
     auto iter = kStringToBools.find(in);
     if (iter == kStringToBools.end())
-      return out->set_error("not a valid bool value");
+      return out->SetError("not a valid bool value");
     *out = iter->second;
   }
 };
@@ -191,9 +191,9 @@ struct DefaultParseTraits<T, std::enable_if_t<internal::IsNumericType<T>{}>> {
     try {
       *out = internal::StlParseNumber<T>(in);
     } catch (std::invalid_argument&) {
-      out->set_error("invalid numeric format");
+      out->SetError("invalid numeric format");
     } catch (std::out_of_range&) {
-      out->set_error("numeric value out of range");
+      out->SetError("numeric value out of range");
     }
   }
 };
@@ -336,6 +336,15 @@ struct MetaTypeOf<T, std::enable_if_t<internal::IsNumericType<T>{}>>
 template <typename T>
 struct TypeHintTraits : internal::DefaultTypeHint<T> {};
 
-namespace internal {}  // namespace internal
+namespace internal {
+template <typename T>
+std::string TypeHint() {
+  return TypeHintTraits<T>::Run();
+}
+template <typename T>
+std::string FormatValue(const T& value) {
+  return FormatTraits<std::decay_t<T>>::Run(value);
+}
+}  // namespace internal
 
 }  // namespace argparse
