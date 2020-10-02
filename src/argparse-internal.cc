@@ -78,7 +78,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
  public:
   ArgumentHolderImpl();
 
-  ArgumentGroup* AddArgumentGroup(const char* header) override;
+  ArgumentGroup* AddArgumentGroup(std::string header) override;
 
   void AddArgument(std::unique_ptr<Argument> arg) override {
     auto* group =
@@ -157,9 +157,8 @@ bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
 
 class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
  public:
-  GroupImpl(ArgumentHolderImpl* holder, const char* header)
-      : holder_(holder), header_(header) {
-    ARGPARSE_DCHECK(header_.size());
+  GroupImpl(ArgumentHolderImpl* holder, std::string header)
+      : holder_(holder), header_(std::move(header)) {
     if (header_.back() != ':')
       header_.push_back(':');
   }
@@ -185,7 +184,7 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
   unsigned members_ = 0;
 };
 
-ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(const char* header) {
+ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(std::string header) {
   auto* group = new GroupImpl(this, header);
   groups_.emplace_back(group);
   if (listener_)

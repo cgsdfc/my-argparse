@@ -156,13 +156,12 @@ class ArgumentGroup : public SupportAddArgument {
 // If we can do add_argument_group(), add_argument() is always possible.
 class SupportAddArgumentGroup : public SupportAddArgument {
  public:
-  ArgumentGroup AddArgumentGroup(const char* header) {
-    ARGPARSE_DCHECK(header);
-    return ArgumentGroup(AddArgumentGroupImpl(header));
+  ArgumentGroup AddArgumentGroup(std::string header) {
+    return ArgumentGroup(AddArgumentGroupImpl(std::move(header)));
   }
 
  private:
-  virtual internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) = 0;
+  virtual internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) = 0;
 };
 
 class SubCommandProxy : public SupportAddArgumentGroup {
@@ -173,8 +172,8 @@ class SubCommandProxy : public SupportAddArgumentGroup {
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
     return sub_->GetHolder()->AddArgument(std::move(arg));
   }
-  internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
-    return sub_->GetHolder()->AddArgumentGroup(header);
+  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) override {
+    return sub_->GetHolder()->AddArgumentGroup(std::move(header));
   }
   internal::SubCommand* sub_;
 };
@@ -312,8 +311,8 @@ class ArgumentParser : public ArgumentParserInterface {
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
     return controller_->GetMainHolder()->AddArgument(std::move(arg));
   }
-  internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
-    return controller_->GetMainHolder()->AddArgumentGroup(header);
+  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) override {
+    return controller_->GetMainHolder()->AddArgumentGroup(std::move(header));
   }
   internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) override {

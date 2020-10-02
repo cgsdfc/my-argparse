@@ -248,7 +248,7 @@ class ArgumentHolder {
   };
 
   virtual void SetListener(std::unique_ptr<Listener> listener) {}
-  virtual ArgumentGroup* AddArgumentGroup(const char* header) = 0;
+  virtual ArgumentGroup* AddArgumentGroup(std::string header) = 0;
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
   virtual unsigned GetArgumentCount() = 0;
