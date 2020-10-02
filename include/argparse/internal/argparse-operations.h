@@ -262,7 +262,7 @@ class OperationsImpl : public Operations {
     return OpsIsSupportedImpl<T>(ops, std::make_index_sequence<kMaxOpsKind>{});
   }
   StringView GetTypeName() override { return TypeName<T>(); }
-  std::string GetTypeHint() override { return TypeHint<T>(); }
+  std::string GetTypeHint() override { return TypeHintTraits<T>::Run(); }
   std::string FormatValue(const Any& val) override {
     return FormatTraits<T>::Run(AnyCast<T>(val));
   }

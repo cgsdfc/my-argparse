@@ -114,6 +114,7 @@ class StringView {
   bool operator==(const StringView& that) const {
     return Compare(*this, that) == 0;
   }
+  operator std::string() const { return ToString(); }
 
  private:
   // data should be non-null and null-terminated.

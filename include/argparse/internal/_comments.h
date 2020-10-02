@@ -240,17 +240,6 @@ static const char* ActionsToString(ActionKind in) {
 //   RunAction(std::move(result.value), delegate.get());
 // }
 
-const char* OpsToString(OpsKind ops) {
-  static const std::map<OpsKind, std::string> kOpsToStrings{
-      {OpsKind::kStore, "Store"},   {OpsKind::kStoreConst, "StoreConst"},
-      {OpsKind::kAppend, "Append"}, {OpsKind::kAppendConst, "AppendConst"},
-      {OpsKind::kParse, "Parse"},   {OpsKind::kOpen, "Open"},
-  };
-  auto iter = kOpsToStrings.find(ops);
-  ARGPARSE_DCHECK(iter != kOpsToStrings.end());
-  return iter->second.c_str();
-}
-
 static ParserFactory::Callback g_parser_factory_callback;
 
 void ParserFactory::RegisterCallback(Callback callback) {

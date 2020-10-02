@@ -37,32 +37,26 @@ class ArgumentImpl : public Argument {
     meta_var_ = std::move(meta_var);
   }
   void SetDest(std::unique_ptr<DestInfo> info) override {
-    ARGPARSE_DCHECK(info);
-    dest_info_ = std::move(info);
+    if (info) dest_info_ = std::move(info);
   }
   void SetType(std::unique_ptr<TypeInfo> info) override {
-    ARGPARSE_DCHECK(info);
-    type_info_ = std::move(info);
+    if (info) type_info_ = std::move(info);
   }
   void SetAction(std::unique_ptr<ActionInfo> info) override {
-    ARGPARSE_DCHECK(info);
-    action_info_ = std::move(info);
+    if (info) action_info_ = std::move(info);
   }
   void SetConstValue(std::unique_ptr<Any> value) override {
-    ARGPARSE_DCHECK(value);
-    const_value_ = std::move(value);
+    if (value) const_value_ = std::move(value);
   }
   void SetDefaultValue(std::unique_ptr<Any> value) override {
-    ARGPARSE_DCHECK(value);
-    default_value_ = std::move(value);
+    if (value) default_value_ = std::move(value);
   }
   void SetGroup(ArgumentGroup* group) override {
     ARGPARSE_DCHECK(group);
     group_ = group;
   }
   void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
-    ARGPARSE_DCHECK(info);
-    num_args_ = std::move(info);
+    if (info) num_args_ = std::move(info);
   }
 
  private:
@@ -1051,6 +1045,17 @@ bool IsValidOptionName(const std::string& name) {
   return std::all_of(name.begin() + 2, name.end(), [](char c) {
     return c == '-' || c == '_' || std::isalnum(c);
   });
+}
+
+const char* OpsToString(OpsKind ops) {
+  static const std::map<OpsKind, std::string> kOpsToStrings{
+      {OpsKind::kStore, "Store"},   {OpsKind::kStoreConst, "StoreConst"},
+      {OpsKind::kAppend, "Append"}, {OpsKind::kAppendConst, "AppendConst"},
+      {OpsKind::kParse, "Parse"},   {OpsKind::kOpen, "Open"},
+  };
+  auto iter = kOpsToStrings.find(ops);
+  ARGPARSE_DCHECK(iter != kOpsToStrings.end());
+  return iter->second.c_str();
 }
 
 }  // namespace internal

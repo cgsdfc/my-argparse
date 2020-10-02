@@ -14,4 +14,8 @@ int main(int argc, char const* argv[]) {
                        .MetaVar("OUT"))
       .AddArgument(argparse::Argument("input", &input, "input file"))
       .AddArgument(argparse::Argument("inout", &input, "in-out file"));
+
+  auto group = parser.AddArgumentGroup("some text");
+  group.AddArgument(argparse::Argument("a"))
+      .AddArgument(argparse::Argument("b"));
 }
