@@ -105,4 +105,16 @@ class Names : private BuilderOf<internal::NamesInfo> {
   friend class BuilderAccessor;
 };
 
+class FileType {
+ public:
+  explicit FileType(const char* mode) : mode_(internal::CharsToMode(mode)) {}
+  explicit FileType(std::ios_base::openmode mode)
+      : mode_(internal::StreamModeToMode(mode)) {}
+
+ private:
+  friend class BuilderAccessor;
+  OpenMode Build() const { return mode_; }
+  OpenMode mode_;
+};
+
 }  // namespace argparse

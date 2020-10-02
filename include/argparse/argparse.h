@@ -11,17 +11,6 @@
 // Holds public things
 namespace argparse {
 
-class FileType {
- public:
-  explicit FileType(const char* mode) : mode_(internal::CharsToMode(mode)) {}
-  explicit FileType(std::ios_base::openmode mode)
-      : mode_(internal::StreamModeToMode(mode)) {}
-  OpenMode mode() const { return mode_; }
-
- private:
-  OpenMode mode_;
-};
-
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
 // passed to argp_parse().
 enum Flags {
@@ -96,7 +85,7 @@ class Argument {
     return *this;
   }
   Argument& Type(FileType file_type) {
-    builder_->SetTypeFileType(file_type.mode());
+    builder_->SetTypeFileType(GetBuiltObject(&file_type));
     return *this;
   }
   Argument& ConstValue(AnyValue val) {
@@ -128,42 +117,46 @@ class Argument {
     return *this;
   }
 
+ private:
+  friend class BuilderAccessor;
   std::unique_ptr<internal::Argument> Build() {
     return builder_->CreateArgument();
   }
 
- private:
   std::unique_ptr<internal::ArgumentBuilder> builder_;
 };
 
 // This is a helper that provides add_argument().
-class AddArgumentHelper {
+class SupportAddArgument {
  public:
-  void Add(Argument& arg) {
-    return Add(std::move(arg));
+  SupportAddArgument& AddArgument(Argument& arg) {
+    return AddArgument(std::move(arg));
   }
-  void Add(Argument&& arg) {
-    return AddArgumentImpl(arg.Build());
+  SupportAddArgument& AddArgument(Argument&& arg) {
+    AddArgumentImpl(GetBuiltObject(&arg));
+    return *this;
   }
-  virtual ~AddArgumentHelper() {}
+  virtual ~SupportAddArgument() {}
 
  private:
   virtual void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) = 0;
 };
 
-class ArgumentGroup : public AddArgumentHelper {
+class ArgumentGroup : public SupportAddArgument {
  public:
   explicit ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
 
  private:
-  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {}
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
+    group_->AddArgument(std::move(arg));
+  }
   internal::ArgumentGroup* group_;
 };
 
 // If we can do add_argument_group(), add_argument() is always possible.
-class AddArgumentGroupHelper : public AddArgumentHelper {
+class SupportAddArgumentGroup : public SupportAddArgument {
  public:
-  ArgumentGroup Add(const char* header) {
+  ArgumentGroup AddArgumentGroup(const char* header) {
     ARGPARSE_DCHECK(header);
     return ArgumentGroup(AddArgumentGroupImpl(header));
   }
@@ -172,9 +165,9 @@ class AddArgumentGroupHelper : public AddArgumentHelper {
   virtual internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) = 0;
 };
 
-class SubParser : public AddArgumentGroupHelper {
+class SubCommandProxy : public SupportAddArgumentGroup {
  public:
-  explicit SubParser(internal::SubCommand* sub) : sub_(sub) {}
+  explicit SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
 
  private:
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
@@ -203,111 +196,106 @@ class SubCommand {
     return *this;
   }
 
+ private:
+  friend class BuilderAccessor;
   std::unique_ptr<internal::SubCommand> Build() {
     ARGPARSE_DCHECK(cmd_);
     return std::move(cmd_);
   }
 
- private:
   std::unique_ptr<internal::SubCommand> cmd_;
 };
 
-class SubParserGroup {
+class SubCommandGroupProxy {
  public:
-  explicit SubParserGroup(internal::SubCommandGroup* group) : group_(group) {}
+  explicit SubCommandGroupProxy(internal::SubCommandGroup* group)
+      : group_(group) {}
 
-  // Positional.
-  // SubParser add_parser(std::string name,
-  //                      std::string help = {},
-  //                      std::vector<std::string> aliases = {}) {
-  //   SubCommand builder(std::move(name));
-  //   builder.help(std::move(help)).aliases(std::move(aliases));
-  //   return add_parser(builder.Build());
-  // }
-
-  // Builder pattern.
-  SubParser Add(SubCommand cmd) {
-    // auto* cmd_ptr = group_->AddSubCommand(std::move(cmd));
-    // return SubParser(cmd_ptr);
+  SubCommandProxy AddParser(SubCommand cmd) {
+    auto real_cmd = GetBuiltObject(&cmd);
+    return SubCommandProxy(group_->AddSubCommand(std::move(real_cmd)));
   }
 
  private:
   internal::SubCommandGroup* group_;
 };
 
-// Support add(subparsers(...))
-class SubParsersBuilder {
+class SubCommandGroup {
  public:
-  explicit SubParsersBuilder() : group_(internal::SubCommandGroup::Create()) {}
+  explicit SubCommandGroup() : group_(internal::SubCommandGroup::Create()) {}
 
-  SubParsersBuilder& Title(std::string val) {
+  SubCommandGroup& Title(std::string val) {
     group_->SetTitle(std::move(val));
     return *this;
   }
 
-  SubParsersBuilder& Description(std::string val) {
+  SubCommandGroup& Description(std::string val) {
     group_->SetDescription(std::move(val));
     return *this;
   }
 
-  SubParsersBuilder& meta_var(std::string val) {
+  SubCommandGroup& MetaVar(std::string val) {
     group_->SetMetaVar(std::move(val));
     return *this;
   }
 
-  SubParsersBuilder& Help(std::string val) {
+  SubCommandGroup& Help(std::string val) {
     group_->SetHelpDoc(std::move(val));
     return *this;
   }
 
-  SubParsersBuilder& dest(Dest val) {
+  SubCommandGroup& Dest(Dest val) {
     group_->SetDest(GetBuiltObject(&val));
     return *this;
   }
 
-  std::unique_ptr<internal:: SubCommandGroup> Build() { return std::move(group_); }
-
  private:
+  friend class BuilderAccessor;
+  std::unique_ptr<internal::SubCommandGroup> Build() {
+    return std::move(group_);
+  }
   std::unique_ptr<internal::SubCommandGroup> group_;
 };
 
 // Interface of ArgumentParser.
-class MainParserHelper : public AddArgumentGroupHelper {
+class ArgumentParserInterface : public SupportAddArgumentGroup {
  public:
-  void parse_args(int argc, const char** argv) {
+  virtual ~ArgumentParserInterface() {}
+
+  using SupportAddArgumentGroup::AddArgument;
+  using SupportAddArgumentGroup::AddArgumentGroup;
+
+  void ParseArgs(int argc, const char** argv) {
     ParseArgsImpl(ArgArray(argc, argv), nullptr);
   }
-  void parse_args(std::vector<const char*> args) {
+  void ParseArgs(std::vector<const char*> args) {
     ParseArgsImpl(ArgArray(args), nullptr);
   }
-  bool parse_known_args(int argc,
-                        const char** argv,
-                        std::vector<std::string>* out) {
+  bool ParseKnownArgs(int argc,
+                      const char** argv,
+                      std::vector<std::string>* out) {
     return ParseArgsImpl(ArgArray(argc, argv), out);
   }
-  bool parse_known_args(std::vector<const char*> args,
-                        std::vector<std::string>* out) {
+  bool ParseKnownArgs(std::vector<const char*> args,
+                      std::vector<std::string>* out) {
     return ParseArgsImpl(args, out);
   }
 
-  // using AddArgumentGroupHelper::add_argument_group;
-  // using AddArgumentHelper::add_argument;
+  SubCommandGroupProxy AddSubParsers(SubCommandGroup&& group) {
+    return SubCommandGroupProxy(AddSubCommandGroupImpl(GetBuiltObject(&group)));
+  }
 
-  // SubParserGroup add_subparsers(std::unique_ptr<internal::SubCommandGroup> group) {
-  //   return SubParserGroup(AddSubParsersImpl(std::move(group)));
-  // }
-
-  SubParserGroup add_subparsers(SubParsersBuilder& subparsers) {
-    
+  SubCommandGroupProxy AddSubParsers(SubCommandGroup& group) {
+    return AddSubParsers(std::move(group));
   }
 
  private:
   virtual bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) = 0;
-  virtual internal::SubCommandGroup* AddSubParsersImpl(
+  virtual internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) = 0;
 };
 
-class ArgumentParser : public MainParserHelper {
+class ArgumentParser : public ArgumentParserInterface {
  public:
   ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
 
@@ -327,7 +315,7 @@ class ArgumentParser : public MainParserHelper {
   internal::ArgumentGroup* AddArgumentGroupImpl(const char* header) override {
     return controller_->GetMainHolder()->AddArgumentGroup(header);
   }
-internal::  SubCommandGroup* AddSubParsersImpl(
+  internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) override {
     return controller_->GetSubCommandHolder()->AddSubCommandGroup(
         std::move(group));
