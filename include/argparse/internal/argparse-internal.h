@@ -242,9 +242,8 @@ class ArgumentHolder {
   // Notify outside some event.
   class Listener {
    public:
-    virtual void OnAddArgument(Argument* arg, ArgumentHolder* holder) {}
-    virtual void OnAddArgumentGroup(ArgumentGroup* group,
-                                    ArgumentHolder* holder) {}
+    virtual void OnAddArgument(Argument* arg) {}
+    virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
     virtual ~Listener() {}
   };
 

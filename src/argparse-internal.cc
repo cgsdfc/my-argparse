@@ -622,7 +622,6 @@ void DefaultActionInfo::Run(CallbackClient* client) {
   }
 }
 
-
 class PositionalName : public NamesInfo {
  public:
   explicit PositionalName(std::string name) : name_(std::move(name)) {}
@@ -704,66 +703,42 @@ class OptionalNames : public NamesInfo {
   std::vector<std::string> short_names_;
 };
 
-class ArgumentControllerImpl : public ArgumentContainer {
+class ArgumentContainerImpl : public ArgumentContainer {
  public:
-  explicit ArgumentControllerImpl(
-      std::unique_ptr<ParserFactory> parser_factory);
+  explicit ArgumentContainerImpl();
 
-  ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
+  ArgumentHolder* GetMainHolder() override { 
+    return main_holder_.get(); }
   SubCommandHolder* GetSubCommandHolder() override {
     return subcmd_holder_.get();
   }
 
-  void SetOptions(std::unique_ptr<OptionsInfo> info) override {
-    SetDirty(true);
-    options_info_ = std::move(info);
+  void AddListener(std::unique_ptr<Listener> listener) override {
+    listeners_.push_back(std::move(listener));
   }
 
  private:
-  // Listen to events of argumentholder and subcommand holder.
   class ListenerImpl;
 
-  void SetDirty(bool dirty) { dirty_ = dirty; }
-  bool dirty() const { return dirty_; }
-  ArgumentParser* GetParser() override {
-    if (dirty() || !parser_) {
-      SetDirty(false);
-      parser_ = parser_factory_->CreateParser(nullptr);
-    }
-    return parser_.get();
-  }
-
-  bool dirty_ = false;
-  std::unique_ptr<ParserFactory> parser_factory_;
-  std::unique_ptr<ArgumentParser> parser_;
-  std::unique_ptr<OptionsInfo> options_info_;
   std::unique_ptr<ArgumentHolder> main_holder_;
   std::unique_ptr<SubCommandHolder> subcmd_holder_;
+  std::vector<std::unique_ptr<Listener>> listeners_;
 };
 
-class ArgumentControllerImpl::ListenerImpl : public ArgumentHolder::Listener,
-                                             public SubCommandHolder::Listener {
- public:
-  explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
+// class ArgumentContainerImpl::ListenerImpl : public ArgumentHolder::Listener,
+//                                              public SubCommandHolder::Listener {
+//  public:
+//   explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
 
- private:
-  void MarkDirty() { impl_->SetDirty(true); }
-  void OnAddArgument(Argument*) override { MarkDirty(); }
-  void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
-  void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
-  void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
+//  private:
+//   void MarkDirty() { impl_->SetDirty(true); }
+//   void OnAddArgument(Argument*) override { MarkDirty(); }
+//   void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
+//   void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
+//   void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
 
-  ArgumentControllerImpl* impl_;
-};
-
-ArgumentControllerImpl::ArgumentControllerImpl(
-    std::unique_ptr<ParserFactory> parser_factory)
-    : parser_factory_(std::move(parser_factory)),
-      main_holder_(ArgumentHolder::Create()),
-      subcmd_holder_(SubCommandHolder::Create()) {
-  main_holder_->SetListener(std::make_unique<ListenerImpl>(this));
-  subcmd_holder_->SetListener(std::make_unique<ListenerImpl>(this));
-}
+//   ArgumentControllerImpl* impl_;
+// };
 
 bool Argument::Less(Argument* a, Argument* b) {
   // options go before positionals.
@@ -816,11 +791,13 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(
     std::unique_ptr<Operations> ops) {
   return std::make_unique<DefaultTypeInfo>(std::move(ops));
 }
+
 std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
     std::unique_ptr<Operations> ops,
     OpenMode mode) {
   return std::make_unique<FileTypeInfo>(std::move(ops), mode);
 }
+
 // Invoke user's callback.
 std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
     std::unique_ptr<TypeCallback> cb) {
@@ -857,9 +834,6 @@ std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
 }
 
 std::unique_ptr<ArgumentContainer> ArgumentContainer::Create() {
-  // if (g_parser_factory_callback)
-  //   return std::make_unique<ArgumentControllerImpl>(
-  //       g_parser_factory_callback());
   return nullptr;
 }
 
