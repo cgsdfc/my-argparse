@@ -704,7 +704,7 @@ class OptionalNames : public NamesInfo {
   std::vector<std::string> short_names_;
 };
 
-class ArgumentControllerImpl : public ArgumentController {
+class ArgumentControllerImpl : public ArgumentContainer {
  public:
   explicit ArgumentControllerImpl(
       std::unique_ptr<ParserFactory> parser_factory);
@@ -725,7 +725,7 @@ class ArgumentControllerImpl : public ArgumentController {
 
   void SetDirty(bool dirty) { dirty_ = dirty; }
   bool dirty() const { return dirty_; }
-  Parser* GetParser() override {
+  ArgumentParser* GetParser() override {
     if (dirty() || !parser_) {
       SetDirty(false);
       parser_ = parser_factory_->CreateParser(nullptr);
@@ -735,7 +735,7 @@ class ArgumentControllerImpl : public ArgumentController {
 
   bool dirty_ = false;
   std::unique_ptr<ParserFactory> parser_factory_;
-  std::unique_ptr<Parser> parser_;
+  std::unique_ptr<ArgumentParser> parser_;
   std::unique_ptr<OptionsInfo> options_info_;
   std::unique_ptr<ArgumentHolder> main_holder_;
   std::unique_ptr<SubCommandHolder> subcmd_holder_;
@@ -856,7 +856,7 @@ std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
   return std::make_unique<OptionalNames>(in);
 }
 
-std::unique_ptr<ArgumentController> ArgumentController::Create() {
+std::unique_ptr<ArgumentContainer> ArgumentContainer::Create() {
   // if (g_parser_factory_callback)
   //   return std::make_unique<ArgumentControllerImpl>(
   //       g_parser_factory_callback());

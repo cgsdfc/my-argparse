@@ -20,7 +20,7 @@ class ArgumentGroup;
 class SubCommandGroup;
 
 // argparse-parser.h
-class Parser;
+class ArgumentParser;
 class OptionsInfo;
 
 bool IsValidPositionalName(const std::string& name);
@@ -242,8 +242,9 @@ class ArgumentHolder {
   // Notify outside some event.
   class Listener {
    public:
-    virtual void OnAddArgument(Argument* arg) {}
-    virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
+    virtual void OnAddArgument(Argument* arg, ArgumentHolder* holder) {}
+    virtual void OnAddArgumentGroup(ArgumentGroup* group,
+                                    ArgumentHolder* holder) {}
     virtual ~Listener() {}
   };
 
@@ -412,43 +413,79 @@ struct OptionsInfo {
   // HelpFilterCallback help_filter;
 };
 
-// Parser contains everythings it needs to parse arguments.
-class Parser {
+// ArgumentParser has some standard options to tune its behaviours.
+class OptionsListener {
  public:
-  virtual ~Parser() {}
+  virtual ~OptionsListener() {}
+  virtual void SetProgramVersion(std::string val) = 0;
+  virtual void SetDescription(std::string val) = 0;
+  virtual void SetEmail(std::string val) = 0;
+  virtual void SetProgramName(std::string val) = 0;
+};
+
+// internal::ArgumentParser is the analogy of argparse::ArgumentParser,
+// except that its methods take internal objects as inputs.
+// ArgumentController exposes ArgumentContainer to receive user's input,
+// and feeds the notification of ArgumentContainer to ArgumentParser through
+// adapter so that the latter can build its data-structure that is optimized for
+// parsing arguments.
+class ArgumentParser {
+ public:
+  virtual ~ArgumentParser() {}
+  virtual std::unique_ptr<OptionsListener> CreateOptionsListener() = 0;
+  virtual void AddArgument(Argument* arg, SubCommand* cmd) = 0;
+  virtual void AddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) = 0;
+  virtual void AddSubCommand(SubCommand* cmd, SubCommandGroup* group) = 0;
+
   // Parse args, if rest is null, exit on error. Otherwise put unknown ones into
   // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
+  static std::unique_ptr<ArgumentParser> CreateDefault();
 };
 
-class ParserFactory {
+// ArgumentContainer contains everything user plugs into us, namely,
+// Arguments, ArgumentGroups, SubCommands, SubCommandGroups, etc.
+// It keeps all these objects alive as long as it is alive.
+// It also sends out notifications of events of the insertion of these objects.
+// It's main role is to receive and hold things, providing iteration methods,
+// etc.
+class ArgumentContainer {
  public:
-  // Interaction when creating parser.
-  class Delegate {
+  class Listener {
    public:
-    virtual ~Delegate() {}
-    virtual std::unique_ptr<OptionsInfo> GetOptions() = 0;
-    virtual ArgumentHolder* GetMainHolder() = 0;
-    virtual SubCommandHolder* GetSubCommandHolder() = 0;
+    virtual ~Listener() {}
+    // TODO: make
+    // argument->argument_group->argument_holder->subcommand->subcommand_group
+    // chain.
+    virtual void OnAddArgument(Argument* arg) {}
+    virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
+    virtual void OnAddSubCommand(SubCommand* cmd) {}
+    virtual void OnAddSubCommandGroup(SubCommandGroup* group) {}
   };
-
-  virtual ~ParserFactory() {}
-  virtual std::unique_ptr<Parser> CreateParser(
-      std::unique_ptr<Delegate> delegate) = 0;
-
-  using Callback = std::unique_ptr<ParserFactory> (*)();
-  static void RegisterCallback(Callback callback);
+  virtual ~ArgumentContainer() {}
+  virtual void AddListener(std::unique_ptr<Listener> listener);
+  virtual ArgumentHolder* GetMainHolder() = 0;
+  virtual SubCommandHolder* GetSubCommandHolder() = 0;
+  static std::unique_ptr<ArgumentContainer> Create();
 };
 
-// Combination of Holder and Parser. ArgumentParser should be impl'ed in terms
-// of this.
+// This combines the functionality of ArgumentContainer and ArgumentParser and
+// connects them. It exposes an interface that is directly usable by the wrapper
+// layers.
 class ArgumentController {
  public:
   virtual ~ArgumentController() {}
-  virtual ArgumentHolder* GetMainHolder() = 0;
-  virtual SubCommandHolder* GetSubCommandHolder() = 0;
-  virtual void SetOptions(std::unique_ptr<OptionsInfo> info) = 0;
-  virtual Parser* GetParser() = 0;
+
+  // Methods forwarded from ArgumentContainer.
+  virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
+  virtual ArgumentGroup* AddArgumentGroup(std::string title) = 0;
+  virtual SubCommandGroup* AddSubCommandGroup(
+      std::unique_ptr<SubCommandGroup> group) = 0;
+
+  // Methods forwarded from ArgumentParser.
+  virtual OptionsListener* GetOptionsListener() = 0;
+  virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
+
   static std::unique_ptr<ArgumentController> Create();
 };
 

@@ -296,7 +296,7 @@ class ArgumentParserInterface : public SupportAddArgumentGroup {
 
 class ArgumentParser : public ArgumentParserInterface {
  public:
-  ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
+  ArgumentParser() : controller_(internal::ArgumentContainer::Create()) {}
 
   explicit ArgumentParser(Options options) : ArgumentParser() {
     if (options.info)
@@ -320,7 +320,7 @@ class ArgumentParser : public ArgumentParserInterface {
         std::move(group));
   }
 
-  std::unique_ptr<internal::ArgumentController> controller_;
+  std::unique_ptr<internal::ArgumentContainer> controller_;
 };
 
 }  // namespace argparse
