@@ -97,8 +97,6 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   unsigned GetArgumentCount() override { return arguments_.size(); }
 
-  // TODO: merge listener into one class about the events during argument
-  // adding.
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
   }
@@ -176,6 +174,11 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
       if (arg->GetGroup() == this)
         callback(arg.get());
     }
+  }
+
+  ArgumentHolder* GetHolder() override {
+    ARGPARSE_DCHECK(holder_);
+    return holder_;
   }
 
  private:
@@ -763,6 +766,64 @@ class ArgumentContainerImpl::ListenerImpl : ArgumentHolder::Listener,
   ArgumentContainerImpl* impl_;
 };
 
+class ArgumentControllerImpl : public ArgumentController {
+ public:
+  ArgumentControllerImpl();
+
+  void AddArgument(std::unique_ptr<Argument> arg) override {
+    ARGPARSE_DCHECK(arg);
+    container_->GetMainHolder()->AddArgument(std::move(arg));
+  }
+
+  ArgumentGroup* AddArgumentGroup(std::string title) override {
+    return container_->GetMainHolder()->AddArgumentGroup(std::move(title));
+  }
+
+  SubCommandGroup* AddSubCommandGroup(
+      std::unique_ptr<SubCommandGroup> group) override {
+    return container_->GetSubCommandHolder()->AddSubCommandGroup(
+        std::move(group));
+  }
+
+  // Methods forwarded from ArgumentParser.
+  OptionsListener* GetOptionsListener() override {
+    return options_listener_.get();
+  }
+
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) override {
+    return parser_->ParseKnownArgs(args, out);
+  }
+
+ private:
+  class ForwardToParserListener;
+
+  std::unique_ptr<ArgumentContainer> container_;
+  std::unique_ptr<ArgumentParser> parser_;
+  std::unique_ptr<OptionsListener> options_listener_;
+};
+
+class ArgumentControllerImpl::ForwardToParserListener
+    : ArgumentContainer::Listener {
+ public:
+ private:
+  void OnAddArgument(Argument* arg) { return parser_->AddArgument(arg); }
+  void OnAddArgumentGroup(ArgumentGroup* group) {
+    return parser_->AddArgumentGroup(group);
+  }
+  void OnAddSubCommand(SubCommand* cmd) { return parser_->AddSubCommand(cmd); }
+  void OnAddSubCommandGroup(SubCommandGroup* group) {
+    return parser_->AddSubCommandGroup(group);
+  }
+
+  ArgumentParser* parser_;
+};
+
+ArgumentControllerImpl::ArgumentControllerImpl()
+    : container_(ArgumentContainer::Create()),
+      parser_(ArgumentParser::CreateDefault()) {
+  options_listener_ = parser_->CreateOptionsListener();
+}
+
 ArgumentContainerImpl::ArgumentContainerImpl()
     : main_holder_(ArgumentHolder::Create()),
       subcmd_holder_(SubCommandHolder::Create()) {
@@ -866,6 +927,10 @@ std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
 std::unique_ptr<ArgumentContainer> ArgumentContainer::Create() {
   return std::make_unique<ArgumentContainerImpl>();
 }
+
+std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {}
+
+std::unique_ptr<ArgumentController> ArgumentController::Create() {}
 
 std::string ModeToChars(OpenMode mode) {
   std::string m;

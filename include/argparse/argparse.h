@@ -296,7 +296,7 @@ class ArgumentParserInterface : public SupportAddArgumentGroup {
 
 class ArgumentParser : public ArgumentParserInterface {
  public:
-  ArgumentParser() : controller_(internal::ArgumentContainer::Create()) {}
+  ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
 
   explicit ArgumentParser(Options options) : ArgumentParser() {
     // if (options.info)
@@ -306,21 +306,20 @@ class ArgumentParser : public ArgumentParserInterface {
  private:
   bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) override {
     ARGPARSE_DCHECK(out);
-    // return controller_->GetParser()->ParseKnownArgs(args, out);
+    return controller_->ParseKnownArgs(args, out);
   }
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
-    // return controller_->GetMainHolder()->AddArgument(std::move(arg));
+    return controller_->AddArgument(std::move(arg));
   }
   internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) override {
-    // return controller_->GetMainHolder()->AddArgumentGroup(std::move(header));
+    return controller_->AddArgumentGroup(std::move(header));
   }
   internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) override {
-    // return controller_->GetSubCommandHolder()->AddSubCommandGroup(
-        // std::move(group));
+    return controller_->AddSubCommandGroup(std::move(group));
   }
 
-  std::unique_ptr<internal::ArgumentContainer> controller_;
+  std::unique_ptr<internal::ArgumentController> controller_;
 };
 
 }  // namespace argparse

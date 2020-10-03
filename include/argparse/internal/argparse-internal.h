@@ -17,6 +17,7 @@ namespace internal {
 // argparse-holder.h
 class Argument;
 class ArgumentGroup;
+class ArgumentHolder;
 class SubCommandGroup;
 
 // argparse-parser.h
@@ -171,6 +172,7 @@ class ArgumentGroup {
   // Add an arg to this group.
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual unsigned GetArgumentCount() = 0;
+  virtual ArgumentHolder* GetHolder() = 0;
 };
 
 class Argument {
@@ -433,10 +435,10 @@ class ArgumentParser {
  public:
   virtual ~ArgumentParser() {}
   virtual std::unique_ptr<OptionsListener> CreateOptionsListener() = 0;
-  virtual void AddArgument(Argument* arg, SubCommand* cmd) = 0;
-  virtual void AddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) = 0;
-  virtual void AddSubCommand(SubCommand* cmd, SubCommandGroup* group) = 0;
-
+  virtual void AddArgument(Argument* arg) = 0;
+  virtual void AddArgumentGroup(ArgumentGroup* group) = 0;
+  virtual void AddSubCommand(SubCommand* cmd) = 0;
+  virtual void AddSubCommandGroup(SubCommandGroup* group) = 0;
   // Parse args, if rest is null, exit on error. Otherwise put unknown ones into
   // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
