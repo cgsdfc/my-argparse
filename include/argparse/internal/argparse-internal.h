@@ -245,6 +245,7 @@ class ArgumentHolder {
     virtual void OnAddArgument(Argument* arg) {}
     virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
     virtual ~Listener() {}
+    // void Listen(ArgumentHolder* holder);
   };
 
   virtual void SetListener(std::unique_ptr<Listener> listener) {}
@@ -462,7 +463,7 @@ class ArgumentContainer {
     virtual void OnAddSubCommandGroup(SubCommandGroup* group) {}
   };
   virtual ~ArgumentContainer() {}
-  virtual void AddListener(std::unique_ptr<Listener> listener);
+  virtual void AddListener(std::unique_ptr<Listener> listener) = 0;
   virtual ArgumentHolder* GetMainHolder() = 0;
   virtual SubCommandHolder* GetSubCommandHolder() = 0;
   static std::unique_ptr<ArgumentContainer> Create();

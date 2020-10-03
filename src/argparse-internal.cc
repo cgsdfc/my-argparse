@@ -705,19 +705,26 @@ class OptionalNames : public NamesInfo {
 
 class ArgumentContainerImpl : public ArgumentContainer {
  public:
-  explicit ArgumentContainerImpl();
+  ArgumentContainerImpl();
 
-  ArgumentHolder* GetMainHolder() override { 
-    return main_holder_.get(); }
+  ArgumentHolder* GetMainHolder() override { return main_holder_.get(); }
   SubCommandHolder* GetSubCommandHolder() override {
     return subcmd_holder_.get();
   }
 
   void AddListener(std::unique_ptr<Listener> listener) override {
+    ARGPARSE_DCHECK(listener);
     listeners_.push_back(std::move(listener));
   }
 
  private:
+  template <typename Method, typename... Args>
+  void NotifyListeners(Method method, Args&&... args) {
+    for (auto& listener : listeners_) {
+      ((*listener).*method)(std::forward<Args>(args)...);
+    }
+  }
+
   class ListenerImpl;
 
   std::unique_ptr<ArgumentHolder> main_holder_;
@@ -725,20 +732,43 @@ class ArgumentContainerImpl : public ArgumentContainer {
   std::vector<std::unique_ptr<Listener>> listeners_;
 };
 
-// class ArgumentContainerImpl::ListenerImpl : public ArgumentHolder::Listener,
-//                                              public SubCommandHolder::Listener {
-//  public:
-//   explicit ListenerImpl(ArgumentControllerImpl* impl) : impl_(impl) {}
+class ArgumentContainerImpl::ListenerImpl : ArgumentHolder::Listener,
+                                            SubCommandHolder::Listener {
+ public:
+  explicit ListenerImpl(ArgumentContainerImpl* impl) : impl_(impl) {}
 
-//  private:
-//   void MarkDirty() { impl_->SetDirty(true); }
-//   void OnAddArgument(Argument*) override { MarkDirty(); }
-//   void OnAddArgumentGroup(ArgumentGroup*) override { MarkDirty(); }
-//   void OnAddSubCommand(SubCommand*) override { MarkDirty(); }
-//   void OnAddSubCommandGroup(SubCommandGroup*) override { MarkDirty(); }
+  void Listen(ArgumentHolder* holder) {
+    holder->SetListener(std::unique_ptr<ArgumentHolder::Listener>(this));
+  }
+  void Listen(SubCommandHolder* holder) {
+    holder->SetListener(std::unique_ptr<SubCommandHolder::Listener>(this));
+  }
 
-//   ArgumentControllerImpl* impl_;
-// };
+ private:
+  void OnAddArgument(Argument* arg) override {
+    impl_->NotifyListeners(&ArgumentContainer::Listener::OnAddArgument, arg);
+  }
+  void OnAddArgumentGroup(ArgumentGroup* group) override {
+    impl_->NotifyListeners(&ArgumentContainer::Listener::OnAddArgumentGroup,
+                           group);
+  }
+  void OnAddSubCommand(SubCommand* cmd) override {
+    impl_->NotifyListeners(&ArgumentContainer::Listener::OnAddSubCommand, cmd);
+  }
+  void OnAddSubCommandGroup(SubCommandGroup* group) override {
+    impl_->NotifyListeners(&ArgumentContainer::Listener::OnAddSubCommandGroup,
+                           group);
+  }
+
+  ArgumentContainerImpl* impl_;
+};
+
+ArgumentContainerImpl::ArgumentContainerImpl()
+    : main_holder_(ArgumentHolder::Create()),
+      subcmd_holder_(SubCommandHolder::Create()) {
+  (new ListenerImpl(this))->Listen(main_holder_.get());
+  (new ListenerImpl(this))->Listen(subcmd_holder_.get());
+}
 
 bool Argument::Less(Argument* a, Argument* b) {
   // options go before positionals.
@@ -834,7 +864,7 @@ std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
 }
 
 std::unique_ptr<ArgumentContainer> ArgumentContainer::Create() {
-  return nullptr;
+  return std::make_unique<ArgumentContainerImpl>();
 }
 
 std::string ModeToChars(OpenMode mode) {
