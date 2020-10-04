@@ -1,3 +1,8 @@
+// Copyright (c) 2020 Feng Cong
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 #include "argparse/argparse.h"
 
 namespace argparse {

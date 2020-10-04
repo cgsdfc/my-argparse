@@ -46,6 +46,13 @@ inline std::string ToUpper(const std::string& in) {
   return out;
 }
 
+// Control whether some extra info appear in the help doc.
+enum class HelpFormatPolicy {
+  kDefault,           // add nothing.
+  kTypeHint,          // add (type: <type-hint>) to help doc.
+  kDefaultValueHint,  // add (default: <default-value>) to help doc.
+};
+
 enum class ActionKind {
   kNoAction,
   kStore,
@@ -137,8 +144,7 @@ class ActionInfo {
   virtual void Run(CallbackClient* client) = 0;
 
   static std::unique_ptr<ActionInfo> CreateDefault(
-      ActionKind action_kind,
-      std::unique_ptr<Operations> ops);
+      ActionKind action_kind, std::unique_ptr<Operations> ops);
 
   static std::unique_ptr<ActionInfo> CreateFromCallback(
       std::unique_ptr<ActionCallback> cb);
@@ -155,8 +161,7 @@ class TypeInfo {
       std::unique_ptr<Operations> ops);
   // Open a file.
   static std::unique_ptr<TypeInfo> CreateFileType(
-      std::unique_ptr<Operations> ops,
-      OpenMode mode);
+      std::unique_ptr<Operations> ops, OpenMode mode);
   // Invoke user's callback.
   static std::unique_ptr<TypeInfo> CreateFromCallback(
       std::unique_ptr<TypeCallback> cb);
