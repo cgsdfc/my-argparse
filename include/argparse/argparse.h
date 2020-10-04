@@ -244,15 +244,14 @@ class ArgumentParser : public SupportAddArgumentGroup {
   }
 
   void ParseArgs(int argc, const char** argv) {
-    ParseArgsImpl(ArgArray(argc, argv), nullptr);
+    ParseArgsImpl({argc, argv}, nullptr);
   }
   void ParseArgs(std::vector<const char*> args) {
-    ParseArgsImpl(ArgArray(args), nullptr);
+    ParseArgsImpl(args, nullptr);
   }
-  bool ParseKnownArgs(int argc,
-                      const char** argv,
+  bool ParseKnownArgs(int argc, const char** argv,
                       std::vector<std::string>* out) {
-    return ParseArgsImpl(ArgArray(argc, argv), out);
+    return ParseArgsImpl({argc, argv}, out);
   }
   bool ParseKnownArgs(std::vector<const char*> args,
                       std::vector<std::string>* out) {
@@ -266,7 +265,7 @@ class ArgumentParser : public SupportAddArgumentGroup {
   }
 
  private:
-  bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) {
+  bool ParseArgsImpl(internal::ArgArray args, std::vector<std::string>* out) {
     ARGPARSE_DCHECK(out);
     return controller_->ParseKnownArgs(args, out);
   }

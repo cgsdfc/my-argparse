@@ -10,6 +10,7 @@
 #include "argparse/internal/argparse-port.h"
 
 namespace argparse {
+namespace internal {
 
 class ArgArray {
  public:
@@ -32,4 +33,5 @@ class ArgArray {
   char** argv_;
 };
 
+}  // namespace internal
 }  // namespace argparse

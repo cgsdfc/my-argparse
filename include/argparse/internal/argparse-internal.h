@@ -9,14 +9,12 @@
 #include <memory>      // unique_ptr
 #include <vector>      // vector
 
-#include "argparse/argparse-arg-array.h"
+#include "argparse/internal/argparse-arg-array.h"
 #include "argparse/internal/argparse-operations.h"
 #include "argparse/internal/argparse-port.h"
 
 // For now, this file should only hold interfaces of core classes.
 namespace argparse {
-class ArgArray;
-
 namespace internal {
 
 class Argument;
