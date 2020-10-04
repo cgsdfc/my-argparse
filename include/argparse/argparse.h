@@ -20,39 +20,6 @@ enum Flags {
   // kNoExit = ARGP_NO_EXIT,
 };
 
-// Options to ArgumentParser constructor.
-// TODO: rename to OptionsBuilder and typedef.
-struct Options {
-  // Only the most common options are listed in this list.
-  Options() : info(new internal::OptionsInfo) {}
-  Options& version(const char* v) {
-    info->program_version = v;
-    return *this;
-  }
-  Options& description(const char* d) {
-    info->description = d;
-    return *this;
-  }
-  Options& after_doc(const char* a) {
-    info->after_doc = a;
-    return *this;
-  }
-  Options& domain(const char* d) {
-    info->domain = d;
-    return *this;
-  }
-  Options& email(const char* b) {
-    info->email = b;
-    return *this;
-  }
-  Options& flags(Flags f) {
-    info->flags |= f;
-    return *this;
-  }
-
-  std::unique_ptr<internal::OptionsInfo> info;
-};
-
 class Argument {
  public:
   explicit Argument(Names names, Dest dest = {}, const char* help = {})
@@ -144,7 +111,7 @@ class SupportAddArgument {
 
 class ArgumentGroup : public SupportAddArgument {
  public:
-  explicit ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
+  ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
 
  private:
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
@@ -157,7 +124,7 @@ class ArgumentGroup : public SupportAddArgument {
 class SupportAddArgumentGroup : public SupportAddArgument {
  public:
   ArgumentGroup AddArgumentGroup(std::string header) {
-    return ArgumentGroup(AddArgumentGroupImpl(std::move(header)));
+    return AddArgumentGroupImpl(std::move(header));
   }
 
  private:
@@ -166,7 +133,7 @@ class SupportAddArgumentGroup : public SupportAddArgument {
 
 class SubCommandProxy : public SupportAddArgumentGroup {
  public:
-  explicit SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
+  SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
 
  private:
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
@@ -207,12 +174,11 @@ class SubCommand {
 
 class SubCommandGroupProxy {
  public:
-  explicit SubCommandGroupProxy(internal::SubCommandGroup* group)
-      : group_(group) {}
+  SubCommandGroupProxy(internal::SubCommandGroup* group) : group_(group) {}
 
   SubCommandProxy AddParser(SubCommand cmd) {
     auto real_cmd = GetBuiltObject(&cmd);
-    return SubCommandProxy(group_->AddSubCommand(std::move(real_cmd)));
+    return group_->AddSubCommand(std::move(real_cmd));
   }
 
  private:
@@ -256,13 +222,26 @@ class SubCommandGroup {
   std::unique_ptr<internal::SubCommandGroup> group_;
 };
 
-// Interface of ArgumentParser.
-class ArgumentParserInterface : public SupportAddArgumentGroup {
+class ArgumentParser : public SupportAddArgumentGroup {
  public:
-  virtual ~ArgumentParserInterface() {}
+  ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
 
-  using SupportAddArgumentGroup::AddArgument;
-  using SupportAddArgumentGroup::AddArgumentGroup;
+  ArgumentParser& Description(std::string val) {
+    GetOptions()->SetDescription(std::move(val));
+    return *this;
+  }
+  ArgumentParser& ProgramVersion(std::string val) {
+    GetOptions()->SetProgramVersion(std::move(val));
+    return *this;
+  }
+  ArgumentParser& Email(std::string val) {
+    GetOptions()->SetEmail(std::move(val));
+    return *this;
+  }
+  ArgumentParser& ProgramName(std::string& val) {
+    GetOptions()->SetProgramName(std::move(val));
+    return *this;
+  }
 
   void ParseArgs(int argc, const char** argv) {
     ParseArgsImpl(ArgArray(argc, argv), nullptr);
@@ -279,44 +258,30 @@ class ArgumentParserInterface : public SupportAddArgumentGroup {
                       std::vector<std::string>* out) {
     return ParseArgsImpl(args, out);
   }
-
   SubCommandGroupProxy AddSubParsers(SubCommandGroup&& group) {
-    return SubCommandGroupProxy(AddSubCommandGroupImpl(GetBuiltObject(&group)));
+    return AddSubCommandGroupImpl(GetBuiltObject(&group));
   }
-
   SubCommandGroupProxy AddSubParsers(SubCommandGroup& group) {
     return AddSubParsers(std::move(group));
   }
 
  private:
-  virtual bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) = 0;
-  virtual internal::SubCommandGroup* AddSubCommandGroupImpl(
-      std::unique_ptr<internal::SubCommandGroup> group) = 0;
-};
-
-class ArgumentParser : public ArgumentParserInterface {
- public:
-  ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
-
-  explicit ArgumentParser(Options options) : ArgumentParser() {
-    // if (options.info)
-    //   controller_->SetOptions(std::move(options.info));
-  }
-
- private:
-  bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) override {
+  bool ParseArgsImpl(ArgArray args, std::vector<std::string>* out) {
     ARGPARSE_DCHECK(out);
     return controller_->ParseKnownArgs(args, out);
   }
-  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {
     return controller_->AddArgument(std::move(arg));
   }
-  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) override {
+  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) {
     return controller_->AddArgumentGroup(std::move(header));
   }
   internal::SubCommandGroup* AddSubCommandGroupImpl(
-      std::unique_ptr<internal::SubCommandGroup> group) override {
+      std::unique_ptr<internal::SubCommandGroup> group) {
     return controller_->AddSubCommandGroup(std::move(group));
+  }
+  internal::OptionsListener* GetOptions() {
+    return controller_->GetOptionsListener();
   }
 
   std::unique_ptr<internal::ArgumentController> controller_;

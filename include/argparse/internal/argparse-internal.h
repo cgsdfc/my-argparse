@@ -1,3 +1,8 @@
+// Copyright (c) 2020 Feng Cong
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 #pragma once
 
 #include <functional>  // function
@@ -14,15 +19,11 @@ class ArgArray;
 
 namespace internal {
 
-// argparse-holder.h
 class Argument;
 class ArgumentGroup;
 class ArgumentHolder;
 class SubCommandGroup;
-
-// argparse-parser.h
 class ArgumentParser;
-class OptionsInfo;
 
 bool IsValidPositionalName(const std::string& name);
 
@@ -398,21 +399,6 @@ class ArgumentBuilder {
   virtual std::unique_ptr<Argument> CreateArgument() = 0;
 
   static std::unique_ptr<ArgumentBuilder> Create();
-};
-
-// Main options passed to the parser.
-// TODO: rename to ParserOptions.
-struct OptionsInfo {
-  int flags = 0;
-  // TODO: may change some of these to std::string to allow dynamic generated
-  // content.
-  const char* program_version = {};
-  const char* description = {};
-  const char* after_doc = {};
-  const char* domain = {};
-  const char* email = {};
-  // ProgramVersionCallback program_version_callback;
-  // HelpFilterCallback help_filter;
 };
 
 // ArgumentParser has some standard options to tune its behaviours.

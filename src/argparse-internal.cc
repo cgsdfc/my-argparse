@@ -928,9 +928,13 @@ std::unique_ptr<ArgumentContainer> ArgumentContainer::Create() {
   return std::make_unique<ArgumentContainerImpl>();
 }
 
-std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {}
+std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
+  return nullptr;
+}
 
-std::unique_ptr<ArgumentController> ArgumentController::Create() {}
+std::unique_ptr<ArgumentController> ArgumentController::Create() {
+  return std::make_unique<ArgumentControllerImpl>();
+}
 
 std::string ModeToChars(OpenMode mode) {
   std::string m;
