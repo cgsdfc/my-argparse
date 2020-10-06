@@ -194,7 +194,7 @@ template <typename T>
 struct DefaultParseTraits<T, std::enable_if_t<internal::IsNumericType<T>{}>> {
   static void Run(const std::string& in, Result<T>* out) {
     try {
-      *out = internal::StlParseNumber<T>(in);
+      *out = internal::STLParseNumeric<T>(in);
     } catch (std::invalid_argument&) {
       out->SetError("invalid numeric format");
     } catch (std::out_of_range&) {
