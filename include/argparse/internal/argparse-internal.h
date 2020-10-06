@@ -20,8 +20,14 @@ namespace internal {
 class Argument;
 class ArgumentGroup;
 class ArgumentHolder;
+
+class SubCommand;
 class SubCommandGroup;
+class SubCommandHolder;
+
+class ArgumentContainer;
 class ArgumentParser;
+class ArgumentController;
 
 bool IsValidPositionalName(const std::string& name);
 
@@ -251,9 +257,9 @@ class ArgumentHolder {
     virtual void OnAddArgument(Argument* arg) {}
     virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
     virtual ~Listener() {}
-    // void Listen(ArgumentHolder* holder);
   };
 
+  virtual SubCommand* GetSubCommand() = 0;
   virtual void SetListener(std::unique_ptr<Listener> listener) {}
   virtual ArgumentGroup* AddArgumentGroup(std::string header) = 0;
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
@@ -262,7 +268,7 @@ class ArgumentHolder {
   // method to add arg to default group.
   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
   virtual ~ArgumentHolder() {}
-  static std::unique_ptr<ArgumentHolder> Create();
+  static std::unique_ptr<ArgumentHolder> Create(SubCommand* cmd);
 
   void CopyArguments(std::vector<Argument*>* out) {
     out->clear();
@@ -308,6 +314,7 @@ class SubCommandGroup {
   virtual void SetRequired(bool val) = 0;
   virtual void SetHelpDoc(std::string val) = 0;
   virtual void SetMetaVar(std::string val) = 0;
+  virtual void SetHolder(SubCommandHolder* holder) = 0;
 
   virtual StringView GetTitle() = 0;
   virtual StringView GetDescription() = 0;
@@ -316,7 +323,7 @@ class SubCommandGroup {
   virtual bool IsRequired() = 0;
   virtual StringView GetHelpDoc() = 0;
   virtual StringView GetMetaVar() = 0;
-  // TODO: change all const char* to StringView..
+  virtual SubCommandHolder* GetHolder() = 0;
 
   static std::unique_ptr<SubCommandGroup> Create();
 };
@@ -324,9 +331,11 @@ class SubCommandGroup {
 // Like ArgumentHolder, but holds subcommands.
 class SubCommandHolder {
  public:
-  class Listener {
+  class Listener  {
    public:
     virtual ~Listener() {}
+    virtual void OnAddArgument(Argument* arg) {}
+    virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
     virtual void OnAddSubCommandGroup(SubCommandGroup* group) {}
     virtual void OnAddSubCommand(SubCommand* sub) {}
   };

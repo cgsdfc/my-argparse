@@ -76,10 +76,11 @@ class ArgumentImpl : public Argument {
 
 class ArgumentHolderImpl : public ArgumentHolder {
  public:
-  ArgumentHolderImpl();
+  explicit ArgumentHolderImpl(SubCommand* cmd);
 
   ArgumentGroup* AddArgumentGroup(std::string header) override;
 
+  SubCommand* GetSubCommand() override { return subcmd_; }
   void AddArgument(std::unique_ptr<Argument> arg) override {
     auto* group =
         arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
@@ -111,6 +112,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   // Add an arg to a specific group.
   void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
+
   ArgumentGroup* GetDefaultOptionGroup() const {
     return groups_[kOptionGroup].get();
   }
@@ -120,6 +122,13 @@ class ArgumentHolderImpl : public ArgumentHolder {
 
   bool CheckNamesConflict(NamesInfo* names);
 
+  void NotifyAddArgumentGroup(ArgumentGroup* group) {
+    if (!listener_) return;
+    listener_->OnAddArgumentGroup(group);
+  }
+
+  SubCommand* subcmd_ = nullptr;
+  bool pending_default_groups_notification_ = true;
   std::unique_ptr<Listener> listener_;
   // Hold the storage of all args.
   std::vector<std::unique_ptr<Argument>> arguments_;
@@ -132,14 +141,14 @@ void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
                                             ArgumentGroup* group) {
   // First check if this arg will conflict with existing ones.
   ARGPARSE_CHECK_F(CheckNamesConflict(arg->GetNamesInfo()),
-                   "Names conflict with existing names!");
+                   "Argument names conflict with existing names!");
   arg->SetGroup(group);
   if (listener_)
     listener_->OnAddArgument(arg.get());
   arguments_.push_back(std::move(arg));
 }
 
-ArgumentHolderImpl::ArgumentHolderImpl() {
+ArgumentHolderImpl::ArgumentHolderImpl(SubCommand* cmd) : subcmd_(cmd) {
   AddArgumentGroup("optional arguments");
   AddArgumentGroup("positional arguments");
 }
@@ -190,14 +199,20 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
 ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(std::string header) {
   auto* group = new GroupImpl(this, header);
   groups_.emplace_back(group);
-  if (listener_)
-    listener_->OnAddArgumentGroup(group);
+
+  if (pending_default_groups_notification_) {
+    pending_default_groups_notification_ = false;
+    NotifyAddArgumentGroup(GetDefaultOptionGroup());
+    NotifyAddArgumentGroup(GetDefaultPositionalGroup());
+  }
+  NotifyAddArgumentGroup(group);
   return group;
 }
 
 class SubCommandImpl : public SubCommand {
  public:
-  explicit SubCommandImpl(std::string name) : name_(std::move(name)) {}
+  explicit SubCommandImpl(std::string name)
+      : name_(std::move(name)), holder_(ArgumentHolder::Create(this)) {}
 
   ArgumentHolder* GetHolder() override { return holder_.get(); }
   void SetGroup(SubCommandGroup* group) override { group_ = group; }
@@ -236,37 +251,61 @@ class SubCommandHolderImpl : public SubCommandHolder {
 
   SubCommandGroup* AddSubCommandGroup(
       std::unique_ptr<SubCommandGroup> group) override {
-    auto* g = group.get();
+    auto* group_ptr = group.get();
+    group_ptr->SetHolder(this);
     groups_.push_back(std::move(group));
-    return g;
+    NotifyAddSubCommandGroup(group_ptr);
+    return group_ptr;
   }
 
   void SetListener(std::unique_ptr<Listener> listener) override {
     listener_ = std::move(listener);
   }
 
- private:
+  // static std::unique_ptr<SubCommandGroup> CreateGroup();
+
   SubCommand* AddSubCommandToGroup(SubCommandGroup* group,
-                                   std::unique_ptr<SubCommand> cmd) {
-    cmd->SetGroup(group);
-    subcmds_.push_back(std::move(cmd));
-    return subcmds_.back().get();
+                                   std::unique_ptr<SubCommand> cmd);
+ private:
+  class GroupImpl;
+  class ListenerImpl;
+
+  bool CheckNamesConflict(SubCommand* cmd) {
+    if (!name_set_.insert(cmd->GetName()).second) return false;
+    bool ok = true;
+    cmd->ForEachAlias([this, &ok](const std::string& in) {
+      ok = ok && name_set_.insert(in).second;
+    });
+    return ok;
   }
+
+  void NotifyAddArgument(Argument* arg) {
+    if (listener_) listener_->OnAddArgument(arg);
+  }
+  void NotifyAddArgumentGroup(ArgumentGroup* group) {
+    if (listener_) listener_->OnAddArgumentGroup(group);
+  }
+  void NotifyAddSubCommand(SubCommand* cmd) {
+    if (listener_) listener_->OnAddSubCommand(cmd);
+  }
+  void NotifyAddSubCommandGroup(SubCommandGroup* group) {
+    if (listener_) listener_->OnAddSubCommandGroup(group);
+  }
+
 
   std::unique_ptr<Listener> listener_;
   std::vector<std::unique_ptr<SubCommand>> subcmds_;
   std::vector<std::unique_ptr<SubCommandGroup>> groups_;
+  std::set<std::string> name_set_;
 };
 
-class SubCommandGroupImpl : public SubCommandGroup {
+class GroupImpl : public SubCommandGroup {
  public:
-  SubCommandGroupImpl() = default;
+  GroupImpl() = default;
 
   SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd) override {
-    auto* cmd_ptr = cmd.get();
-    commands_.push_back(std::move(cmd));
-    cmd_ptr->SetGroup(this);
-    return cmd_ptr;
+    ARGPARSE_DCHECK(holder_);
+    return holder_->AddSubCommandToGroup(this, std::move(cmd));
   }
 
   void SetTitle(std::string val) override { title_ = std::move(val); }
@@ -282,6 +321,11 @@ class SubCommandGroupImpl : public SubCommandGroup {
   void SetRequired(bool val) override { required_ = val; }
   void SetHelpDoc(std::string val) override { help_doc_ = std::move(val); }
   void SetMetaVar(std::string val) override { meta_var_ = std::move(val); }
+  void SetHolder(SubCommandHolder* holder) override {
+    ARGPARSE_DCHECK(holder);
+    //TODO:
+    // holder_ = holder;
+  }
 
   StringView GetTitle() override { return title_; }
   StringView GetDescription() override { return description_; }
@@ -290,8 +334,10 @@ class SubCommandGroupImpl : public SubCommandGroup {
   bool IsRequired() override { return required_; }
   StringView GetHelpDoc() override { return help_doc_; }
   StringView GetMetaVar() override { return meta_var_; }
+  SubCommandHolder* GetHolder() override { return holder_; }
 
  private:
+  SubCommandHolderImpl* holder_ = nullptr;
   bool required_ = false;
   std::string title_;
   std::string description_;
@@ -299,8 +345,36 @@ class SubCommandGroupImpl : public SubCommandGroup {
   std::string meta_var_;
   std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfo> action_info_;
-  std::vector<std::unique_ptr<SubCommand>> commands_;
 };
+
+class SubCommandHolderImpl::ListenerImpl : public ArgumentHolder::Listener {
+ public:
+  explicit ListenerImpl(SubCommandHolderImpl* holder) : holder_(holder) {}
+
+ private:
+  void OnAddArgument(Argument* arg) override {
+    holder_->NotifyAddArgument(arg);
+  }
+  void OnAddArgumentGroup(ArgumentGroup* group) override {
+    holder_->NotifyAddArgumentGroup(group);
+  }
+  SubCommandHolderImpl* holder_;
+};
+
+SubCommand* SubCommandHolderImpl::AddSubCommandToGroup(
+    SubCommandGroup* group, std::unique_ptr<SubCommand> cmd) {
+  ARGPARSE_CHECK_F(CheckNamesConflict(cmd.get()),
+                   "SubCommand name or aliases conflict with existing names!");
+  auto* cmd_ptr = cmd.get();
+  cmd_ptr->SetGroup(group);
+  // Setup listener.
+  ARGPARSE_DCHECK(cmd_ptr->GetHolder());
+  cmd_ptr->GetHolder()->SetListener(std::make_unique<ListenerImpl>(this));
+  subcmds_.push_back(std::move(cmd));
+
+  if (listener_) listener_->OnAddSubCommand(cmd_ptr);
+  return cmd_ptr;
+}
 
 static ActionKind StringToActions(const std::string& str) {
   static const std::map<std::string, ActionKind> kStringToActions{
@@ -825,7 +899,7 @@ ArgumentControllerImpl::ArgumentControllerImpl()
 }
 
 ArgumentContainerImpl::ArgumentContainerImpl()
-    : main_holder_(ArgumentHolder::Create()),
+    : main_holder_(ArgumentHolder::Create(nullptr)),
       subcmd_holder_(SubCommandHolder::Create()) {
   (new ListenerImpl(this))->Listen(main_holder_.get());
   (new ListenerImpl(this))->Listen(subcmd_holder_.get());
@@ -854,7 +928,7 @@ bool Argument::Less(Argument* a, Argument* b) {
 }
 
 std::unique_ptr<SubCommandGroup> SubCommandGroup::Create() {
-  return std::make_unique<SubCommandGroupImpl>();
+  return std::make_unique<GroupImpl>();
 }
 
 std::unique_ptr<ArgumentBuilder> ArgumentBuilder::Create() {
@@ -866,8 +940,8 @@ std::unique_ptr<Argument> Argument::Create(std::unique_ptr<NamesInfo> info) {
   return std::make_unique<ArgumentImpl>(std::move(info));
 }
 
-std::unique_ptr<ArgumentHolder> ArgumentHolder::Create() {
-  return std::make_unique<ArgumentHolderImpl>();
+std::unique_ptr<ArgumentHolder> ArgumentHolder::Create(SubCommand* cmd) {
+  return std::make_unique<ArgumentHolderImpl>(cmd);
 }
 
 std::unique_ptr<SubCommand> SubCommand::Create(std::string name) {
