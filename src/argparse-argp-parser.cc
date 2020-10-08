@@ -13,7 +13,7 @@ namespace internal {
 class ArgumentNamespace {
 public:
     virtual ~ArgumentNamespace() {}
-    virtual Argument* 
+    // virtual Argument* 
 };
 
 class SubCommandNamespace {

@@ -168,7 +168,7 @@ struct OpsImpl<OpsKind::kStore, T, true> {
   static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto value = AnyCast<T>(std::move(data));
-      dest.store(std::move_if_noexcept(value));
+      dest.PutValue(std::move_if_noexcept(value));
     }
   }
 };
@@ -176,7 +176,7 @@ struct OpsImpl<OpsKind::kStore, T, true> {
 template <typename T>
 struct OpsImpl<OpsKind::kStoreConst, T, true> {
   static void Run(OpaquePtr dest, const Any& data) {
-    dest.store(AnyCast<T>(data));
+    dest.PutValue(AnyCast<T>(data));
   }
 };
 
@@ -184,7 +184,7 @@ template <typename T>
 struct OpsImpl<OpsKind::kAppend, T, true> {
   static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
-      auto* ptr = dest.load_ptr<T>();
+      auto* ptr = dest.Cast<T>();
       auto value = AnyCast<ValueTypeOf<T>>(std::move(data));
       AppendTraits<T>::Run(ptr, std::move_if_noexcept(value));
     }
@@ -194,7 +194,7 @@ struct OpsImpl<OpsKind::kAppend, T, true> {
 template <typename T>
 struct OpsImpl<OpsKind::kAppendConst, T, true> {
   static void Run(OpaquePtr dest, const Any& data) {
-    auto* ptr = dest.load_ptr<T>();
+    auto* ptr = dest.Cast<T>();
     auto value = AnyCast<ValueTypeOf<T>>(data);
     AppendTraits<T>::Run(ptr, value);
   }
@@ -203,7 +203,7 @@ struct OpsImpl<OpsKind::kAppendConst, T, true> {
 template <typename T>
 struct OpsImpl<OpsKind::kCount, T, true> {
   static void Run(OpaquePtr dest) {
-    auto* ptr = dest.load_ptr<T>();
+    auto* ptr = dest.Cast<T>();
     ++(*ptr);
   }
 };
@@ -334,7 +334,7 @@ class CustomActionCallback : public ActionCallback {
  private:
   void Run(OpaquePtr dest_ptr, std::unique_ptr<Any> data) override {
     Result<V> result(AnyCast<V>(std::move(data)));
-    auto* obj = dest_ptr.template load_ptr<T>();
+    auto* obj = dest_ptr.template Cast<T>();
     std::invoke(callback_, obj, std::move(result));
   }
 

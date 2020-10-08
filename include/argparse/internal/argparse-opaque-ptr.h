@@ -5,62 +5,81 @@
 
 #pragma once
 
+#include <typeindex>
+
+#include "argparse/internal/argparse-port.h"
+
 namespace argparse {
 namespace internal {
 
-// This is a type-erased type-safe void* wrapper.
+//  A type-erased type-safe void* wrapper.
 class OpaquePtr {
  public:
   template <typename T>
-  explicit OpaquePtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {}
+  explicit OpaquePtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {
+    ARGPARSE_DCHECK(ptr);
+  }
+
   OpaquePtr() = default;
+  OpaquePtr(std::nullptr_t) : OpaquePtr() {}
+  OpaquePtr(const OpaquePtr&) = default;
+  OpaquePtr& operator=(const OpaquePtr&) = default;
 
-  // Copy content to out.
-  template <typename T>
-  const T& load() const {
-    ARGPARSE_DCHECK(type_ == typeid(T));
-    return *reinterpret_cast<const T*>(ptr_);
+  bool operator==(const OpaquePtr& that) const {
+    return raw_value() == that.raw_value();
   }
-  template <typename T>
-  void load(T* out) const {
-    *out = load<T>();
-  }
-
-  template <typename T>
-  T* load_ptr() const {
-    ARGPARSE_DCHECK(type_ == typeid(T));
-    return reinterpret_cast<T*>(ptr_);
-  }
-  template <typename T>
-  void load_ptr(T** ptr_out) const {
-    *ptr_out = load_ptr<T>();
+  bool operator!=(const OpaquePtr& that) const {
+    return !(*this == that);
   }
 
   template <typename T>
-  void store(T&& val) {
-    using Type = std::remove_reference_t<T>;
-    ARGPARSE_DCHECK(type_ == typeid(Type));
-    *reinterpret_cast<T*>(ptr_) = std::forward<T>(val);
+  const T* Cast() const {
+    ARGPARSE_DCHECK(type() == typeid(T));
+    return reinterpret_cast<const T*>(raw_value());
+  }
+  template <typename T>
+  T* Cast() {
+    ARGPARSE_DCHECK(type() == typeid(T));
+    return reinterpret_cast<T*>(raw_value());
   }
 
   template <typename T>
-  void reset(T* ptr) {
+  const T& GetValue() const {
+    return *Cast<T>();
+  }
+  template <typename T>
+  T& GetValue() {
+    return *Cast<T>();
+  }
+
+  template <typename T>
+  void PutValue(T&& val) {
+    GetValue<std::decay_t<T>>() = std::forward<T>(val);
+  }
+
+  template <typename T>
+  void Reset(T* ptr) {
     OpaquePtr that(ptr);
-    swap(that);
+    Swap(that);
+  }
+  void Reset(std::nullptr_t) {
+    OpaquePtr null;
+    Swap(null);
   }
 
-  void swap(OpaquePtr& that) {
+  void Swap(OpaquePtr& that) {
     std::swap(this->type_, that.type_);
     std::swap(this->ptr_, that.ptr_);
   }
 
-  explicit operator bool() const { return !!ptr_; }
+  explicit operator bool() const { return !!raw_value(); }
 
   std::type_index type() const { return type_; }
-  void* ptr() const { return ptr_; }
+  void* raw_value() const { return ptr_; }
 
  private:
-  std::type_index type_ = typeid(NoneType);
+  // The type of *ptr_.
+  std::type_index type_ = typeid(void);
   void* ptr_ = nullptr;
 };
 
