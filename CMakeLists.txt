@@ -37,6 +37,7 @@ include_directories(include)
 add_library(argparse 
    src/argparse.cc 
    src/argparse-internal.cc
+   src/argparse-argp-parser.cc
 )
 
 add_executable(test_main test_main.cc)
