@@ -443,6 +443,12 @@ class ArgumentParser {
   // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
   static std::unique_ptr<ArgumentParser> CreateDefault();
+
+  class Factory {
+   public:
+    virtual ~Factory() {}
+    virtual std::unique_ptr<ArgumentParser> CreateParser() = 0;
+  };
 };
 
 // ArgumentContainer contains everything user plugs into us, namely,

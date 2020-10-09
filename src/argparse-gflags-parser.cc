@@ -15,7 +15,7 @@ using GflagsTypeList = TypeList<bool, gflags::int32, gflags::int64,
                                 gflags::uint64, double, std::string>;
 
 template <typename... Types>
-bool IsGflagsSupportedTypeImpl( std::type_index type, TypeList<Types...>) {
+bool IsGflagsSupportedTypeImpl(std::type_index type, TypeList<Types...>) {
   return ((type == typeid(Types)) || ...);
 }
 
@@ -32,7 +32,7 @@ void JoinTypeNamesImpl(const char* sep, std::ostream& os,
 }
 void JoinTypeNamesImpl(const char* sep, std::ostream& os, TypeList<>) {}
 
-template <typename...Types>
+template <typename... Types>
 std::string JoinTypeNames(const char* sep, TypeList<Types...> type_list) {
   std::ostringstream os;
   JoinTypeNamesImpl(sep, os, type_list);
@@ -110,9 +110,9 @@ GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
   return GflagsRegisterMap{{typeid(Types), &RegisterGlagsArgument<Types>}...};
 }
 
-class GflagsArgumentParser : public ArgumentParser {
+class GflagsParser : public ArgumentParser {
  public:
-  GflagsArgumentParser() : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
+  GflagsParser() : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
 
   // TODO: make them empty.
   void AddArgumentGroup(ArgumentGroup*) override {
@@ -125,18 +125,25 @@ class GflagsArgumentParser : public ArgumentParser {
     ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
   }
   void AddArgument(Argument* arg) override {
-      GflagsArgument gflags_arg(arg);
-      auto iter = register_map_.find(arg->GetDest()->GetType());
-      ARGPARSE_DCHECK(iter != register_map_.end());
-      return (*iter->second)(&gflags_arg);
+    GflagsArgument gflags_arg(arg);
+    auto iter = register_map_.find(arg->GetDest()->GetType());
+    ARGPARSE_DCHECK(iter != register_map_.end());
+    return (*iter->second)(&gflags_arg);
   }
 
-  bool ParseKnownArgs(ArgArray args, std::vector<std::string>*) override {
+  bool ParseKnownArgs(ArgArray args,
+                      std::vector<std::string>* unparsed_args) override {
     int argc = args.argc();
     char** argv = args.argv();
-    gflags::ParseCommandLineFlags(&argc, &argv, remove_flags_);
+    auto rv = gflags::ParseCommandLineFlags(&argc, &argv, true);
+    if (unparsed_args) {
+      for (int i = 0; i < argc; ++i) unparsed_args->push_back(argv[i]);
+      return rv == 0;
+    }
     return true;
   }
+
+  ~GflagsParser() override { gflags::ShutDownCommandLineFlags(); }
 
   std::unique_ptr<OptionsListener> CreateOptionsListener() override;
 
@@ -144,10 +151,9 @@ class GflagsArgumentParser : public ArgumentParser {
   class OptionsListenerImpl;
 
   const GflagsRegisterMap register_map_;
-  bool remove_flags_ = false;
 };
 
-class GflagsArgumentParser::OptionsListenerImpl : public OptionsListener {
+class GflagsParser::OptionsListenerImpl : public OptionsListener {
  public:
   void SetProgramVersion(std::string val) override {
     gflags::SetVersionString(val);
@@ -166,8 +172,12 @@ class GflagsArgumentParser::OptionsListenerImpl : public OptionsListener {
   }
 };
 
-std::unique_ptr<OptionsListener> GflagsArgumentParser::CreateOptionsListener() {
+std::unique_ptr<OptionsListener> GflagsParser::CreateOptionsListener() {
   return std::make_unique<OptionsListenerImpl>();
+}
+
+std::unique_ptr<ArgumentParser> GflagsParserFactory::CreateParser() {
+  return std::make_unique<GflagsParser>();
 }
 
 }  // namespace internal

@@ -14,5 +14,10 @@ namespace internal {
 
 bool IsGflagsSupportedType(std::type_index type);
 
+class GflagsParserFactory : public ArgumentParser::Factory {
+ public:
+  std::unique_ptr<ArgumentParser> CreateParser() override;
+};
+
 }  // namespace internal
 }  // namespace argparse
