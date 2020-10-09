@@ -1,21 +1,7 @@
 #include <argparse/argparse.h>
+#include <argparse/internal/argparse-gflags-parser.h>
+
 #include <iostream>
 
 int main(int argc, char const* argv[]) {
-  auto parser = argparse::ArgumentParser();
-
-  int output;
-  int input;
-
-  parser
-      .AddArgument(argparse::Argument("output")
-                       .Dest(&output)
-                       .Help("this is the output file")
-                       .MetaVar("OUT"))
-      .AddArgument(argparse::Argument("input", &input, "input file"))
-      .AddArgument(argparse::Argument("inout", &input, "in-out file"));
-
-  auto group = parser.AddArgumentGroup("some text");
-  group.AddArgument(argparse::Argument("a"))
-      .AddArgument(argparse::Argument("b"));
 }

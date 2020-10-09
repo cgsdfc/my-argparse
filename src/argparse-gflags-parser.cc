@@ -3,15 +3,48 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-#include <gflags/gflags.h>
-
-#include "argparse/internal/argparse-internal.h"
+#include "argparse/internal/argparse-gflags-parser.h"
 
 #define ARGPARSE_UNSUPPORTED_METHOD(object) \
   ARGPARSE_CHECK_F(false, "%s is not supported by %s", __func__, (object))
 
 namespace argparse {
 namespace internal {
+
+using GflagsTypeList = TypeList<bool, gflags::int32, gflags::int64,
+                                gflags::uint64, double, std::string>;
+
+template <typename... Types>
+bool IsGflagsSupportedTypeImpl( std::type_index type, TypeList<Types...>) {
+  return ((type == typeid(Types)) || ...);
+}
+
+bool IsGflagsSupportedType(std::type_index type) {
+  return IsGflagsSupportedTypeImpl(type, GflagsTypeList{});
+}
+
+template <typename T, typename... Rest>
+void JoinTypeNamesImpl(const char* sep, std::ostream& os,
+                       TypeList<T, Rest...>) {
+  os << TypeName<T>();
+  if (sizeof...(Rest)) os << sep;
+  JoinTypeNamesImpl(sep, os, TypeList<Rest...>{});
+}
+void JoinTypeNamesImpl(const char* sep, std::ostream& os, TypeList<>) {}
+
+template <typename...Types>
+std::string JoinTypeNames(const char* sep, TypeList<Types...> type_list) {
+  std::ostringstream os;
+  JoinTypeNamesImpl(sep, os, type_list);
+  return os.str();
+}
+
+const char* GetGflagsSupportedTypeAsString() {
+  // Hand-rolled one is better than computed one.
+  return "bool, int32, int64, uint64, double, std::string";
+}
+
+constexpr char kGflagParserName[] = "gflags-parser";
 
 inline StringView StripLeading(StringView sv, char ch) {
   auto str = sv.data();
@@ -21,25 +54,67 @@ inline StringView StripLeading(StringView sv, char ch) {
   return StringView(str, size);
 }
 
-class RegisterHelper {
+class GflagsArgument {
  public:
-  virtual void Run(StringView name, StringView help, Any* default_value,
-                   OpaquePtr ptr) = 0;
-  virtual ~RegisterHelper() {}
+  explicit GflagsArgument(Argument* arg) {
+    ARGPARSE_CHECK_F(IsValidNamesInfo(arg->GetNamesInfo()),
+                     "%s only accept optional argument without alias",
+                     kGflagParserName);
+    ARGPARSE_CHECK_F(IsGflagsSupportedType(arg->GetDest()->GetType()),
+                     "Not a gflags-supported type. Supported types are:\n%s",
+                     GetGflagsSupportedTypeAsString());
+    name_ = arg->GetNamesInfo()->GetName().data();
+    help_ = arg->GetHelpDoc().data();
+    ARGPARSE_DCHECK(arg->GetConstValue());
+    filename_ = AnyCast<StringView>(arg->GetConstValue())->data();
+    dest_ptr_ = arg->GetDest()->GetDestPtr();
+    default_value_ = const_cast<Any*>(arg->GetDefaultValue());
+    ARGPARSE_DCHECK(default_value_);
+  }
+
+  template <typename FlagType>
+  void Register() {
+    gflags::FlagRegisterer(name_,                             // name
+                           help_,                             // help
+                           filename_,                         // filename
+                           dest_ptr_.Cast<FlagType>(),        // current_storage
+                           AnyCast<FlagType>(default_value_)  // defval_storage
+    );
+  }
+
+ private:
+  static bool IsValidNamesInfo(NamesInfo* info) {
+    if (!info->IsOption()) return false;
+    auto count_all = info->GetLongNamesCount() + info->GetShortNamesCount();
+    return count_all == 1;
+  }
+
+  const char* name_;
+  const char* help_;
+  const char* filename_;
+  OpaquePtr dest_ptr_;
+  Any* default_value_;
 };
 
-template <typename T>
-class RegisterHelperImpl : public RegisterHelper {
- public:
-  void Run(StringView name, StringView help, Any* default_value,
-           OpaquePtr ptr) override {
-    gflags::FlagRegisterer(name.data(), help.data(), nullptr, ptr.Cast<T>(),
-                           AnyCast<T>(default_value));
-  }
-};
+using GflagRegisterFunc = void (*)(GflagsArgument*);
+
+template <typename FlagType>
+void RegisterGlagsArgument(GflagsArgument* arg) {
+  return arg->Register<FlagType>();
+}
+
+using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
+
+template <typename... Types>
+GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
+  return GflagsRegisterMap{{typeid(Types), &RegisterGlagsArgument<Types>}...};
+}
 
 class GflagsArgumentParser : public ArgumentParser {
  public:
+  GflagsArgumentParser() : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
+
+  // TODO: make them empty.
   void AddArgumentGroup(ArgumentGroup*) override {
     ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
   }
@@ -50,11 +125,10 @@ class GflagsArgumentParser : public ArgumentParser {
     ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
   }
   void AddArgument(Argument* arg) override {
-    // Arg should only have one optional name.
-    ARGPARSE_CHECK_F(IsValidNamesInfo(arg->GetNamesInfo()),
-                     "%s only accept optional argument without alias",
-                     kGflagParserName);
-    RegisterFlagForArgument(arg);
+      GflagsArgument gflags_arg(arg);
+      auto iter = register_map_.find(arg->GetDest()->GetType());
+      ARGPARSE_DCHECK(iter != register_map_.end());
+      return (*iter->second)(&gflags_arg);
   }
 
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>*) override {
@@ -67,61 +141,34 @@ class GflagsArgumentParser : public ArgumentParser {
   std::unique_ptr<OptionsListener> CreateOptionsListener() override;
 
  private:
-  // Holds something that gflags needs but don't store.
-  class FlagStorage;
   class OptionsListenerImpl;
 
-  static constexpr char kGflagParserName[] = "gflags parser";
-
-  static bool IsValidNamesInfo(NamesInfo* info) {
-    if (!info->IsOption()) return false;
-    auto count_all = info->GetLongNamesCount() + info->GetShortNamesCount();
-    return count_all == 1;
-  }
-
-  void RegisterFlagForArgument(Argument* arg) {
-    auto type = arg->GetDest()->GetType();
-    auto register_func = register_func_map_[type].get();
-    // TODO: make dest can get type name.
-    ARGPARSE_CHECK_F(register_func, "Invalid type of Argument's dest");
-
-    // A default value is needed.
-    ARGPARSE_CHECK_F(arg->GetDefaultValue(), "Default value must be set");
-
-    auto name = StripLeading(arg->GetNamesInfo()->GetName(), '-');
-    auto help = arg->GetHelpDoc();
-    register_func->Run(name, help, const_cast<Any*>(arg->GetDefaultValue()),
-                       arg->GetDest()->GetDestPtr());
-  }
-
-  //   template <typename T>
-  //   static void RegisterFuncImpl(Argument* arg) {
-  //     auto* current_storage = arg->GetDest()->GetDestPtr().Cast<T>();
-
-  //     auto* defval_storage = AnyCast<T>(arg->GetDefaultValue());
-
-  //     gflags::FlagRegisterer(name.data(), help.data(), nullptr,
-  //     current_storage,
-  //                            const_cast<T*>(defval_storage));
-  //   }
-
-  //   using RegisterFunc = void (*)(Argument*);
-
-  std::map<std::type_index, std::unique_ptr<RegisterHelper>> register_func_map_;
+  const GflagsRegisterMap register_map_;
   bool remove_flags_ = false;
 };
 
 class GflagsArgumentParser::OptionsListenerImpl : public OptionsListener {
  public:
-  void SetProgramUsage(std::string val) override {
-    gflags::SetUsageMessage(val);
-  }
   void SetProgramVersion(std::string val) override {
     gflags::SetVersionString(val);
   }
-
- private:
+  void SetDescription(std::string val) override {
+    gflags::SetUsageMessage(val);
+  }
+  void SetEmail(std::string) override {
+    ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
+  }
+  void SetProgramName(std::string) override {
+    ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
+  }
+  void SetProgramUsage(std::string) override {
+    ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
+  }
 };
+
+std::unique_ptr<OptionsListener> GflagsArgumentParser::CreateOptionsListener() {
+  return std::make_unique<OptionsListenerImpl>();
+}
 
 }  // namespace internal
 }  // namespace argparse

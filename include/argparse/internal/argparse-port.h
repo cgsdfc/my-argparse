@@ -135,5 +135,8 @@ StringView TypeName() {
   return TypeNameImpl(typeid(T));
 }
 
+template <typename...>
+struct TypeList {};
+
 }  // namespace internal
 }  // namespace argparse
