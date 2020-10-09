@@ -97,6 +97,9 @@ class StringView {
   template <std::size_t N>
   StringView(const char (&data)[N]) : StringView(data, N - 1) {}
 
+  // data should be non-null and null-terminated.
+  StringView(const char* data, std::size_t size);
+
   std::size_t size() const { return size_; }
   bool empty() const { return 0 == size(); }
   const char* data() const {
@@ -117,8 +120,6 @@ class StringView {
   operator std::string() const { return ToString(); }
 
  private:
-  // data should be non-null and null-terminated.
-  StringView(const char* data, std::size_t size);
 
   // Not default-constructible.
   const char* data_;

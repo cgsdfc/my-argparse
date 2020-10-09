@@ -35,6 +35,7 @@ class AnyImpl : public Any {
 
   T ReleaseValue() { return std::move_if_noexcept(value_); }
   const T& value() const { return value_; }
+  T& value() { return value_; }
 
   static AnyImpl* FromAny(Any* any) {
     ARGPARSE_DCHECK(any && any->GetType() == typeid(T));
@@ -62,8 +63,18 @@ T AnyCast(std::unique_ptr<Any> any) {
 }
 
 template <typename T>
-T AnyCast(const Any& any) {
+const T& AnyCast(const Any& any) {
   return AnyImpl<T>::FromAny(any).value();
+}
+
+template <typename T>
+const T* AnyCast(const Any* any) {
+  return &AnyCast<T>(*any);
+}
+
+template <typename T>
+T* AnyCast(Any* any) {
+  return &AnyImpl<T>::FromAny(any)->value();
 }
 
 }  // namespace internal

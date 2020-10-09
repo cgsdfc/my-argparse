@@ -128,6 +128,7 @@ class DestInfo {
   virtual std::string FormatValue(const Any& in) = 0;
   // For providing default ops for type and action.
   virtual OpsFactory* GetOpsFactory() = 0;
+  virtual std::type_index GetType() = 0;
 
   template <typename T>
   static std::unique_ptr<DestInfo> CreateFromPtr(T* ptr);
@@ -421,6 +422,7 @@ class OptionsListener {
   virtual void SetDescription(std::string val) = 0;
   virtual void SetEmail(std::string val) = 0;
   virtual void SetProgramName(std::string val) = 0;
+  virtual void SetProgramUsage(std::string usage) = 0;
 };
 
 // internal::ArgumentParser is the analogy of argparse::ArgumentParser,
@@ -501,6 +503,7 @@ class DestInfoImpl : public DestInfo {
   std::string FormatValue(const Any& in) override {
     return ops_->FormatValue(in);
   }
+  std::type_index GetType() override { return ops_->GetTypeInfo(); }
 
  private:
   OpaquePtr dest_ptr_;
