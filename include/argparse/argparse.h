@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -14,7 +14,7 @@ namespace argparse {
 // Public flags user can use. These are corresponding to the ARGP_XXX flags
 // passed to argp_parse().
 enum Flags {
-  kNoFlags = 0,            // The default.
+  kNoFlags = 0,  // The default.
   // kNoHelp = ARGP_NO_HELP,  // Don't produce --help.
   // kLongOnly = ARGP_LONG_ONLY,
   // kNoExit = ARGP_NO_EXIT,
@@ -24,14 +24,13 @@ class Argument {
  public:
   explicit Argument(Names names, Dest dest = {}, const char* help = {})
       : builder_(internal::ArgumentBuilder::Create()) {
-    builder_->SetNames(GetBuiltObject(&names));
-    builder_->SetDest(GetBuiltObject(&dest));
-    if (help)
-      builder_->SetHelp(help);
+    builder_->SetNames(internal::GetBuiltObject(&names));
+    builder_->SetDest(internal::GetBuiltObject(&dest));
+    if (help) builder_->SetHelp(help);
   }
 
   Argument& Dest(Dest dest) {
-    builder_->SetDest(GetBuiltObject(&dest));
+    builder_->SetDest(internal::GetBuiltObject(&dest));
     return *this;
   }
   Argument& Action(const char* str) {
@@ -39,11 +38,11 @@ class Argument {
     return *this;
   }
   Argument& Action(ActionCallback cb) {
-    builder_->SetActionCallback(GetBuiltObject(&cb));
+    builder_->SetActionCallback(internal::GetBuiltObject(&cb));
     return *this;
   }
   Argument& Type(TypeCallback cb) {
-    builder_->SetTypeCallback(GetBuiltObject(&cb));
+    builder_->SetTypeCallback(internal::GetBuiltObject(&cb));
     return *this;
   }
   template <typename T>
@@ -52,15 +51,15 @@ class Argument {
     return *this;
   }
   Argument& Type(FileType file_type) {
-    builder_->SetTypeFileType(GetBuiltObject(&file_type));
+    builder_->SetTypeFileType(internal::GetBuiltObject(&file_type));
     return *this;
   }
   Argument& ConstValue(AnyValue val) {
-    builder_->SetConstValue(GetBuiltObject(&val));
+    builder_->SetConstValue(internal::GetBuiltObject(&val));
     return *this;
   }
   Argument& DefaultValue(AnyValue val) {
-    builder_->SetDefaultValue(GetBuiltObject(&val));
+    builder_->SetDefaultValue(internal::GetBuiltObject(&val));
     return *this;
   }
   Argument& Help(std::string val) {
@@ -85,7 +84,7 @@ class Argument {
   }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
   std::unique_ptr<internal::Argument> Build() {
     return builder_->CreateArgument();
   }
@@ -100,7 +99,7 @@ class SupportAddArgument {
     return AddArgument(std::move(arg));
   }
   SupportAddArgument& AddArgument(Argument&& arg) {
-    AddArgumentImpl(GetBuiltObject(&arg));
+    AddArgumentImpl(internal::GetBuiltObject(&arg));
     return *this;
   }
   virtual ~SupportAddArgument() {}
@@ -149,8 +148,7 @@ class SubCommand {
  public:
   explicit SubCommand(std::string name, const char* help = {})
       : cmd_(internal::SubCommand::Create(std::move(name))) {
-    if (help)
-      cmd_->SetHelpDoc(help);
+    if (help) cmd_->SetHelpDoc(help);
   }
 
   SubCommand& Aliases(std::vector<std::string> als) {
@@ -163,7 +161,7 @@ class SubCommand {
   }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
   std::unique_ptr<internal::SubCommand> Build() {
     ARGPARSE_DCHECK(cmd_);
     return std::move(cmd_);
@@ -177,7 +175,7 @@ class SubCommandGroupProxy {
   SubCommandGroupProxy(internal::SubCommandGroup* group) : group_(group) {}
 
   SubCommandProxy AddParser(SubCommand cmd) {
-    auto real_cmd = GetBuiltObject(&cmd);
+    auto real_cmd = internal::GetBuiltObject(&cmd);
     return group_->AddSubCommand(std::move(real_cmd));
   }
 
@@ -210,12 +208,12 @@ class SubCommandGroup {
   }
 
   SubCommandGroup& Dest(Dest val) {
-    group_->SetDest(GetBuiltObject(&val));
+    group_->SetDest(internal::GetBuiltObject(&val));
     return *this;
   }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
   std::unique_ptr<internal::SubCommandGroup> Build() {
     return std::move(group_);
   }
@@ -258,7 +256,7 @@ class ArgumentParser : public SupportAddArgumentGroup {
     return ParseArgsImpl(args, out);
   }
   SubCommandGroupProxy AddSubParsers(SubCommandGroup&& group) {
-    return AddSubCommandGroupImpl(GetBuiltObject(&group));
+    return AddSubCommandGroupImpl(internal::GetBuiltObject(&group));
   }
   SubCommandGroupProxy AddSubParsers(SubCommandGroup& group) {
     return AddSubParsers(std::move(group));

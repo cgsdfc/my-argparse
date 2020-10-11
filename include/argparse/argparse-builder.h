@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -8,6 +8,8 @@
 #include "argparse/internal/argparse-internal.h"
 
 namespace argparse {
+
+namespace internal {
 class BuilderAccessor;
 
 // Base class of builders for some kind of object T.
@@ -26,7 +28,7 @@ class BuilderOf {
   bool HasObject() const { return object_ != nullptr; }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
   std::unique_ptr<T> object_;
 };
 
@@ -43,7 +45,9 @@ auto GetBuiltObject(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
   return BuilderAccessor::Build(b);
 }
 
-class AnyValue : private BuilderOf<internal::Any> {
+}  // namespace internal
+
+class AnyValue : private internal::BuilderOf<internal::Any> {
  public:
   template <typename T,
             std::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = nullptr>
@@ -53,10 +57,10 @@ class AnyValue : private BuilderOf<internal::Any> {
   }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
 };
 
-class TypeCallback : private BuilderOf<internal::TypeCallback> {
+class TypeCallback : private internal::BuilderOf<internal::TypeCallback> {
  public:
   template <typename T, std::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
   TypeCallback(T&& cb) {
@@ -64,10 +68,10 @@ class TypeCallback : private BuilderOf<internal::TypeCallback> {
   }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
 };
 
-class ActionCallback : private BuilderOf<internal::ActionCallback> {
+class ActionCallback : private internal::BuilderOf<internal::ActionCallback> {
  public:
   template <typename T, std::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
   ActionCallback(T&& cb) {
@@ -75,25 +79,25 @@ class ActionCallback : private BuilderOf<internal::ActionCallback> {
   }
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
 };
 
 // Creator of DestInfo. For those that need a DestInfo, just take Dest
 // as an arg.
-class Dest : private BuilderOf<internal::DestInfo> {
+class Dest : private internal::BuilderOf<internal::DestInfo> {
  public:
   template <typename T>
   Dest(T* ptr) {
     this->SetObject(internal::DestInfo::CreateFromPtr(ptr));
   }
   Dest() = default;
-  using BuilderOf<internal::DestInfo>::HasObject;
+  using internal::BuilderOf<internal::DestInfo>::HasObject;
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
 };
 
-class Names : private BuilderOf<internal::NamesInfo> {
+class Names : private internal::BuilderOf<internal::NamesInfo> {
  public:
   Names(const char* name) : Names(std::string(name)) {
     ARGPARSE_CHECK_F(name, "name should not be null");
@@ -102,7 +106,7 @@ class Names : private BuilderOf<internal::NamesInfo> {
   Names(std::initializer_list<std::string> names);
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
 };
 
 class FileType {
@@ -112,7 +116,7 @@ class FileType {
       : mode_(internal::StreamModeToMode(mode)) {}
 
  private:
-  friend class BuilderAccessor;
+  friend class internal::BuilderAccessor;
   OpenMode Build() const { return mode_; }
   OpenMode mode_;
 };
