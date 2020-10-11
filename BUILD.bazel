@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test", "cc_binary")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -20,14 +20,26 @@ cc_library(
     ],
 )
 
+# cc_library(
+#     name = "argparse_test_lib",
+#     hdrs = []
+# )
+
 cc_test(
     name  = "argparse_test",
     size = "small",
     srcs = glob(
-        include = ["test/*.cc"]
+        include = ["test/*.cc", "test/*.h"]
     ),
     linkstatic = 0,
     deps = [
-        ":argparse"
+        ":argparse",
+        "@gtest//:gtest_main",
     ]
+)
+
+cc_binary(
+    name = "test_main",
+    srcs = ["test_main.cc"],
+    deps = [":argparse"],
 )
