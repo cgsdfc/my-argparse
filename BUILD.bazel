@@ -1,0 +1,33 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+package(default_visibility = ["//visibility:public"])
+
+licenses(["notice"])
+
+cc_library(
+    name = "argparse",
+    srcs = glob(
+        include = ["src/*.cc"]
+    ),
+    hdrs = glob(
+        include = ["include/argparse/**/*.h"]
+    ),
+    includes = [
+        "include/",
+    ],
+    deps = [
+        # "@com_google_absl//absl/strings",
+    ],
+)
+
+cc_test(
+    name  = "argparse_test",
+    size = "small",
+    srcs = glob(
+        include = ["test/*.cc"]
+    ),
+    linkstatic = 0,
+    deps = [
+        ":argparse"
+    ]
+)

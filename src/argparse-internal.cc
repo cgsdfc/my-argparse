@@ -6,6 +6,8 @@
 #include "argparse/internal/argparse-internal.h"
 
 #include <cxxabi.h>
+
+#include <cstdarg>
 #include <cstring>
 #include <set>
 
