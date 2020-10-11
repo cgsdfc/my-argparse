@@ -74,12 +74,8 @@ class Argument {
     builder_->SetMetaVar(std::move(val));
     return *this;
   }
-  Argument& NumArgs(int num) {
-    builder_->SetNumArgsNumber(num);
-    return *this;
-  }
-  Argument& NumArgs(char flag) {
-    builder_->SetNumArgsFlag(flag);
+  Argument& NumArgs(NumArgs num_args) {
+    builder_->SetNumArgs(internal::GetBuiltObject(&num_args));
     return *this;
   }
 

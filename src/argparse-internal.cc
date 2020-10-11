@@ -419,12 +419,8 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
 
   void SetTypeFileType(OpenMode mode) override { open_mode_ = mode; }
 
-  void SetNumArgsFlag(char flag) override {
-    arg_->SetNumArgs(NumArgsInfo::CreateFromFlag(flag));
-  }
-
-  void SetNumArgsNumber(int num) override {
-    arg_->SetNumArgs(NumArgsInfo::CreateFromNum(num));
+  void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
+    if (info) arg_->SetNumArgs(std::move(info));
   }
 
   void SetConstValue(std::unique_ptr<Any> val) override {

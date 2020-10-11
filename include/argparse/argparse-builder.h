@@ -121,4 +121,17 @@ class FileType {
   OpenMode mode_;
 };
 
+class NumArgs : private internal::BuilderOf<internal::NumArgsInfo> {
+ public:
+  NumArgs(int number) {
+    this->SetObject(internal::NumArgsInfo::CreateFromNum(number));
+  }
+  NumArgs(char flag) {
+    this->SetObject(internal::NumArgsInfo::CreateFromFlag(flag));
+  }
+
+ private:
+  friend class internal::BuilderAccessor;
+};
+
 }  // namespace argparse

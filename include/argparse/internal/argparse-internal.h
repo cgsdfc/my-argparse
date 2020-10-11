@@ -388,10 +388,7 @@ class ArgumentBuilder {
   virtual void SetTypeFileType(OpenMode mode) = 0;
 
   // nargs('+')
-  virtual void SetNumArgsFlag(char flag) = 0;
-
-  // nargs(42)
-  virtual void SetNumArgsNumber(int num) = 0;
+  virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
 
   // const_value(...)
   virtual void SetConstValue(std::unique_ptr<Any> val) = 0;
