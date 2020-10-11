@@ -89,52 +89,61 @@ class Argument {
 };
 
 // This is a helper that provides add_argument().
+// For derived, void AddArgumentImpl(std::unique_ptr<internal::Argument>) should
+// be implemented.
+// Note: THIS IS NOT A PUBLIC API!
+template <typename Derived>
 class SupportAddArgument {
  public:
-  SupportAddArgument& AddArgument(Argument& arg) {
-    return AddArgument(std::move(arg));
+  template <typename T>
+  Derived& AddArgument(T&& arg) {
+    auto* self = static_cast<Derived*>(this);
+    self->AddArgumentImpl(
+        std::unique_ptr<internal::Argument>(internal::GetBuiltObject(&arg)));
+    return *self;
   }
-  SupportAddArgument& AddArgument(Argument&& arg) {
-    AddArgumentImpl(internal::GetBuiltObject(&arg));
-    return *this;
-  }
-  virtual ~SupportAddArgument() {}
-
- private:
-  virtual void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) = 0;
 };
 
-class ArgumentGroup : public SupportAddArgument {
+// ArgumentGroup: a group of arguments that share the same title.
+class ArgumentGroup : public SupportAddArgument<ArgumentGroup> {
  public:
   ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
 
  private:
-  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
+  friend class SupportAddArgument<ArgumentGroup>;
+
+  // SupportArgument implementation.
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {
     group_->AddArgument(std::move(arg));
   }
   internal::ArgumentGroup* group_;
 };
 
 // If we can do add_argument_group(), add_argument() is always possible.
-class SupportAddArgumentGroup : public SupportAddArgument {
+// For derived, void AddArgumentGroupImpl(std::string) should be implemented.
+// Note: THIS IS NOT A PUBLIC API!
+template <typename Derived>
+class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
  public:
+  // Add an argument group to this object.
   ArgumentGroup AddArgumentGroup(std::string header) {
-    return AddArgumentGroupImpl(std::move(header));
+    auto* self = static_cast<Derived*>(this);
+    self->AddArgumentGroupImpl(std::move(header));
+    return *self;
   }
-
- private:
-  virtual internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) = 0;
 };
 
-class SubCommandProxy : public SupportAddArgumentGroup {
+class SubCommandProxy
+    : public SupportAddArgumentGroup<SubCommandProxy> {
  public:
   SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
 
  private:
-  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) override {
+  friend class SupportAddArgumentGroup<SubCommandProxy>;
+  void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {
     return sub_->GetHolder()->AddArgument(std::move(arg));
   }
-  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) override {
+  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) {
     return sub_->GetHolder()->AddArgumentGroup(std::move(header));
   }
   internal::SubCommand* sub_;
@@ -147,11 +156,11 @@ class SubCommand {
     if (help) cmd_->SetHelpDoc(help);
   }
 
-  SubCommand& Aliases(std::vector<std::string> als) {
+  SubCommand& SetAliases(std::vector<std::string> als) {
     cmd_->SetAliases(std::move(als));
     return *this;
   }
-  SubCommand& Help(std::string val) {
+  SubCommand& SetHelp(std::string val) {
     cmd_->SetHelpDoc(std::move(val));
     return *this;
   }
@@ -183,12 +192,12 @@ class SubCommandGroup {
  public:
   explicit SubCommandGroup() : group_(internal::SubCommandGroup::Create()) {}
 
-  SubCommandGroup& Title(std::string val) {
+  SubCommandGroup& SetTitle(std::string val) {
     group_->SetTitle(std::move(val));
     return *this;
   }
 
-  SubCommandGroup& Description(std::string val) {
+  SubCommandGroup& SetDescription(std::string val) {
     group_->SetDescription(std::move(val));
     return *this;
   }
@@ -198,12 +207,12 @@ class SubCommandGroup {
     return *this;
   }
 
-  SubCommandGroup& Help(std::string val) {
+  SubCommandGroup& SetHelp(std::string val) {
     group_->SetHelpDoc(std::move(val));
     return *this;
   }
 
-  SubCommandGroup& Dest(Dest val) {
+  SubCommandGroup& SetDest(Dest val) {
     group_->SetDest(internal::GetBuiltObject(&val));
     return *this;
   }
@@ -216,23 +225,23 @@ class SubCommandGroup {
   std::unique_ptr<internal::SubCommandGroup> group_;
 };
 
-class ArgumentParser : public SupportAddArgumentGroup {
+class ArgumentParser : public SupportAddArgumentGroup<ArgumentParser> {
  public:
   ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
 
-  ArgumentParser& Description(std::string val) {
+  ArgumentParser& SetDescription(std::string val) {
     GetOptions()->SetDescription(std::move(val));
     return *this;
   }
-  ArgumentParser& ProgramVersion(std::string val) {
+  ArgumentParser& SetProgramVersion(std::string val) {
     GetOptions()->SetProgramVersion(std::move(val));
     return *this;
   }
-  ArgumentParser& Email(std::string val) {
+  ArgumentParser& SetEmail(std::string val) {
     GetOptions()->SetEmail(std::move(val));
     return *this;
   }
-  ArgumentParser& ProgramName(std::string& val) {
+  ArgumentParser& SetProgramName(std::string& val) {
     GetOptions()->SetProgramName(std::move(val));
     return *this;
   }
@@ -259,6 +268,8 @@ class ArgumentParser : public SupportAddArgumentGroup {
   }
 
  private:
+  friend class SupportAddArgumentGroup<ArgumentParser>;
+
   bool ParseArgsImpl(internal::ArgArray args, std::vector<std::string>* out) {
     ARGPARSE_DCHECK(out);
     return controller_->ParseKnownArgs(args, out);
