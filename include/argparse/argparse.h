@@ -29,52 +29,52 @@ class Argument {
     if (help) builder_->SetHelp(help);
   }
 
-  Argument& Dest(Dest dest) {
+  Argument& SetDest(Dest dest) {
     builder_->SetDest(internal::GetBuiltObject(&dest));
     return *this;
   }
-  Argument& Action(const char* str) {
+  Argument& SetAction(const char* str) {
     builder_->SetActionString(str);
     return *this;
   }
-  Argument& Action(ActionCallback cb) {
+  Argument& SetAction(ActionCallback cb) {
     builder_->SetActionCallback(internal::GetBuiltObject(&cb));
     return *this;
   }
-  Argument& Type(TypeCallback cb) {
+  Argument& SetType(TypeCallback cb) {
     builder_->SetTypeCallback(internal::GetBuiltObject(&cb));
     return *this;
   }
   template <typename T>
-  Argument& Type() {
+  Argument& SetType() {
     builder_->SetTypeOperations(internal::CreateOperations<T>());
     return *this;
   }
-  Argument& Type(FileType file_type) {
+  Argument& SetType(FileType file_type) {
     builder_->SetTypeFileType(internal::GetBuiltObject(&file_type));
     return *this;
   }
-  Argument& ConstValue(AnyValue val) {
+  Argument& SetConstValue(AnyValue val) {
     builder_->SetConstValue(internal::GetBuiltObject(&val));
     return *this;
   }
-  Argument& DefaultValue(AnyValue val) {
+  Argument& SetDefaultValue(AnyValue val) {
     builder_->SetDefaultValue(internal::GetBuiltObject(&val));
     return *this;
   }
-  Argument& Help(std::string val) {
+  Argument& SetHelp(std::string val) {
     builder_->SetHelp(std::move(val));
     return *this;
   }
-  Argument& Required(bool val) {
+  Argument& SetRequired(bool val) {
     builder_->SetRequired(val);
     return *this;
   }
-  Argument& MetaVar(std::string val) {
+  Argument& SetMetaVar(std::string val) {
     builder_->SetMetaVar(std::move(val));
     return *this;
   }
-  Argument& NumArgs(NumArgs num_args) {
+  Argument& SetNumArgs(NumArgs num_args) {
     builder_->SetNumArgs(internal::GetBuiltObject(&num_args));
     return *this;
   }
@@ -193,7 +193,7 @@ class SubCommandGroup {
     return *this;
   }
 
-  SubCommandGroup& MetaVar(std::string val) {
+  SubCommandGroup& SetMetaVar(std::string val) {
     group_->SetMetaVar(std::move(val));
     return *this;
   }
