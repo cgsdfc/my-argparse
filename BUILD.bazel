@@ -16,14 +16,10 @@ cc_library(
         "include/",
     ],
     deps = [
+        "@gflags//:gflags",
         # "@com_google_absl//absl/strings",
     ],
 )
-
-# cc_library(
-#     name = "argparse_test_lib",
-#     hdrs = []
-# )
 
 cc_test(
     name  = "argparse_test",

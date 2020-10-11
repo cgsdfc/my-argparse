@@ -2,6 +2,13 @@ workspace(name = "cgsdfc_argparse")
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+# Gflags
+http_archive(
+     name = "gflags",
+     urls = ["https://github.com/gflags/gflags/archive/master.zip"],
+     strip_prefix = "gflags-master",
+)
+
 # GTest
 http_archive(
      name = "gtest",
