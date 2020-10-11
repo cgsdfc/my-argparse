@@ -161,7 +161,7 @@ class GflagsParser::OptionsListenerImpl : public OptionsListener {
   void SetDescription(std::string val) override {
     gflags::SetUsageMessage(val);
   }
-  void SetEmail(std::string) override {
+  void SetBugReportEmail(std::string) override {
     ARGPARSE_UNSUPPORTED_METHOD(kGflagParserName);
   }
   void SetProgramName(std::string) override {

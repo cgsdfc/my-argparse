@@ -417,7 +417,7 @@ class OptionsListener {
   virtual ~OptionsListener() {}
   virtual void SetProgramVersion(std::string val) = 0;
   virtual void SetDescription(std::string val) = 0;
-  virtual void SetEmail(std::string val) = 0;
+  virtual void SetBugReportEmail(std::string val) = 0;
   virtual void SetProgramName(std::string val) = 0;
   virtual void SetProgramUsage(std::string usage) = 0;
 };

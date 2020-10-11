@@ -237,8 +237,8 @@ class ArgumentParser : public SupportAddArgumentGroup<ArgumentParser> {
     GetOptions()->SetProgramVersion(std::move(val));
     return *this;
   }
-  ArgumentParser& SetEmail(std::string val) {
-    GetOptions()->SetEmail(std::move(val));
+  ArgumentParser& SetBugReportEmail(std::string val) {
+    GetOptions()->SetBugReportEmail(std::move(val));
     return *this;
   }
   ArgumentParser& SetProgramName(std::string& val) {
@@ -268,6 +268,7 @@ class ArgumentParser : public SupportAddArgumentGroup<ArgumentParser> {
   }
 
  private:
+  friend class SupportAddArgument<ArgumentParser>;
   friend class SupportAddArgumentGroup<ArgumentParser>;
 
   bool ParseArgsImpl(internal::ArgArray args, std::vector<std::string>* out) {
