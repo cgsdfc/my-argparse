@@ -76,7 +76,7 @@ TEST(Result, WorksForMoveOnlyType) {
 }
 
 TEST(Result, InPlaceConstructorWorks) {
-  Result<CtorOverload> res(std::in_place, double());
+  Result<CtorOverload> res(portability::in_place, double());
   EXPECT_TRUE(res.has_value());
   EXPECT_TRUE(res.value().called_ctor == CtorOverload::kDouble);
 }

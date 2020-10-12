@@ -138,7 +138,7 @@ static const char* ActionsToString(ActionKind in) {
 // void ArgpParserImpl::RunCallback(Argument* arg, char* value, argp_state*
 // state) {
 //   arg->GetCallbackRunner()->RunCallback(
-//       absl::make_unique<Context>(arg, value, state));
+//       portability::make_unique<Context>(arg, value, state));
 // }
 
 // void ArgpParserImpl::Init(const Options& options) {

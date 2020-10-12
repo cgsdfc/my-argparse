@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <absl/meta/type_traits.h>
+
 #include <string>
 
 // About how to parse a string into a numeric value.
@@ -49,7 +51,7 @@ struct STLNumericParseFunc<unsigned long long>
 
 template <typename T>
 using HasSTLNumericParseFunc =
-    std::bool_constant<bool(STLNumericParseFunc<T>{})>;
+    portability::bool_constant<bool(STLNumericParseFunc<T>{})>;
 
 template <typename T, typename STLNumericParseFunc<T>::value_type func>
 T STLParseNumericImpl(const std::string& in, std::false_type) {
@@ -61,7 +63,7 @@ T STLParseNumericImpl(const std::string& in, std::true_type) {
 }
 template <typename T>
 T STLParseNumeric(const std::string& in) {
-  static_assert(HasSTLNumericParseFunc<T>{});
+  static_assert(HasSTLNumericParseFunc<T>{}, "Must be a numeric type");
   return STLParseNumericImpl<T, STLNumericParseFunc<T>{}>(
       in, std::is_floating_point<T>{});
 }

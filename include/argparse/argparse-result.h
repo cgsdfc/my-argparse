@@ -16,10 +16,10 @@ class Result {
   // Default is empty (!has_value && !has_error).
   Result() = default;
 
-  // template <typename ... Args>
-  // explicit Result(std::in_place_t, Args&&... args) {
-  //   AdvanceToValueStateFromEmpty(std::in_place, std::forward<Args>(args)...);
-  // }
+  template <typename ... Args>
+  explicit Result(portability::in_place_t, Args&&... args) {
+    AdvanceToValueStateFromEmpty(portability::in_place, std::forward<Args>(args)...);
+  }
 
   // To hold a value.
   explicit Result(T&& val) { AdvanceToValueStateFromEmpty(std::move(val)); }
@@ -47,10 +47,10 @@ class Result {
     return *this;
   }
 
-  // template <typename ... Args>
-  // void emplace(Args&&... args) {
-  //   AdvanceToValueState(std::in_place, std::forward<Args>(args)...);
-  // }
+  template <typename ... Args>
+  void emplace(Args&&... args) {
+    AdvanceToValueState(portability::in_place, std::forward<Args>(args)...);
+  }
 
   // Release the err-msg (if any). Go back to empty state.
   std::string ReleaseError() { return AdvanceToEmptyStateFromError(); }
@@ -94,16 +94,16 @@ class Result {
     ARGPARSE_DCHECK(IsEmptyState());
     value_.reset(new T(std::move_if_noexcept(value)));
   }
-  // template <typename... Args>
-  // void AdvanceToValueState(std::in_place_t, Args&&... args) {
-  //   AdvanceToEmptyState();
-  //   AdvanceToValueStateFromEmpty(std::in_place, std::forward<Args>(args)...);
-  // }
-  // template <typename... Args>
-  // void AdvanceToValueStateFromEmpty(std::in_place_t, Args&&... args) {
-  //   ARGPARSE_DCHECK(IsEmptyState());
-  //   value_.reset(new T{std::forward<Args>(args)...});
-  // }
+  template <typename... Args>
+  void AdvanceToValueState(portability::in_place_t, Args&&... args) {
+    AdvanceToEmptyState();
+    AdvanceToValueStateFromEmpty(portability::in_place, std::forward<Args>(args)...);
+  }
+  template <typename... Args>
+  void AdvanceToValueStateFromEmpty(portability::in_place_t, Args&&... args) {
+    ARGPARSE_DCHECK(IsEmptyState());
+    value_.reset(new T{std::forward<Args>(args)...});
+  }
   void AdvanceToErrorStateFromEmpty(std::string err) {
     ARGPARSE_DCHECK(IsEmptyState());
     error_.reset(new std::string(std::move(err)));

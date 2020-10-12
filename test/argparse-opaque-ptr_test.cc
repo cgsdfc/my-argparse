@@ -48,7 +48,7 @@ TEST(OpaquePtr, GetValue) {
   int val = 0;
   OpaquePtr ptr(&val);
   EXPECT_TRUE(ptr.GetValue<int>() == 0);
-  EXPECT_TRUE(std::as_const(ptr).GetValue<int>() == 0);
+  EXPECT_TRUE(const_cast<const OpaquePtr&>(ptr).GetValue<int>() == 0);
 }
 
 TEST(OpaquePtr, PutValue) {

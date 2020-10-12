@@ -8,6 +8,7 @@
 #include <absl/base/attributes.h>
 #include <absl/memory/memory.h>
 #include <absl/meta/type_traits.h>
+#include <absl/utility/utility.h>
 
 #include <iostream>
 #include <memory>
@@ -41,6 +42,37 @@
 
 namespace argparse {
 
+// Abseil has already done a great job on portability, but still there is some
+// corner to cover, such as std::bool_constant.
+namespace portability {
+
+// For now we don't what standard/compiler has bool_constant, so we always use
+// this one.
+template <bool B>
+using bool_constant = std::integral_constant<bool, B>;
+
+using ::absl::conditional_t;
+using ::absl::decay_t;
+using ::absl::enable_if_t;
+using ::absl::in_place;
+using ::absl::in_place_t;
+using ::absl::in_place_type;
+using ::absl::in_place_type_t;
+using ::absl::index_sequence;
+using ::absl::make_index_sequence;
+using ::absl::make_unique;
+using ::absl::remove_pointer_t;
+using ::absl::remove_reference_t;
+using ::absl::base_internal::invoke;
+
+// using ::absl::as_const;
+
+#define ARGPARSE_PP_TO_STRING(x) (#x)
+#define ARGPARSE_STATIC_ASSERT(const_expr) \
+  static_assert((const_expr), #const_expr)
+
+}  // namespace portability
+
 // File open mode. This is not enum class since we do & | on it.
 enum OpenMode {
   kModeNoMode = 0x0,
@@ -52,6 +84,7 @@ enum OpenMode {
 };
 
 namespace internal {
+
 class Any;
 
 // When an meaningless type is needed.
@@ -125,7 +158,6 @@ class StringView {
   operator std::string() const { return ToString(); }
 
  private:
-
   // Not default-constructible.
   const char* data_;
   std::size_t size_;

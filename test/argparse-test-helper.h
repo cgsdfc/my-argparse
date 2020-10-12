@@ -3,6 +3,8 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
+#include "argparse/internal/argparse-port.h"
+
 namespace argparse {
 namespace {
 
@@ -15,8 +17,8 @@ struct MoveOnlyType {
   int val;
 };
 
-static_assert(std::is_move_constructible<MoveOnlyType>{});
-static_assert(!std::is_copy_constructible<MoveOnlyType>{});
+ARGPARSE_STATIC_ASSERT(std::is_move_constructible<MoveOnlyType>{});
+ARGPARSE_STATIC_ASSERT(!std::is_copy_constructible<MoveOnlyType>{});
 
 struct CtorOverload {
   enum {

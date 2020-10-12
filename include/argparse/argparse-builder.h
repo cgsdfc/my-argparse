@@ -50,9 +50,9 @@ auto GetBuiltObject(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
 class AnyValue : private internal::BuilderOf<internal::Any> {
  public:
   template <typename T,
-            absl::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = nullptr>
+            portability::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = nullptr>
   AnyValue(T&& val) {
-    auto obj = internal::MakeAny<absl::decay_t<T>>(std::forward<T>(val));
+    auto obj = internal::MakeAny<portability::decay_t<T>>(std::forward<T>(val));
     this->SetObject(std::move(obj));
   }
 
@@ -62,7 +62,7 @@ class AnyValue : private internal::BuilderOf<internal::Any> {
 
 class TypeCallback : private internal::BuilderOf<internal::TypeCallback> {
  public:
-  template <typename T, absl::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
+  template <typename T, portability::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
   TypeCallback(T&& cb) {
     this->SetObject(internal::MakeTypeCallback(std::forward<T>(cb)));
   }
@@ -73,7 +73,7 @@ class TypeCallback : private internal::BuilderOf<internal::TypeCallback> {
 
 class ActionCallback : private internal::BuilderOf<internal::ActionCallback> {
  public:
-  template <typename T, absl::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
+  template <typename T, portability::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
   ActionCallback(T&& cb) {
     this->SetObject(internal::MakeActionCallback(std::forward<T>(cb)));
   }

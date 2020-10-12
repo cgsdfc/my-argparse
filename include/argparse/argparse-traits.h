@@ -147,7 +147,7 @@ struct DefaultFormatTraits : FmtlibFormatTraits<T> {};
 template <typename T, typename SFINAE>
 struct DefaultFormatTraits : DummyFormatTraits<T> {};
 template <typename T>
-struct DefaultFormatTraits<T, absl::enable_if_t<has_insert_operator<T>{}>>
+struct DefaultFormatTraits<T, portability::enable_if_t<has_insert_operator<T>{}>>
     : StringStreamFormatTraits<T> {};
 #endif
 // Handling for file obj..
@@ -191,7 +191,7 @@ struct DefaultParseTraits<bool> {
 };
 
 template <typename T>
-struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
+struct DefaultParseTraits<T, portability::enable_if_t<internal::IsNumericType<T>{}>> {
   static void Run(const std::string& in, Result<T>* out) {
     try {
       *out = internal::STLParseNumeric<T>(in);
@@ -243,7 +243,7 @@ struct MetaTypeHint<T, MetaTypes::kList> {
 
 template <typename T>
 struct DefaultTypeHint<T,
-                       absl::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
+                       portability::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
     : MetaTypeHint<T> {};
 
 }  // namespace internal
@@ -325,17 +325,17 @@ struct MetaTypeOf<char, void> : MetaTypeContant<MetaTypes::kChar> {};
 
 // File.
 template <typename T>
-struct MetaTypeOf<T, absl::enable_if_t<internal::IsOpenSupported<T>{}>>
+struct MetaTypeOf<T, portability::enable_if_t<internal::IsOpenSupported<T>{}>>
     : MetaTypeContant<MetaTypes::kFile> {};
 
 // List.
 template <typename T>
-struct MetaTypeOf<T, absl::enable_if_t<internal::IsAppendSupported<T>{}>>
+struct MetaTypeOf<T, portability::enable_if_t<internal::IsAppendSupported<T>{}>>
     : MetaTypeContant<MetaTypes::kList> {};
 
 // Number.
 template <typename T>
-struct MetaTypeOf<T, absl::enable_if_t<internal::IsNumericType<T>{}>>
+struct MetaTypeOf<T, portability::enable_if_t<internal::IsNumericType<T>{}>>
     : MetaTypeContant<MetaTypes::kNumber> {};
 
 template <typename T>
@@ -348,7 +348,7 @@ std::string TypeHint() {
 }
 template <typename T>
 std::string FormatValue(const T& value) {
-  return FormatTraits<absl::decay_t<T>>::Run(value);
+  return FormatTraits<portability::decay_t<T>>::Run(value);
 }
 }  // namespace internal
 
