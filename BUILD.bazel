@@ -1,8 +1,23 @@
+# Copyright (c) 2020 Feng Cong
+# 
+# This software is released under the MIT License.
+# https://opensource.org/licenses/MIT
+
 load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test", "cc_binary")
 
 package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
+
+# config_setting(
+#     name = "has_gflags",
+#     values = {"define": "gflags=1"},
+# )
+
+# config_setting(
+#     name = "has_absl",
+#     values = {"define": "absl=1"},
+# )
 
 cc_library(
     name = "argparse",
@@ -16,9 +31,16 @@ cc_library(
         "include/",
     ],
     deps = [
+        "@com_google_absl//absl/strings",
         "@gflags//:gflags",
-        # "@com_google_absl//absl/strings",
-    ],
+    ]
+    # deps = select({
+    #     ":has_absl": [
+    #     ],
+    #     ":has_gflags": [
+    #     ],
+    #     "//conditions:default": [],
+    # }),
 )
 
 cc_test(
