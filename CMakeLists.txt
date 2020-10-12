@@ -14,6 +14,12 @@ download_project(PROJ                googletest
                  GIT_TAG             master
                  ${UPDATE_DISCONNECTED_IF_AVAILABLE})
 
+download_project(PROJ               abseil
+                GIT_REPOSITORY      https://github.com/abseil/abseil-cpp.git 
+                GIT_TAG             master
+                ${UPDATE_DISCONNECTED_IF_AVAILABLE})
+add_subdirectory(${abseil_SOURCE_DIR} ${abseil_BINARY_DIR})
+
 if (ARGPARSE_USE_GFLAGS)
     download_project(PROJ                gflags
                     GIT_REPOSITORY      https://github.com/gflags/gflags.git 
@@ -43,12 +49,12 @@ if (NOT HAVE_ARGP_H)
     message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
 endif()
 
-include_directories(include)
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
 set(ARGPARSE_SOURCE 
-   src/argparse.cc 
-   src/argparse-internal.cc
-   src/argparse-argp-parser.cc
+   ${CMAKE_SOURCE_DIR}/src/argparse.cc 
+   ${CMAKE_SOURCE_DIR}/src/argparse-internal.cc
+   ${CMAKE_SOURCE_DIR}/src/argparse-argp-parser.cc
 )
 
 if (ARGPARSE_USE_GFLAGS)
