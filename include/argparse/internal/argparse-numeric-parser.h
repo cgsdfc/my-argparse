@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include <absl/meta/type_traits.h>
-
 #include <string>
+
+#include "argparse/internal/argparse-port.h"
 
 // About how to parse a string into a numeric value.
 namespace argparse {

@@ -21,6 +21,8 @@ TEST(OpaquePtr, DefaultCtorWorks) {
 TEST(OpaquePtr, CanBeConvertedFromNullptr) {
   OpaquePtr ptr_a = nullptr;
   OpaquePtr ptr_b(nullptr);
+  (void) ptr_a;
+  (void) ptr_b;
 }
 
 TEST(OpaquePtr, NullptrCtorWorks) {

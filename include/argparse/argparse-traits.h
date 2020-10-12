@@ -130,7 +130,7 @@ template <typename T, typename SFINAE = void>
 struct has_insert_operator : std::false_type {};
 template <typename T>
 struct has_insert_operator<T,
-                           std::void_t<decltype(std::declval<std::ostream&>()
+                           portability::void_t<decltype(std::declval<std::ostream&>()
                                                 << std::declval<const T&>())>>
     : std::true_type {};
 

@@ -384,7 +384,7 @@ struct IsFunctor : std::false_type {};
 // Note: this will fail on auto lambda and overloaded operator().
 // But you should not use these as input to callback.
 template <typename T>
-struct IsFunctor<T, std::void_t<decltype(&T::operator())>> : std::true_type {};
+struct IsFunctor<T, portability::void_t<decltype(&T::operator())>> : std::true_type {};
 
 template <typename Func, typename F = portability::decay_t<Func>>
 struct IsCallback

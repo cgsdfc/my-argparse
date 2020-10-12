@@ -31,7 +31,9 @@ cc_library(
         "include/",
     ],
     deps = [
-        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/meta:type_traits",
+        "@com_google_absl//absl/utility",
+        "@com_google_absl//absl/memory",
         "@gflags//:gflags",
     ]
     # deps = select({
