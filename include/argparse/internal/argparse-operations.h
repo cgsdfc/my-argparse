@@ -378,7 +378,7 @@ struct IsFunctor : std::false_type {};
 template <typename T>
 struct IsFunctor<T, std::void_t<decltype(&T::operator())>> : std::true_type {};
 
-template <typename Func, typename F = std::decay_t<Func>>
+template <typename Func, typename F = absl::decay_t<Func>>
 struct IsCallback
     : std::bool_constant<IsFunctionPointer<F>{} || IsFunctor<F>{}> {};
 
