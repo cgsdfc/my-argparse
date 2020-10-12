@@ -12,25 +12,24 @@ option(ARGPARSE_USE_GFLAGS "Whether to use gflags as an backend" ON)
 download_project(PROJ                googletest
                  GIT_REPOSITORY      https://github.com/google/googletest.git
                  GIT_TAG             master
-                 ${UPDATE_DISCONNECTED_IF_AVAILABLE})
+                 UPDATE_DISCONNECTED 1
+                 QUITE)
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
 download_project(PROJ               abseil
                 GIT_REPOSITORY      https://github.com/abseil/abseil-cpp.git 
                 GIT_TAG             master
-                ${UPDATE_DISCONNECTED_IF_AVAILABLE})
+                UPDATE_DISCONNECTED 1)
 add_subdirectory(${abseil_SOURCE_DIR} ${abseil_BINARY_DIR})
 
 if (ARGPARSE_USE_GFLAGS)
     download_project(PROJ                gflags
                     GIT_REPOSITORY      https://github.com/gflags/gflags.git 
                     GIT_TAG             master
-                    ${UPDATE_DISCONNECTED_IF_AVAILABLE})
+                    UPDATE_DISCONNECTED 1)
     add_subdirectory(${gflags_SOURCE_DIR} ${gflags_BINARY_DIR})
 endif()
-
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
-add_subdirectory(${googletest_SOURCE_DIR} ${googletest_BINARY_DIR})
 
 
 # When using CMake 2.8.11 or later, header path dependencies
@@ -63,6 +62,8 @@ if (ARGPARSE_USE_GFLAGS)
 endif()
 
 add_library(argparse ${ARGPARSE_SOURCE})
+
+target_link_libraries(argparse absl::base absl::meta absl::memory)
 
 if (ARGPARSE_USE_GFLAGS)
     target_link_libraries(argparse gflags::gflags)

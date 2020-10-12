@@ -52,7 +52,7 @@ class AnyImpl : public Any {
 
 template <typename T, typename... Args>
 std::unique_ptr<Any> MakeAny(Args&&... args) {
-  return std::make_unique<AnyImpl<T>>(std::in_place_type<T>,
+  return absl::make_unique<AnyImpl<T>>(std::in_place_type<T>,
                                       std::forward<Args>(args)...);
 }
 

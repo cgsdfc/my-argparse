@@ -5,6 +5,10 @@
 
 #pragma once
 
+#include <absl/base/attributes.h>
+#include <absl/memory/memory.h>
+#include <absl/meta/type_traits.h>
+
 #include <iostream>
 #include <memory>
 #include <string>
@@ -59,7 +63,8 @@ struct SourceLocation {
   const char* function;
 };
 
-[[noreturn]] void CheckFailed(SourceLocation loc, const char* fmt, ...);
+ABSL_ATTRIBUTE_NORETURN void CheckFailed(SourceLocation loc, const char* fmt,
+                                         ...);
 
 OpenMode CharsToMode(const char* str);
 std::string ModeToChars(OpenMode mode);

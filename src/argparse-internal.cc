@@ -371,7 +371,7 @@ SubCommand* SubCommandHolderImpl::AddSubCommandToGroup(
   cmd_ptr->SetGroup(group);
   // Setup listener.
   ARGPARSE_DCHECK(cmd_ptr->GetHolder());
-  cmd_ptr->GetHolder()->SetListener(std::make_unique<ListenerImpl>(this));
+  cmd_ptr->GetHolder()->SetListener(absl::make_unique<ListenerImpl>(this));
   subcmds_.push_back(std::move(cmd));
 
   if (listener_) listener_->OnAddSubCommand(cmd_ptr);
@@ -434,7 +434,7 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
   }
 
   void SetMetaVar(std::string val) override {
-    meta_var_ = std::make_unique<std::string>(std::move(val));
+    meta_var_ = absl::make_unique<std::string>(std::move(val));
   }
 
   void SetRequired(bool val) override {
@@ -926,78 +926,78 @@ bool Argument::Less(Argument* a, Argument* b) {
 }
 
 std::unique_ptr<SubCommandGroup> SubCommandGroup::Create() {
-  return std::make_unique<GroupImpl>();
+  return absl::make_unique<GroupImpl>();
 }
 
 std::unique_ptr<ArgumentBuilder> ArgumentBuilder::Create() {
-  return std::make_unique<ArgumentBuilderImpl>();
+  return absl::make_unique<ArgumentBuilderImpl>();
 }
 
 std::unique_ptr<Argument> Argument::Create(std::unique_ptr<NamesInfo> info) {
   ARGPARSE_DCHECK(info);
-  return std::make_unique<ArgumentImpl>(std::move(info));
+  return absl::make_unique<ArgumentImpl>(std::move(info));
 }
 
 std::unique_ptr<ArgumentHolder> ArgumentHolder::Create(SubCommand* cmd) {
-  return std::make_unique<ArgumentHolderImpl>(cmd);
+  return absl::make_unique<ArgumentHolderImpl>(cmd);
 }
 
 std::unique_ptr<SubCommand> SubCommand::Create(std::string name) {
-  return std::make_unique<SubCommandImpl>(std::move(name));
+  return absl::make_unique<SubCommandImpl>(std::move(name));
 }
 
 std::unique_ptr<SubCommandHolder> SubCommandHolder::Create() {
-  return std::make_unique<SubCommandHolderImpl>();
+  return absl::make_unique<SubCommandHolderImpl>();
 }
 
 std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(
     std::unique_ptr<Operations> ops) {
-  return std::make_unique<DefaultTypeInfo>(std::move(ops));
+  return absl::make_unique<DefaultTypeInfo>(std::move(ops));
 }
 
 std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
     std::unique_ptr<Operations> ops,
     OpenMode mode) {
-  return std::make_unique<FileTypeInfo>(std::move(ops), mode);
+  return absl::make_unique<FileTypeInfo>(std::move(ops), mode);
 }
 
 // Invoke user's callback.
 std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
     std::unique_ptr<TypeCallback> cb) {
-  return std::make_unique<TypeCallbackInfo>(std::move(cb));
+  return absl::make_unique<TypeCallbackInfo>(std::move(cb));
 }
 
 std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
-  return std::make_unique<FlagNumArgsInfo>(flag);
+  return absl::make_unique<FlagNumArgsInfo>(flag);
 }
 
 std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
   ARGPARSE_CHECK_F(num >= 0, "nargs number must be >= 0");
-  return std::make_unique<NumberNumArgsInfo>(num);
+  return absl::make_unique<NumberNumArgsInfo>(num);
 }
 
 std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(
     ActionKind action_kind,
     std::unique_ptr<Operations> ops) {
-  return std::make_unique<DefaultActionInfo>(action_kind, std::move(ops));
+  return absl::make_unique<DefaultActionInfo>(action_kind, std::move(ops));
 }
 
 std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(
     std::unique_ptr<ActionCallback> cb) {
-  return std::make_unique<ActionCallbackInfo>(std::move(cb));
+  return absl::make_unique<ActionCallbackInfo>(std::move(cb));
 }
 
 std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
-  return std::make_unique<PositionalName>(std::move(in));
+  return absl::make_unique<PositionalName>(std::move(in));
 }
 
 std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
     const std::vector<std::string>& in) {
-  return std::make_unique<OptionalNames>(in);
+  return absl::make_unique<OptionalNames>(in);
 }
 
 std::unique_ptr<ArgumentContainer> ArgumentContainer::Create() {
-  return std::make_unique<ArgumentContainerImpl>();
+  return absl::make_unique<ArgumentContainerImpl>();
 }
 
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
@@ -1005,7 +1005,7 @@ std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
 }
 
 std::unique_ptr<ArgumentController> ArgumentController::Create() {
-  return std::make_unique<ArgumentControllerImpl>();
+  return absl::make_unique<ArgumentControllerImpl>();
 }
 
 std::string ModeToChars(OpenMode mode) {
@@ -1100,7 +1100,7 @@ StringView::StringView(const char* data)
     : StringView(data, std::strlen(data)) {}
 
 std::unique_ptr<char[]> StringView::ToCharArray() const {
-  auto dest = std::make_unique<char[]>(size() + 1);
+  auto dest = absl::make_unique<char[]>(size() + 1);
   std::char_traits<char>::copy(dest.get(), data(), size());
   dest[size()] = 0;
   return dest;

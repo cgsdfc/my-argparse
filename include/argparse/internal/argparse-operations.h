@@ -271,7 +271,7 @@ class OperationsImpl : public Operations {
 
 template <typename T>
 std::unique_ptr<Operations> CreateOperations() {
-  return std::make_unique<OperationsImpl<T>>();
+  return absl::make_unique<OperationsImpl<T>>();
 }
 
 template <typename T, bool = IsAppendSupported<T>{}>
@@ -301,7 +301,7 @@ class OpsFactoryImpl : public OpsFactory {
 
 template <typename T>
 std::unique_ptr<OpsFactory> CreateOpsFactory() {
-  return std::make_unique<OpsFactoryImpl<T>>();
+  return absl::make_unique<OpsFactoryImpl<T>>();
 }
 
 template <typename T>
@@ -385,7 +385,7 @@ struct IsCallback
 template <typename Callback, typename T>
 std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(Callback&& cb,
                                                    TypeCallbackPrototype<T>*) {
-  return std::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
+  return absl::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
 }
 
 template <typename Callback, typename T>
@@ -399,7 +399,7 @@ std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
       out->SetError(e.what());
     }
   };
-  return std::make_unique<TypeCallbackImpl<T>>(std::move(wrapped_cb));
+  return absl::make_unique<TypeCallbackImpl<T>>(std::move(wrapped_cb));
 }
 
 template <typename Callback>
@@ -412,7 +412,7 @@ template <typename Callback, typename T, typename V>
 std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
     Callback&& cb,
     ActionCallbackPrototype<T, V>*) {
-  return std::make_unique<CustomActionCallback<T, V>>(
+  return absl::make_unique<CustomActionCallback<T, V>>(
       std::forward<Callback>(cb));
 }
 
