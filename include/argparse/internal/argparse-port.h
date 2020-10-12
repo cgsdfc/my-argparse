@@ -56,8 +56,6 @@ using ::absl::decay_t;
 using ::absl::enable_if_t;
 using ::absl::in_place;
 using ::absl::in_place_t;
-using ::absl::in_place_type;
-using ::absl::in_place_type_t;
 using ::absl::index_sequence;
 using ::absl::make_index_sequence;
 using ::absl::make_unique;

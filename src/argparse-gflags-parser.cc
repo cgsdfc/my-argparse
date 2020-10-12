@@ -16,7 +16,9 @@ using GflagsTypeList = TypeList<bool, gflags::int32, gflags::int64,
 
 template <typename... Types>
 bool IsGflagsSupportedTypeImpl(std::type_index type, TypeList<Types...>) {
-  return ((type == typeid(Types)) || ...);
+  static const std::type_index kValidTypes[] = {typeid(Types)...};
+  return std::find(std::begin(kValidTypes), std::end(kValidTypes), type) !=
+         std::end(kValidTypes);
 }
 
 bool IsGflagsSupportedType(std::type_index type) {

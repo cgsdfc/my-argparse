@@ -27,9 +27,11 @@ enum class OpsKind {
   kCount,
   kParse,
   kOpen,
+  kMaxOpsKind,
 };
 
-inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
+// inline unsigned  GetMaxOpsKind() {return static_cast}
+// inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
 
 const char* OpsToString(OpsKind ops);
 
@@ -95,7 +97,8 @@ class ActionCallback {
 
 // Extracted the bool value from AppendTraits.
 template <typename T>
-struct IsAppendSupported : portability::bool_constant<bool(AppendTraits<T>::Run)> {};
+struct IsAppendSupported
+    : portability::bool_constant<bool(AppendTraits<T>::Run)> {};
 
 template <typename T, bool = IsAppendSupported<T>{}>
 struct IsAppendConstSupportedImpl;
@@ -109,7 +112,8 @@ template <typename T>
 struct IsAppendConstSupported : IsAppendConstSupportedImpl<T> {};
 
 template <typename T>
-struct IsOpenSupported : portability::bool_constant<bool(OpenTraits<T>::Run)> {};
+struct IsOpenSupported : portability::bool_constant<bool(OpenTraits<T>::Run)> {
+};
 
 template <OpsKind Ops, typename T>
 struct IsOpsSupported : std::false_type {};
@@ -117,7 +121,7 @@ struct IsOpsSupported : std::false_type {};
 template <typename T>
 struct IsOpsSupported<OpsKind::kStore, T>
     : portability::bool_constant<std::is_copy_assignable<T>{} ||
-                         std::is_move_assignable<T>{}> {};
+                                 std::is_move_assignable<T>{}> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kStoreConst, T> : std::is_copy_assignable<T> {};
@@ -252,7 +256,9 @@ class OperationsImpl : public Operations {
   void AppendConst(OpaquePtr dest, const Any& data) override {
     OpsImpl<OpsKind::kAppendConst, T>::Run(dest, data);
   }
-  void Count(OpaquePtr dest) override { OpsImpl<OpsKind::kCount, T>::Run(dest); }
+  void Count(OpaquePtr dest) override {
+    OpsImpl<OpsKind::kCount, T>::Run(dest);
+  }
   void Parse(const std::string& in, OpsResult* out) override {
     OpsImpl<OpsKind::kParse, T>::Run(in, out);
   }
@@ -260,6 +266,7 @@ class OperationsImpl : public Operations {
     OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {
+    const auto kMaxOpsKind = static_cast<std::size_t>(OpsKind::kMaxOpsKind);
     return OpsIsSupportedImpl<T>(
         ops, portability::make_index_sequence<kMaxOpsKind>{});
   }
@@ -362,15 +369,14 @@ struct StripFunctionObject {
 // Extracts the function signature from a function, function pointer or lambda.
 template <typename Func, typename F = portability::remove_reference_t<Func>>
 using FunctionSignature = portability::conditional_t<
-    std::is_function<F>::value,
-    F,
-    typename portability::conditional_t<std::is_pointer<F>::value ||
-                                    std::is_member_pointer<F>::value,
-                                std::remove_pointer<F>,
-                                StripFunctionObject<F>>::type>;
+    std::is_function<F>::value, F,
+    typename portability::conditional_t<
+        std::is_pointer<F>::value || std::is_member_pointer<F>::value,
+        std::remove_pointer<F>, StripFunctionObject<F>>::type>;
 
 template <typename T>
-struct IsFunctionPointer : std::is_function<portability::remove_pointer_t<T>> {};
+struct IsFunctionPointer : std::is_function<portability::remove_pointer_t<T>> {
+};
 
 template <typename T, typename SFINAE = void>
 struct IsFunctor : std::false_type {};
@@ -387,13 +393,13 @@ struct IsCallback
 template <typename Callback, typename T>
 std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(Callback&& cb,
                                                    TypeCallbackPrototype<T>*) {
-  return portability::make_unique<TypeCallbackImpl<T>>(std::forward<Callback>(cb));
+  return portability::make_unique<TypeCallbackImpl<T>>(
+      std::forward<Callback>(cb));
 }
 
 template <typename Callback, typename T>
 std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
-    Callback&& cb,
-    TypeCallbackPrototypeThrows<T>*) {
+    Callback&& cb, TypeCallbackPrototypeThrows<T>*) {
   auto wrapped_cb = [cb](const std::string& in, Result<T>* out) {
     try {
       *out = portability::invoke(cb, in);
@@ -412,17 +418,15 @@ std::unique_ptr<TypeCallback> MakeTypeCallback(Callback&& cb) {
 
 template <typename Callback, typename T, typename V>
 std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
-    Callback&& cb,
-    ActionCallbackPrototype<T, V>*) {
+    Callback&& cb, ActionCallbackPrototype<T, V>*) {
   return portability::make_unique<CustomActionCallback<T, V>>(
       std::forward<Callback>(cb));
 }
 
 template <typename Callback>
 std::unique_ptr<ActionCallback> MakeActionCallback(Callback&& cb) {
-  return MakeActionCallbackImpl(
-      std::forward<Callback>(cb),
-      (FunctionSignature<Callback>*)nullptr);
+  return MakeActionCallbackImpl(std::forward<Callback>(cb),
+                                (FunctionSignature<Callback>*)nullptr);
 }
 
 }  // namespace internal
