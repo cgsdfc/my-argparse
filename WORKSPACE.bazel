@@ -12,6 +12,7 @@ http_archive(
      name = "gflags",
      urls = ["https://github.com/gflags/gflags/archive/master.zip"],
      strip_prefix = "gflags-master",
+     sha256 = "cbf07efb911493a1b55c196c60c3c18b7d2ac0391b5fb36ef73ed842c39c0861",
 )
 
 # GTest
@@ -26,12 +27,14 @@ http_archive(
      name = "com_google_absl",
      urls = ["https://github.com/abseil/abseil-cpp/archive/master.zip"],
      strip_prefix = "abseil-cpp-master",
+     sha256 = "2a378cb85b0158b4ef95c979c8121175a36515dfb759c8ff994b9da11c1eaa13",
 )
 
 http_archive(
     name = "rules_cc",
     strip_prefix = "rules_cc-master",
     urls = ["https://github.com/bazelbuild/rules_cc/archive/master.zip"],
+    sha256 = "e1b6d845f9473ececdfb8dbd8c4c18e0339f4e6a45c4aa52e6a265e6f5040933",
 )
 
 http_archive(

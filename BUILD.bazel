@@ -21,12 +21,29 @@ licenses(["notice"])
 
 cc_library(
     name = "argparse",
-    srcs = glob(
-        include = ["src/*.cc"]
-    ),
-    hdrs = glob(
-        include = ["include/argparse/**/*.h"]
-    ),
+    srcs = [
+        "src/argparse-internal.cc",
+        "src/argparse.cc",
+        "src/argparse-gflags-parser.cc",
+        "src/argparse-argp-parser.cc",
+    ],
+    hdrs = [
+        "include/argparse/internal/argparse-any.h",
+        "include/argparse/internal/argparse-arg-array.h",
+        "include/argparse/internal/argparse-argp-parser.h",
+        "include/argparse/internal/argparse-gflags-parser.h",
+        "include/argparse/internal/argparse-internal.h",
+        "include/argparse/internal/argparse-numeric-parser.h",
+        "include/argparse/internal/argparse-opaque-ptr.h",
+        "include/argparse/internal/argparse-operations.h",
+        "include/argparse/internal/argparse-port.h",
+        "include/argparse/internal/argparse-result.h",
+        "include/argparse/argparse-builder.h",
+        "include/argparse/argparse-conversion-result.h",
+        "include/argparse/argparse-result.h",
+        "include/argparse/argparse-traits.h",
+        "include/argparse/argparse.h",
+    ],
     includes = [
         "include/",
     ],
