@@ -20,6 +20,7 @@ http_archive(
      name = "gtest",
      urls = ["https://github.com/google/googletest/archive/master.zip"],
      strip_prefix = "googletest-master",
+     sha256 = "cb80444c051a4edea028c6177a4955a650e99e519d72364075da3686da5dae6e",
 )
 
 # Abseil
