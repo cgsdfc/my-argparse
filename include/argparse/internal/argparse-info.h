@@ -128,6 +128,8 @@ class TypeInfo {
       std::unique_ptr<TypeCallback> cb);
 };
 
+namespace info_internal {
+
 class DestInfoImpl : public DestInfo {
  public:
   DestInfoImpl(OpaquePtr d, std::unique_ptr<OpsFactory> f)
@@ -148,10 +150,15 @@ class DestInfoImpl : public DestInfo {
   std::unique_ptr<Operations> ops_;
 };
 
+}  // namespace info_internal
+
+// If we can make Operations indexable from type_index, then only an opaque-ptr
+// is needed here.
 template <typename T>
 std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
   ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
-  return absl::make_unique<DestInfoImpl>(OpaquePtr(ptr), CreateOpsFactory<T>());
+  return absl::make_unique<info_internal::DestInfoImpl>(OpaquePtr(ptr),
+                                                        CreateOpsFactory<T>());
 }
 
 }  // namespace internal

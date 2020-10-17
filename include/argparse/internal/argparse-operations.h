@@ -55,6 +55,9 @@ class Operations {
   virtual ~Operations() {}
 };
 
+template <typename T>
+std::unique_ptr<Operations> CreateOperations();
+
 // How to create a vtable?
 class OpsFactory {
  public:
@@ -141,6 +144,9 @@ struct IsOpsSupported<OpsKind::kParse, T>
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T> : IsOpenSupported<T> {};
+
+// Put the code used only in this module here.
+namespace operations_internal {
 
 template <typename T>
 void ConvertResults(Result<T>* in, OpsResult* out) {
@@ -276,11 +282,6 @@ class OperationsImpl : public Operations {
   const std::type_info& GetTypeInfo() override { return typeid(T); }
 };
 
-template <typename T>
-std::unique_ptr<Operations> CreateOperations() {
-  return absl::make_unique<OperationsImpl<T>>();
-}
-
 template <typename T, bool = IsAppendSupported<T>{}>
 struct CreateValueTypeOpsImpl;
 
@@ -306,10 +307,19 @@ class OpsFactoryImpl : public OpsFactory {
   }
 };
 
+}  // namespace operations_internal
+
+template <typename T>
+std::unique_ptr<Operations> CreateOperations() {
+  return absl::make_unique<operations_internal::OperationsImpl<T>>();
+}
+
 template <typename T>
 std::unique_ptr<OpsFactory> CreateOpsFactory() {
-  return absl::make_unique<OpsFactoryImpl<T>>();
+  return absl::make_unique<operations_internal::OpsFactoryImpl<T>>();
 }
+
+namespace operations_internal {
 
 template <typename T>
 class TypeCallbackImpl : public TypeCallback {
@@ -383,10 +393,6 @@ struct IsFunctor : std::false_type {};
 template <typename T>
 struct IsFunctor<T, absl::void_t<decltype(&T::operator())>> : std::true_type {};
 
-template <typename Func, typename F = absl::decay_t<Func>>
-struct IsCallback
-    : portability::bool_constant<IsFunctionPointer<F>{} || IsFunctor<F>{}> {};
-
 template <typename Callback, typename T>
 std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(Callback&& cb,
                                                    TypeCallbackPrototype<T>*) {
@@ -406,12 +412,6 @@ std::unique_ptr<TypeCallback> MakeTypeCallbackImpl(
   return absl::make_unique<TypeCallbackImpl<T>>(std::move(wrapped_cb));
 }
 
-template <typename Callback>
-std::unique_ptr<TypeCallback> MakeTypeCallback(Callback&& cb) {
-  return MakeTypeCallbackImpl(std::forward<Callback>(cb),
-                              (FunctionSignature<Callback>*)nullptr);
-}
-
 template <typename Callback, typename T, typename V>
 std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
     Callback&& cb, ActionCallbackPrototype<T, V>*) {
@@ -419,8 +419,23 @@ std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
       std::forward<Callback>(cb));
 }
 
+}  // namespace operations_internal
+
+template <typename Func, typename F = absl::decay_t<Func>>
+struct IsCallback
+    : portability::bool_constant<operations_internal::IsFunctionPointer<F>{} ||
+                                 operations_internal::IsFunctor<F>{}> {};
+
+template <typename Callback>
+std::unique_ptr<TypeCallback> MakeTypeCallback(Callback&& cb) {
+  using namespace operations_internal;
+  return MakeTypeCallbackImpl(std::forward<Callback>(cb),
+                              (FunctionSignature<Callback>*)nullptr);
+}
+
 template <typename Callback>
 std::unique_ptr<ActionCallback> MakeActionCallback(Callback&& cb) {
+  using namespace operations_internal;
   return MakeActionCallbackImpl(std::forward<Callback>(cb),
                                 (FunctionSignature<Callback>*)nullptr);
 }
