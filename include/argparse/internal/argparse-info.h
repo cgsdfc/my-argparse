@@ -139,7 +139,7 @@ class TypeInfo {
 template <typename T>
 std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
   ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
-  return absl::make_unique<DestInfo>(ptr);
+  return absl::WrapUnique(new DestInfo(ptr));
 }
 
 }  // namespace internal

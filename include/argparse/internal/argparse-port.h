@@ -91,12 +91,6 @@ class Any;
 // When an meaningless type is needed.
 struct NoneType {};
 
-struct OpsResult {
-  bool has_error = false;
-  std::unique_ptr<Any> value;  // null if error.
-  std::string errmsg;
-};
-
 // TODO: forbit exception..
 // Throw this exception will cause an error msg to be printed (via what()).
 class ArgumentError final : public std::runtime_error {

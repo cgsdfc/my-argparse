@@ -1,31 +1,77 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
 #pragma once
 
-#include "argparse/internal/argparse-result.h"
+#include "argparse/internal/argparse-any.h"
+#include "argparse/internal/argparse-port.h"
 
 namespace argparse {
 
+namespace internal {
+struct OpsResult;
+}  // namespace internal
+
+// A new API that will replace the legacy TypeCallback by directly erasing type
+// using ConversionResult.
 class ConversionResult {
  public:
-  explicit ConversionResult(internal::Result result)
-      : result_(std::move(result)) {}
+  // Use ConversionFailure() or ConversionSuccess() instead.
+  explicit ConversionResult(std::string error)
+      : error_(absl::make_unique<std::string>(std::move(error))) {}
+  explicit ConversionResult(std::unique_ptr<internal::Any> value)
+      : value_(std::move(value)) {}
+
+  bool HasValue() const { return value_ != nullptr; }
+  bool HasError() const { return error_ != nullptr; }
+
+  template <typename T>
+  T* GetValue() const {
+    ARGPARSE_DCHECK(HasValue());
+    return internal::AnyCast<T>(value_.get());
+  }
+
+  absl::string_view GetError() const {
+    ARGPARSE_DCHECK(HasError());
+    return *error_;
+  }
+
+  template <typename T>
+  T TakeValue() ABSL_MUST_USE_RESULT {
+    return internal::AnyCast<T>(ReleaseValue());
+  }
 
  private:
-  internal::Result result_;
+  friend class internal::OpsResult;
+
+  std::unique_ptr<internal::Any> ReleaseValue() {
+    ARGPARSE_DCHECK(HasValue());
+    return std::move(value_);
+  }
+  std::string ReleaseError() {
+    ARGPARSE_DCHECK(HasError());
+    auto str = std::move(*error_);
+    error_.reset();
+    return str;
+  }
+
+  std::unique_ptr<internal::Any> value_;
+  std::unique_ptr<std::string> error_;
 };
 
-inline ConversionResult ConversionFailure(std::string error) {
-  return ConversionResult(internal::Result(std::move(error)));
+// Indicate a conversion failure. Optionally an error message can be supplied.
+inline ConversionResult ConversionFailure(std::string error = {}) {
+  return ConversionResult(std::move(error));
 }
 
-template <typename T>
-ConversionResult ConversionSuccess(T&& value) {
-  auto any = internal::MakeAny<absl::decay_t<T>>(std::forward<T>(value));
-  return ConversionResult(internal::Result(std::move(any)));
+// Indicate a conversion success by wrapping a value into an instance of
+// ConversionResult. The T type argument is made explicit to avoid
+// human-errors.
+template <typename T, typename... Args>
+ConversionResult ConversionSuccess(Args&&... args) {
+  return ConversionResult(internal::MakeAny<T>(std::forward<Args>(args)...));
 }
 
 }  // namespace argparse
