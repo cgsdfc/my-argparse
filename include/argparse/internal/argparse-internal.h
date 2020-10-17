@@ -99,7 +99,7 @@ class Argument {
   // If a default-value exists, return true and set out.
   bool FormatDefaultValue(std::string* out) {
     if (GetDefaultValue() && GetDest()) {
-      *out = GetDest()->FormatValue(*GetDefaultValue());
+      *out = GetDest()->GetOperations()->FormatValue(*GetDefaultValue());
       return true;
     }
     return false;
@@ -241,7 +241,7 @@ class ArgumentBuilder {
   virtual void SetActionCallback(std::unique_ptr<ActionCallback> cb) = 0;
 
   // type<int>()
-  virtual void SetTypeOperations(std::unique_ptr<Operations> ops) = 0;
+  virtual void SetTypeOperations(Operations* ops) = 0;
 
   // type(<lambda>)
   virtual void SetTypeCallback(std::unique_ptr<TypeCallback> cb) = 0;

@@ -81,15 +81,15 @@ FlagNumArgsInfo::FlagNumArgsInfo(char flag) : flag_(flag) {
 // ActionInfo for builtin actions like store and append.
 class DefaultActionInfo : public ActionInfo {
  public:
-  DefaultActionInfo(ActionKind action_kind, std::unique_ptr<Operations> ops)
-      : action_kind_(action_kind), ops_(std::move(ops)) {}
+  DefaultActionInfo(ActionKind action_kind, Operations* ops)
+      : action_kind_(action_kind), ops_(ops) {}
 
   void Run(CallbackClient* client) override;
 
  private:
   // Since kind of action is too much, we use a switch instead of subclasses.
   ActionKind action_kind_;
-  std::unique_ptr<Operations> ops_;
+  Operations* ops_;
 };
 
 // Adapt an ActionCallback to ActionInfo.
@@ -110,8 +110,7 @@ class ActionCallbackInfo : public ActionInfo {
 // using ParseTraits.
 class DefaultTypeInfo : public TypeInfo {
  public:
-  explicit DefaultTypeInfo(std::unique_ptr<Operations> ops)
-      : ops_(std::move(ops)) {}
+  explicit DefaultTypeInfo(Operations* ops) : ops_(ops) {}
 
   void Run(const std::string& in, OpsResult* out) override {
     return ops_->Parse(in, out);
@@ -120,15 +119,14 @@ class DefaultTypeInfo : public TypeInfo {
   std::string GetTypeHint() override { return ops_->GetTypeHint(); }
 
  private:
-  std::unique_ptr<Operations> ops_;
+  Operations* ops_;
 };
 
 // TypeInfo that opens a file according to some mode.
 class FileTypeInfo : public TypeInfo {
  public:
   // TODO: set up cache of Operations objs..
-  FileTypeInfo(std::unique_ptr<Operations> ops, OpenMode mode)
-      : ops_(std::move(ops)), mode_(mode) {
+  FileTypeInfo(Operations* ops, OpenMode mode) : ops_(ops), mode_(mode) {
     ARGPARSE_DCHECK(mode != kModeNoMode);
   }
 
@@ -139,7 +137,7 @@ class FileTypeInfo : public TypeInfo {
   std::string GetTypeHint() override { return ops_->GetTypeHint(); }
 
  private:
-  std::unique_ptr<Operations> ops_;
+  Operations* ops_;
   OpenMode mode_;
 };
 
@@ -275,14 +273,13 @@ class OptionalNames : public NamesInfo {
 
 }  // namespace
 
-std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(
-    std::unique_ptr<Operations> ops) {
-  return absl::make_unique<DefaultTypeInfo>(std::move(ops));
+std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(Operations* ops) {
+  return absl::make_unique<DefaultTypeInfo>(ops);
 }
 
-std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
-    std::unique_ptr<Operations> ops, OpenMode mode) {
-  return absl::make_unique<FileTypeInfo>(std::move(ops), mode);
+std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(Operations* ops,
+                                                   OpenMode mode) {
+  return absl::make_unique<FileTypeInfo>(ops, mode);
 }
 
 // Invoke user's callback.
@@ -300,9 +297,9 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
   return absl::make_unique<NumberNumArgsInfo>(num);
 }
 
-std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(
-    ActionKind action_kind, std::unique_ptr<Operations> ops) {
-  return absl::make_unique<DefaultActionInfo>(action_kind, std::move(ops));
+std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(ActionKind action_kind,
+                                                      Operations* ops) {
+  return absl::make_unique<DefaultActionInfo>(action_kind, ops);
 }
 
 std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(

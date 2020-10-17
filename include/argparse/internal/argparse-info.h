@@ -75,17 +75,24 @@ class NumArgsInfo {
 
 class DestInfo {
  public:
-  virtual ~DestInfo() {}
-  // For action.
-  virtual OpaquePtr GetDestPtr() = 0;
-  // For default value formatting.
-  virtual std::string FormatValue(const Any& in) = 0;
-  // For providing default ops for type and action.
-  virtual OpsFactory* GetOpsFactory() = 0;
-  virtual std::type_index GetType() = 0;
+  OpaquePtr GetDestPtr() const { return dest_ptr_; }
+  Operations* GetOperations() const { return operations_; }
+  Operations* GetValueTypeOps() const { return value_type_ops_; }
+  std::type_index GetType() const { return dest_ptr_.type(); }
 
   template <typename T>
   static std::unique_ptr<DestInfo> CreateFromPtr(T* ptr);
+
+ private:
+  template <typename T>
+  explicit DestInfo(T* ptr)
+      : dest_ptr_(OpaquePtr(ptr)),
+        operations_(Operations::GetOps<T>()),
+        value_type_ops_(Operations::GetValueTypeOps<T>()) {}
+
+  OpaquePtr dest_ptr_;
+  Operations* operations_;
+  Operations* value_type_ops_;
 };
 
 class CallbackClient {
@@ -104,8 +111,8 @@ class ActionInfo {
 
   virtual void Run(CallbackClient* client) = 0;
 
-  static std::unique_ptr<ActionInfo> CreateDefault(
-      ActionKind action_kind, std::unique_ptr<Operations> ops);
+  static std::unique_ptr<ActionInfo> CreateDefault(ActionKind action_kind,
+                                                   Operations* ops);
 
   static std::unique_ptr<ActionInfo> CreateFromCallback(
       std::unique_ptr<ActionCallback> cb);
@@ -118,47 +125,21 @@ class TypeInfo {
   virtual std::string GetTypeHint() = 0;
 
   // Default version: parse a single string into value.
-  static std::unique_ptr<TypeInfo> CreateDefault(
-      std::unique_ptr<Operations> ops);
+  static std::unique_ptr<TypeInfo> CreateDefault(Operations* ops);
   // Open a file.
-  static std::unique_ptr<TypeInfo> CreateFileType(
-      std::unique_ptr<Operations> ops, OpenMode mode);
+  static std::unique_ptr<TypeInfo> CreateFileType(Operations* ops,
+                                                  OpenMode mode);
   // Invoke user's callback.
   static std::unique_ptr<TypeInfo> CreateFromCallback(
       std::unique_ptr<TypeCallback> cb);
 };
-
-namespace info_internal {
-
-class DestInfoImpl : public DestInfo {
- public:
-  DestInfoImpl(OpaquePtr d, std::unique_ptr<OpsFactory> f)
-      : dest_ptr_(d), ops_factory_(std::move(f)) {
-    ops_ = ops_factory_->CreateOps();
-  }
-
-  OpaquePtr GetDestPtr() override { return dest_ptr_; }
-  OpsFactory* GetOpsFactory() override { return ops_factory_.get(); }
-  std::string FormatValue(const Any& in) override {
-    return ops_->FormatValue(in);
-  }
-  std::type_index GetType() override { return ops_->GetTypeInfo(); }
-
- private:
-  OpaquePtr dest_ptr_;
-  std::unique_ptr<OpsFactory> ops_factory_;
-  std::unique_ptr<Operations> ops_;
-};
-
-}  // namespace info_internal
 
 // If we can make Operations indexable from type_index, then only an opaque-ptr
 // is needed here.
 template <typename T>
 std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
   ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
-  return absl::make_unique<info_internal::DestInfoImpl>(OpaquePtr(ptr),
-                                                        CreateOpsFactory<T>());
+  return absl::make_unique<DestInfo>(ptr);
 }
 
 }  // namespace internal

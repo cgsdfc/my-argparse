@@ -404,8 +404,8 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
     action_kind_ = StringToActions(str);
   }
 
-  void SetTypeOperations(std::unique_ptr<Operations> ops) override {
-    arg_->SetType(TypeInfo::CreateDefault(std::move(ops)));
+  void SetTypeOperations(Operations* ops) override {
+    arg_->SetType(TypeInfo::CreateDefault(ops));
   }
 
   void SetTypeCallback(std::unique_ptr<TypeCallback> cb) override {
@@ -477,7 +477,6 @@ std::unique_ptr<Argument> ArgumentBuilderImpl::CreateArgument() {
 
   // Important phrase..
   auto* dest = arg_->GetDest();
-  OpsFactory* factory = dest ? dest->GetOpsFactory() : nullptr;
 
   if (!arg_->GetAction()) {
     // We assume a default store action but only if has dest.
@@ -485,18 +484,18 @@ std::unique_ptr<Argument> ArgumentBuilderImpl::CreateArgument() {
       action_kind_ = ActionKind::kStore;
     // Some action don't need an ops, like print_help, we perhaps need to
     // distinct that..
-    auto ops = factory ? factory->CreateOps() : nullptr;
-    arg_->SetAction(ActionInfo::CreateDefault(action_kind_, std::move(ops)));
+    auto* ops = dest ? dest->GetOperations() : nullptr;
+    arg_->SetAction(ActionInfo::CreateDefault(action_kind_, ops));
   }
 
   if (!arg_->GetType()) {
-    std::unique_ptr<Operations> ops = nullptr;
-    if (factory)
-      ops = ActionNeedsValueType(action_kind_) ? factory->CreateValueTypeOps()
-                                               : factory->CreateOps();
+    Operations* ops = nullptr;
+    if (dest)
+      ops = ActionNeedsValueType(action_kind_) ? dest->GetValueTypeOps()
+                                               : dest->GetOperations();
     auto info = open_mode_ == kModeNoMode
-                    ? TypeInfo::CreateDefault(std::move(ops))
-                    : TypeInfo::CreateFileType(std::move(ops), open_mode_);
+                    ? TypeInfo::CreateDefault(ops)
+                    : TypeInfo::CreateFileType(ops, open_mode_);
     arg_->SetType(std::move(info));
   }
 

@@ -53,18 +53,12 @@ class Operations {
   virtual const std::type_info& GetTypeInfo() = 0;
   virtual std::string FormatValue(const Any& val) = 0;
   virtual ~Operations() {}
-};
 
-template <typename T>
-std::unique_ptr<Operations> CreateOperations();
+  template <typename T>
+  static Operations* GetOps();
 
-// How to create a vtable?
-class OpsFactory {
- public:
-  virtual std::unique_ptr<Operations> CreateOps() = 0;
-  // If this type has a concept of value_type, create a handle.
-  virtual std::unique_ptr<Operations> CreateValueTypeOps() = 0;
-  virtual ~OpsFactory() {}
+  template <typename T>
+  static Operations* GetValueTypeOps();
 };
 
 template <typename T>
@@ -287,36 +281,36 @@ struct CreateValueTypeOpsImpl;
 
 template <typename T>
 struct CreateValueTypeOpsImpl<T, false> {
-  static std::unique_ptr<Operations> Run() { return nullptr; }
+  static Operations* Run() { return nullptr; }
 };
 template <typename T>
 struct CreateValueTypeOpsImpl<T, true> {
-  static std::unique_ptr<Operations> Run() {
-    return CreateOperations<ValueTypeOf<T>>();
+  static Operations* Run() {
+    return new OperationsImpl<ValueTypeOf<T>>;
   }
 };
 
 template <typename T>
-class OpsFactoryImpl : public OpsFactory {
- public:
-  std::unique_ptr<Operations> CreateOps() override {
-    return CreateOperations<T>();
-  }
-  std::unique_ptr<Operations> CreateValueTypeOps() override {
-    return CreateValueTypeOpsImpl<T>::Run();
-  }
-};
+Operations* GetOpsImpl() {
+  static auto* g_operations = new OperationsImpl<T>;
+  return g_operations;
+}
+
+template <typename T>
+Operations* GetValueTypeOpsImpl() {
+  return CreateValueTypeOpsImpl<T>::Run().release();
+}
 
 }  // namespace operations_internal
 
 template <typename T>
-std::unique_ptr<Operations> CreateOperations() {
-  return absl::make_unique<operations_internal::OperationsImpl<T>>();
+Operations* Operations::GetOps() {
+  return operations_internal::GetOpsImpl<T>();
 }
 
 template <typename T>
-std::unique_ptr<OpsFactory> CreateOpsFactory() {
-  return absl::make_unique<operations_internal::OpsFactoryImpl<T>>();
+Operations* Operations::GetValueTypeOps() {
+  return operations_internal::GetValueTypeOpsImpl<T>();
 }
 
 namespace operations_internal {
