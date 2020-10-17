@@ -24,7 +24,7 @@ inline ConversionResult ConversionFailure(std::string error) {
 
 template <typename T>
 ConversionResult ConversionSuccess(T&& value) {
-  auto any = internal::MakeAny<portability::decay_t<T>>(std::forward<T>(value));
+  auto any = internal::MakeAny<absl::decay_t<T>>(std::forward<T>(value));
   return ConversionResult(internal::Result(std::move(any)));
 }
 

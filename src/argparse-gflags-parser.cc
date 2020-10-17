@@ -175,11 +175,11 @@ class GflagsParser::OptionsListenerImpl : public OptionsListener {
 };
 
 std::unique_ptr<OptionsListener> GflagsParser::CreateOptionsListener() {
-  return portability::make_unique<OptionsListenerImpl>();
+  return absl::make_unique<OptionsListenerImpl>();
 }
 
 std::unique_ptr<ArgumentParser> GflagsParserFactory::CreateParser() {
-  return portability::make_unique<GflagsParser>();
+  return absl::make_unique<GflagsParser>();
 }
 
 }  // namespace internal

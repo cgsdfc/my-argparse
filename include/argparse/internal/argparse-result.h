@@ -19,7 +19,7 @@ class Result {
  public:
   explicit Result(std::unique_ptr<Any> value) : value_(std::move(value)) {}
   explicit Result(std::string error)
-      : error_(portability::make_unique<std::string>(std::move(error))) {}
+      : error_(absl::make_unique<std::string>(std::move(error))) {}
 
   Result() = default;
 

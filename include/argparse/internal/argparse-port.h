@@ -51,20 +51,6 @@ namespace portability {
 template <bool B>
 using bool_constant = std::integral_constant<bool, B>;
 
-using ::absl::conditional_t;
-using ::absl::decay_t;
-using ::absl::enable_if_t;
-using ::absl::in_place;
-using ::absl::in_place_t;
-using ::absl::index_sequence;
-using ::absl::make_index_sequence;
-using ::absl::make_unique;
-using ::absl::remove_pointer_t;
-using ::absl::remove_reference_t;
-using ::absl::void_t;
-using ::absl::base_internal::invoke;
-
-#define ARGPARSE_PP_TO_STRING(x) (#x)
 #define ARGPARSE_STATIC_ASSERT(const_expr) \
   static_assert((const_expr), #const_expr)
 

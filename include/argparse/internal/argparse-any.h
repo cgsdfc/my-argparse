@@ -27,7 +27,7 @@ class AnyImpl : public Any {
   explicit AnyImpl(T&& val) : value_(std::move(val)) {}
   explicit AnyImpl(const T& val) : value_(val) {}
   template <typename... Args>
-  explicit AnyImpl(portability::in_place_t, Args&&... args)
+  explicit AnyImpl(absl::in_place_t, Args&&... args)
       : value_(std::forward<Args>(args)...) {}
 
   ~AnyImpl() override {}
@@ -52,7 +52,7 @@ class AnyImpl : public Any {
 
 template <typename T, typename... Args>
 std::unique_ptr<Any> MakeAny(Args&&... args) {
-  return portability::make_unique<AnyImpl<T>>(portability::in_place,
+  return absl::make_unique<AnyImpl<T>>(absl::in_place,
                                               std::forward<Args>(args)...);
 }
 

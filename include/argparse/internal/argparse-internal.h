@@ -517,7 +517,7 @@ class DestInfoImpl : public DestInfo {
 template <typename T>
 std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
   ARGPARSE_CHECK_F(ptr, "Pointer passed to dest() must not be null.");
-  return portability::make_unique<DestInfoImpl>(OpaquePtr(ptr), CreateOpsFactory<T>());
+  return absl::make_unique<DestInfoImpl>(OpaquePtr(ptr), CreateOpsFactory<T>());
 }
 
 }  // namespace internal

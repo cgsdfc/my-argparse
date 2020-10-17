@@ -54,7 +54,7 @@ class OpaquePtr {
 
   template <typename T>
   void PutValue(T&& val) {
-    GetValue<portability::decay_t<T>>() = std::forward<T>(val);
+    GetValue<absl::decay_t<T>>() = std::forward<T>(val);
   }
 
   template <typename T>

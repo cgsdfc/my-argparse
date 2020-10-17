@@ -17,8 +17,8 @@ class Result {
   Result() = default;
 
   template <typename ... Args>
-  explicit Result(portability::in_place_t, Args&&... args) {
-    AdvanceToValueStateFromEmpty(portability::in_place, std::forward<Args>(args)...);
+  explicit Result(absl::in_place_t, Args&&... args) {
+    AdvanceToValueStateFromEmpty(absl::in_place, std::forward<Args>(args)...);
   }
 
   // To hold a value.
@@ -49,7 +49,7 @@ class Result {
 
   template <typename ... Args>
   void emplace(Args&&... args) {
-    AdvanceToValueState(portability::in_place, std::forward<Args>(args)...);
+    AdvanceToValueState(absl::in_place, std::forward<Args>(args)...);
   }
 
   // Release the err-msg (if any). Go back to empty state.
@@ -95,12 +95,12 @@ class Result {
     value_.reset(new T(std::move_if_noexcept(value)));
   }
   template <typename... Args>
-  void AdvanceToValueState(portability::in_place_t, Args&&... args) {
+  void AdvanceToValueState(absl::in_place_t, Args&&... args) {
     AdvanceToEmptyState();
-    AdvanceToValueStateFromEmpty(portability::in_place, std::forward<Args>(args)...);
+    AdvanceToValueStateFromEmpty(absl::in_place, std::forward<Args>(args)...);
   }
   template <typename... Args>
-  void AdvanceToValueStateFromEmpty(portability::in_place_t, Args&&... args) {
+  void AdvanceToValueStateFromEmpty(absl::in_place_t, Args&&... args) {
     ARGPARSE_DCHECK(IsEmptyState());
     value_.reset(new T{std::forward<Args>(args)...});
   }
