@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -26,11 +26,11 @@ class ArgumentImpl : public Argument {
   NumArgsInfo* GetNumArgs() override { return num_args_.get(); }
   const Any* GetConstValue() override { return const_value_.get(); }
   const Any* GetDefaultValue() override { return default_value_.get(); }
-  StringView GetMetaVar() override { return meta_var_; }
+  absl::string_view GetMetaVar() override { return meta_var_; }
   ArgumentGroup* GetGroup() override { return group_; }
   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required_; }
-  StringView GetHelpDoc() override { return help_doc_; }
+  absl::string_view GetHelpDoc() override { return help_doc_; }
   void SetRequired(bool required) override { is_required_ = required; }
   void SetHelpDoc(std::string help_doc) override {
     help_doc_ = std::move(help_doc);
@@ -90,12 +90,10 @@ class ArgumentHolderImpl : public ArgumentHolder {
   }
 
   void ForEachArgument(std::function<void(Argument*)> callback) override {
-    for (auto& arg : arguments_)
-      callback(arg.get());
+    for (auto& arg : arguments_) callback(arg.get());
   }
   void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
-    for (auto& group : groups_)
-      callback(group.get());
+    for (auto& group : groups_) callback(group.get());
   }
 
   unsigned GetArgumentCount() override { return arguments_.size(); }
@@ -145,8 +143,7 @@ void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
   ARGPARSE_CHECK_F(CheckNamesConflict(arg->GetNamesInfo()),
                    "Argument names conflict with existing names!");
   arg->SetGroup(group);
-  if (listener_)
-    listener_->OnAddArgument(arg.get());
+  if (listener_) listener_->OnAddArgument(arg.get());
   arguments_.push_back(std::move(arg));
 }
 
@@ -158,8 +155,7 @@ ArgumentHolderImpl::ArgumentHolderImpl(SubCommand* cmd) : subcmd_(cmd) {
 bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
   bool ok = true;
   names->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
-    if (!name_set_.insert(in).second)
-      ok = false;
+    if (!name_set_.insert(in).second) ok = false;
   });
   return ok;
 }
@@ -168,22 +164,20 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
  public:
   GroupImpl(ArgumentHolderImpl* holder, std::string header)
       : holder_(holder), header_(std::move(header)) {
-    if (header_.back() != ':')
-      header_.push_back(':');
+    if (header_.back() != ':') header_.push_back(':');
   }
 
   void AddArgument(std::unique_ptr<Argument> arg) override {
     ++members_;
     holder_->AddArgumentToGroup(std::move(arg), this);
   }
-  StringView GetHeader() override { return header_; }
+  absl::string_view GetHeader() override { return header_; }
 
   unsigned GetArgumentCount() override { return members_; }
 
   void ForEachArgument(std::function<void(Argument*)> callback) override {
     for (auto& arg : holder_->arguments_) {
-      if (arg->GetGroup() == this)
-        callback(arg.get());
+      if (arg->GetGroup() == this) callback(arg.get());
     }
   }
 
@@ -219,16 +213,15 @@ class SubCommandImpl : public SubCommand {
   ArgumentHolder* GetHolder() override { return holder_.get(); }
   void SetGroup(SubCommandGroup* group) override { group_ = group; }
   SubCommandGroup* GetGroup() override { return group_; }
-  StringView GetName() override { return name_; }
-  StringView GetHelpDoc() override { return help_doc_; }
+  absl::string_view GetName() override { return name_; }
+  absl::string_view GetHelpDoc() override { return help_doc_; }
   void SetAliases(std::vector<std::string> val) override {
     aliases_ = std::move(val);
   }
   void SetHelpDoc(std::string val) override { help_doc_ = std::move(val); }
 
   void ForEachAlias(std::function<void(const std::string&)> callback) override {
-    for (auto& al : aliases_)
-      callback(al);
+    for (auto& al : aliases_) callback(al);
   }
 
  private:
@@ -242,13 +235,11 @@ class SubCommandImpl : public SubCommand {
 class SubCommandHolderImpl : public SubCommandHolder {
  public:
   void ForEachSubCommand(std::function<void(SubCommand*)> callback) override {
-    for (auto& sub : subcmds_)
-      callback(sub.get());
+    for (auto& sub : subcmds_) callback(sub.get());
   }
   void ForEachSubCommandGroup(
       std::function<void(SubCommandGroup*)> callback) override {
-    for (auto& group : groups_)
-      callback(group.get());
+    for (auto& group : groups_) callback(group.get());
   }
 
   SubCommandGroup* AddSubCommandGroup(
@@ -268,12 +259,14 @@ class SubCommandHolderImpl : public SubCommandHolder {
 
   SubCommand* AddSubCommandToGroup(SubCommandGroup* group,
                                    std::unique_ptr<SubCommand> cmd);
+
  private:
   class GroupImpl;
   class ListenerImpl;
 
   bool CheckNamesConflict(SubCommand* cmd) {
-    if (!name_set_.insert(cmd->GetName()).second) return false;
+    if (!name_set_.insert(static_cast<std::string>(cmd->GetName())).second)
+      return false;
     bool ok = true;
     cmd->ForEachAlias([this, &ok](const std::string& in) {
       ok = ok && name_set_.insert(in).second;
@@ -293,7 +286,6 @@ class SubCommandHolderImpl : public SubCommandHolder {
   void NotifyAddSubCommandGroup(SubCommandGroup* group) {
     if (listener_) listener_->OnAddSubCommandGroup(group);
   }
-
 
   std::unique_ptr<Listener> listener_;
   std::vector<std::unique_ptr<SubCommand>> subcmds_;
@@ -325,17 +317,17 @@ class GroupImpl : public SubCommandGroup {
   void SetMetaVar(std::string val) override { meta_var_ = std::move(val); }
   void SetHolder(SubCommandHolder* holder) override {
     ARGPARSE_DCHECK(holder);
-    //TODO:
+    // TODO:
     // holder_ = holder;
   }
 
-  StringView GetTitle() override { return title_; }
-  StringView GetDescription() override { return description_; }
+  absl::string_view GetTitle() override { return title_; }
+  absl::string_view GetDescription() override { return description_; }
   ActionInfo* GetAction() override { return action_info_.get(); }
   DestInfo* GetDest() override { return dest_info_.get(); }
   bool IsRequired() override { return required_; }
-  StringView GetHelpDoc() override { return help_doc_; }
-  StringView GetMetaVar() override { return meta_var_; }
+  absl::string_view GetHelpDoc() override { return help_doc_; }
+  absl::string_view GetMetaVar() override { return meta_var_; }
   SubCommandHolder* GetHolder() override { return holder_; }
 
  private:
@@ -514,8 +506,7 @@ class NumberNumArgsInfo : public NumArgsInfo {
  public:
   explicit NumberNumArgsInfo(unsigned num) : num_(num) {}
   bool Run(unsigned in, std::string* errmsg) override {
-    if (in == num_)
-      return true;
+    if (in == num_) return true;
     std::ostringstream os;
     os << "expected " << num_ << " values, got " << in;
     *errmsg = os.str();
@@ -649,8 +640,7 @@ bool FlagNumArgsInfo::Run(unsigned in, std::string* errmsg) {
     default:
       ARGPARSE_DCHECK(false);
   }
-  if (ok)
-    return true;
+  if (ok) return true;
   std::ostringstream os;
   os << "expected " << FlagToString(flag_) << " values, got " << in;
   *errmsg = os.str();
@@ -705,10 +695,9 @@ class PositionalName : public NamesInfo {
   std::string GetDefaultMetaVar() override { return ToUpper(name_); }
   void ForEachName(NameKind name_kind,
                    std::function<void(const std::string&)> callback) override {
-    if (name_kind == kPosName)
-      callback(name_);
+    if (name_kind == kPosName) callback(name_);
   }
-  StringView GetName() override { return name_; }
+  absl::string_view GetName() override { return name_; }
 
  private:
   std::string name_;
@@ -746,20 +735,16 @@ class OptionalNames : public NamesInfo {
       case kPosName:
         return;
       case kLongName: {
-        for (auto& name : long_names_)
-          callback(name);
+        for (auto& name : long_names_) callback(name);
         break;
       }
       case kShortName: {
-        for (auto& name : short_names_)
-          callback(name);
+        for (auto& name : short_names_) callback(name);
         break;
       }
       case kAllNames: {
-        for (auto& name : long_names_)
-          callback(name);
-        for (auto& name : short_names_)
-          callback(name);
+        for (auto& name : long_names_) callback(name);
+        for (auto& name : short_names_) callback(name);
         break;
       }
       default:
@@ -767,7 +752,7 @@ class OptionalNames : public NamesInfo {
     }
   }
 
-  StringView GetName() override {
+  absl::string_view GetName() override {
     const auto& name =
         long_names_.empty() ? short_names_.front() : long_names_.front();
     return name;
@@ -905,8 +890,7 @@ ArgumentContainerImpl::ArgumentContainerImpl()
 
 bool Argument::Less(Argument* a, Argument* b) {
   // options go before positionals.
-  if (a->IsOption() != b->IsOption())
-    return a->IsOption();
+  if (a->IsOption() != b->IsOption()) return a->IsOption();
 
   // positional compares on their names.
   if (!a->IsOption() && !b->IsOption()) {
@@ -914,12 +898,10 @@ bool Argument::Less(Argument* a, Argument* b) {
   }
 
   // required option goes first.
-  if (a->IsRequired() != b->IsRequired())
-    return a->IsRequired();
+  if (a->IsRequired() != b->IsRequired()) return a->IsRequired();
 
   // // short-only option (flag) goes before the rest.
-  if (a->IsFlag() != b->IsFlag())
-    return a->IsFlag();
+  if (a->IsFlag() != b->IsFlag()) return a->IsFlag();
 
   // a and b are both long options or both flags.
   return a->GetName() < b->GetName();
@@ -956,8 +938,7 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(
 }
 
 std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(
-    std::unique_ptr<Operations> ops,
-    OpenMode mode) {
+    std::unique_ptr<Operations> ops, OpenMode mode) {
   return absl::make_unique<FileTypeInfo>(std::move(ops), mode);
 }
 
@@ -977,8 +958,7 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
 }
 
 std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(
-    ActionKind action_kind,
-    std::unique_ptr<Operations> ops) {
+    ActionKind action_kind, std::unique_ptr<Operations> ops) {
   return absl::make_unique<DefaultActionInfo>(action_kind, std::move(ops));
 }
 
@@ -1010,24 +990,18 @@ std::unique_ptr<ArgumentController> ArgumentController::Create() {
 
 std::string ModeToChars(OpenMode mode) {
   std::string m;
-  if (mode & kModeRead)
-    m.append("r");
-  if (mode & kModeWrite)
-    m.append("w");
-  if (mode & kModeAppend)
-    m.append("a");
-  if (mode & kModeBinary)
-    m.append("b");
+  if (mode & kModeRead) m.append("r");
+  if (mode & kModeWrite) m.append("w");
+  if (mode & kModeAppend) m.append("a");
+  if (mode & kModeBinary) m.append("b");
   return m;
 }
 
-void CFileOpenTraits::Run(const std::string& in,
-                          OpenMode mode,
+void CFileOpenTraits::Run(const std::string& in, OpenMode mode,
                           Result<FILE*>* out) {
   auto mode_str = ModeToChars(mode);
   auto* file = std::fopen(in.c_str(), mode_str.c_str());
-  if (file)
-    return out->SetValue(file);
+  if (file) return out->SetValue(file);
   if (int e = errno) {
     errno = 0;
     return out->SetError(std::strerror(e));
@@ -1037,31 +1011,21 @@ void CFileOpenTraits::Run(const std::string& in,
 
 std::ios_base::openmode ModeToStreamMode(OpenMode m) {
   std::ios_base::openmode out;
-  if (m & kModeRead)
-    out |= std::ios_base::in;
-  if (m & kModeWrite)
-    out |= std::ios_base::out;
-  if (m & kModeAppend)
-    out |= std::ios_base::app;
-  if (m & kModeTruncate)
-    out |= std::ios_base::trunc;
-  if (m & kModeBinary)
-    out |= std::ios_base::binary;
+  if (m & kModeRead) out |= std::ios_base::in;
+  if (m & kModeWrite) out |= std::ios_base::out;
+  if (m & kModeAppend) out |= std::ios_base::app;
+  if (m & kModeTruncate) out |= std::ios_base::trunc;
+  if (m & kModeBinary) out |= std::ios_base::binary;
   return out;
 }
 
 OpenMode StreamModeToMode(std::ios_base::openmode stream_mode) {
   int m = kModeNoMode;
-  if (stream_mode & std::ios_base::in)
-    m |= kModeRead;
-  if (stream_mode & std::ios_base::out)
-    m |= kModeWrite;
-  if (stream_mode & std::ios_base::app)
-    m |= kModeAppend;
-  if (stream_mode & std::ios_base::trunc)
-    m |= kModeTruncate;
-  if (stream_mode & std::ios_base::binary)
-    m |= kModeBinary;
+  if (stream_mode & std::ios_base::in) m |= kModeRead;
+  if (stream_mode & std::ios_base::out) m |= kModeWrite;
+  if (stream_mode & std::ios_base::app) m |= kModeAppend;
+  if (stream_mode & std::ios_base::trunc) m |= kModeTruncate;
+  if (stream_mode & std::ios_base::binary) m |= kModeBinary;
   return static_cast<OpenMode>(m);
 }
 
@@ -1094,31 +1058,6 @@ OpenMode CharsToMode(const char* str) {
     }
   }
   return static_cast<OpenMode>(m);
-}
-
-StringView::StringView(const char* data)
-    : StringView(data, std::strlen(data)) {}
-
-std::unique_ptr<char[]> StringView::ToCharArray() const {
-  auto dest = absl::make_unique<char[]>(size() + 1);
-  std::char_traits<char>::copy(dest.get(), data(), size());
-  dest[size()] = 0;
-  return dest;
-}
-
-int StringView::Compare(const StringView& a, const StringView& b) {
-  return std::char_traits<char>::compare(a.data(), b.data(),
-                                         std::min(a.size(), b.size()));
-}
-
-StringView::StringView(const char* data, std::size_t size)
-    : data_(data), size_(size) {
-  ARGPARSE_DCHECK_F(data, "data shouldn't be null");
-  ARGPARSE_DCHECK(std::strlen(data) == size);
-}
-
-std::ostream& operator<<(std::ostream& os, const StringView& in) {
-  return os << in.data();
 }
 
 static std::string Demangle(const char* mangled_name) {
@@ -1165,8 +1104,7 @@ void CheckFailed(SourceLocation loc, const char* fmt, ...) {
 
 bool IsValidPositionalName(const std::string& name) {
   auto len = name.size();
-  if (!len || !std::isalpha(name[0]))
-    return false;
+  if (!len || !std::isalpha(name[0])) return false;
 
   return std::all_of(name.begin() + 1, name.end(), [](char c) {
     return std::isalnum(c) || c == '-' || c == '_';
@@ -1175,8 +1113,7 @@ bool IsValidPositionalName(const std::string& name) {
 
 bool IsValidOptionName(const std::string& name) {
   auto len = name.size();
-  if (len < 2 || name[0] != '-')
-    return false;
+  if (len < 2 || name[0] != '-') return false;
   if (len == 2)  // This rules out -?, -* -@ -= --
     return std::isalnum(name[1]);
   // check for long-ness.

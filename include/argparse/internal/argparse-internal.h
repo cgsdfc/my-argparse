@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -102,7 +102,7 @@ class NamesInfo {
   virtual void ForEachName(NameKind name_kind,
                            std::function<void(const std::string&)> callback) {}
 
-  virtual StringView GetName() = 0;
+  virtual absl::string_view GetName() = 0;
 
   static std::unique_ptr<NamesInfo> CreatePositional(std::string in);
   static std::unique_ptr<NamesInfo> CreateOptional(
@@ -177,7 +177,7 @@ class TypeInfo {
 class ArgumentGroup {
  public:
   virtual ~ArgumentGroup() {}
-  virtual StringView GetHeader() = 0;
+  virtual absl::string_view GetHeader() = 0;
   // Visit each arg.
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   // Add an arg to this group.
@@ -189,8 +189,8 @@ class ArgumentGroup {
 class Argument {
  public:
   virtual bool IsRequired() = 0;
-  virtual StringView GetHelpDoc() = 0;
-  virtual StringView GetMetaVar() = 0;
+  virtual absl::string_view GetHelpDoc() = 0;
+  virtual absl::string_view GetMetaVar() = 0;
   virtual ArgumentGroup* GetGroup() = 0;
   virtual NamesInfo* GetNamesInfo() = 0;
   virtual DestInfo* GetDest() = 0;
@@ -221,7 +221,7 @@ class Argument {
 
   // For positional, this will be PosName. For Option, this will be
   // the first long name or first short name (if no long name).
-  StringView GetName() {
+  absl::string_view GetName() {
     ARGPARSE_DCHECK(GetNamesInfo());
     return GetNamesInfo()->GetName();
   }
@@ -292,8 +292,8 @@ class SubCommand {
   virtual ArgumentHolder* GetHolder() = 0;
   virtual void SetAliases(std::vector<std::string> val) = 0;
   virtual void SetHelpDoc(std::string val) = 0;
-  virtual StringView GetName() = 0;
-  virtual StringView GetHelpDoc() = 0;
+  virtual absl::string_view GetName() = 0;
+  virtual absl::string_view GetHelpDoc() = 0;
   virtual void ForEachAlias(
       std::function<void(const std::string&)> callback) = 0;
   virtual void SetGroup(SubCommandGroup* group) = 0;
@@ -317,13 +317,13 @@ class SubCommandGroup {
   virtual void SetMetaVar(std::string val) = 0;
   virtual void SetHolder(SubCommandHolder* holder) = 0;
 
-  virtual StringView GetTitle() = 0;
-  virtual StringView GetDescription() = 0;
+  virtual absl::string_view GetTitle() = 0;
+  virtual absl::string_view GetDescription() = 0;
   virtual ActionInfo* GetAction() = 0;
   virtual DestInfo* GetDest() = 0;
   virtual bool IsRequired() = 0;
-  virtual StringView GetHelpDoc() = 0;
-  virtual StringView GetMetaVar() = 0;
+  virtual absl::string_view GetHelpDoc() = 0;
+  virtual absl::string_view GetMetaVar() = 0;
   virtual SubCommandHolder* GetHolder() = 0;
 
   static std::unique_ptr<SubCommandGroup> Create();
@@ -332,7 +332,7 @@ class SubCommandGroup {
 // Like ArgumentHolder, but holds subcommands.
 class SubCommandHolder {
  public:
-  class Listener  {
+  class Listener {
    public:
     virtual ~Listener() {}
     virtual void OnAddArgument(Argument* arg) {}

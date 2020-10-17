@@ -48,7 +48,7 @@ class Operations {
   virtual void Parse(const std::string& in, OpsResult* out) = 0;
   virtual void Open(const std::string& in, OpenMode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
-  virtual StringView GetTypeName() = 0;
+  virtual absl::string_view GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
   virtual const std::type_info& GetTypeInfo() = 0;
   virtual std::string FormatValue(const Any& val) = 0;
@@ -268,7 +268,7 @@ class OperationsImpl : public Operations {
     const auto kMaxOpsKind = static_cast<std::size_t>(OpsKind::kMaxOpsKind);
     return OpsIsSupportedImpl<T>(ops, absl::make_index_sequence<kMaxOpsKind>{});
   }
-  StringView GetTypeName() override { return TypeName<T>(); }
+  absl::string_view GetTypeName() override { return TypeName<T>(); }
   std::string GetTypeHint() override { return TypeHintTraits<T>::Run(); }
   std::string FormatValue(const Any& val) override {
     return FormatTraits<T>::Run(AnyCast<T>(val));

@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -18,9 +18,9 @@
 #endif
 
 // This header is needed since we have impl code here.
-#include "argparse/internal/argparse-port.h"
 #include "argparse/argparse-result.h"
 #include "argparse/internal/argparse-numeric-parser.h"
+#include "argparse/internal/argparse-port.h"
 
 // Defines various traits that users can specialize to meet their needs.
 namespace argparse {
@@ -86,8 +86,7 @@ struct StreamOpenTraits {
   static void Run(const std::string& in, OpenMode mode, Result<T>* out) {
     auto ios_mode = ModeToStreamMode(mode);
     T stream(in, ios_mode);
-    if (stream.is_open())
-      return out->SetValue(std::move(stream));
+    if (stream.is_open()) return out->SetValue(std::move(stream));
     out->SetError(kDefaultOpenFailureMsg);
   }
 };
@@ -171,8 +170,7 @@ struct DefaultParseTraits<char> {
   static void Run(const std::string& in, Result<char>* out) {
     if (in.size() != 1)
       return out->SetError("char must be exactly one character");
-    if (!std::isprint(in[0]))
-      return out->SetError("char must be printable");
+    if (!std::isprint(in[0])) return out->SetError("char must be printable");
     *out = in[0];
   }
 };
@@ -208,7 +206,7 @@ struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
 // 2. MetaTypeHint, for file, string and list[T], general types..
 template <typename T, typename SFINAE = void>
 struct DefaultTypeHint {
-  static std::string Run() { return TypeName<T>(); }
+  static std::string Run() { return static_cast<std::string>(TypeName<T>()); }
 };
 
 // If you get unhappy with this default handling, for example,
@@ -242,8 +240,8 @@ struct MetaTypeHint<T, MetaTypes::kList> {
 };
 
 template <typename T>
-struct DefaultTypeHint<T,
-                       absl::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
+struct DefaultTypeHint<
+    T, absl::enable_if_t<MetaTypes::kUnknown != MetaTypeOf<T>{}>>
     : MetaTypeHint<T> {};
 
 }  // namespace internal

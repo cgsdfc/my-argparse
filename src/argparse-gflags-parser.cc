@@ -48,12 +48,12 @@ const char* GetGflagsSupportedTypeAsString() {
 
 constexpr char kGflagParserName[] = "gflags-parser";
 
-inline StringView StripLeading(StringView sv, char ch) {
+inline absl::string_view StripLeading(absl::string_view sv, char ch) {
   auto str = sv.data();
   auto size = sv.size();
   for (; size != 0 && *str == ch; ++str, --size)
     ;
-  return StringView(str, size);
+  return absl::string_view(str, size);
 }
 
 class GflagsArgument {
@@ -68,7 +68,7 @@ class GflagsArgument {
     name_ = arg->GetNamesInfo()->GetName().data();
     help_ = arg->GetHelpDoc().data();
     ARGPARSE_DCHECK(arg->GetConstValue());
-    filename_ = AnyCast<StringView>(arg->GetConstValue())->data();
+    filename_ = AnyCast<absl::string_view>(arg->GetConstValue())->data();
     dest_ptr_ = arg->GetDest()->GetDestPtr();
     default_value_ = const_cast<Any*>(arg->GetDefaultValue());
     ARGPARSE_DCHECK(default_value_);
