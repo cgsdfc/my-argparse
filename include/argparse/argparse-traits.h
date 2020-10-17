@@ -60,6 +60,9 @@ struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
 template <typename T>
 struct AppendTraits;
 
+using TypeFunction = std::function<ConversionResult(const std::string&)>;
+using ActionFunction = std::function<void(ConversionResult)>;
+
 // Keep these impl here. This makes the code more coherent.
 namespace internal {
 

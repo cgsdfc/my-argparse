@@ -92,6 +92,21 @@ class DefaultActionInfo : public ActionInfo {
   Operations* ops_;
 };
 
+class CustomCallbackActionInfo : public ActionInfo {
+ public:
+  explicit CustomCallbackActionInfo(ActionFunction callback)
+      : callback_(std::move(callback)) {}
+
+  void Run(CallbackClient* client) override {
+    ConversionResult result(client->GetData());
+    return callback_(std::move(result));
+  }
+
+ private:
+  ActionFunction callback_;
+};
+
+
 // Adapt an ActionCallback to ActionInfo.
 class ActionCallbackInfo : public ActionInfo {
  public:
@@ -139,6 +154,21 @@ class FileTypeInfo : public TypeInfo {
  private:
   Operations* ops_;
   OpenMode mode_;
+};
+
+// TypeInfo that runs user's callback.
+class CustomCallbackTypeInfo : public TypeInfo {
+ public:
+  explicit CustomCallbackTypeInfo(TypeFunction callback)
+      : callback_(std::move(callback)) {
+    ARGPARSE_DCHECK(callback_);
+  }
+  void Run(const std::string& in, OpsResult* out) override {
+    *out = OpsResult(callback_(in));
+  }
+
+ private:
+  TypeFunction callback_;
 };
 
 // TypeInfo that runs user's callback.

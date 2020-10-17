@@ -214,9 +214,8 @@ struct OpsMethod<OpsKind::kCount, T, true> {
 template <typename T>
 struct OpsMethod<OpsKind::kParse, T, true> {
   static void Run(const std::string& in, OpsResult* out) {
-    Result<T> result;
-    ParseTraits<T>::Run(in, &result);
-    ConvertResults(&result, out);
+    auto conversion_result = ParseTraits<T>::Run(in);
+    *out = OpsResult(std::move(conversion_result));
   }
 };
 
