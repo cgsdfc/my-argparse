@@ -1,4 +1,5 @@
-project(argparse CXX C)
+project(argparse)
+
 cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_CXX_STANDARD 11)
@@ -55,6 +56,7 @@ set(ARGPARSE_SOURCE
    ${CMAKE_SOURCE_DIR}/src/argparse-internal.cc
    ${CMAKE_SOURCE_DIR}/src/argparse-argp-parser.cc
    ${CMAKE_SOURCE_DIR}/src/argparse-info.cc
+   ${CMAKE_SOURCE_DIR}/src/argparse-open-mode.cc
 )
 
 if (ARGPARSE_USE_GFLAGS)

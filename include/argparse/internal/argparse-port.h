@@ -57,18 +57,9 @@ using bool_constant = std::integral_constant<bool, B>;
 
 }  // namespace portability
 
-// File open mode. This is not enum class since we do & | on it.
-enum OpenMode {
-  kModeNoMode = 0x0,
-  kModeRead = 1,
-  kModeWrite = 2,
-  kModeAppend = 4,
-  kModeTruncate = 8,
-  kModeBinary = 16,
-};
-
 namespace internal {
 
+// TODO: integrate with absl's debugging.
 struct SourceLocation {
   int line;
   const char* filename;
@@ -100,74 +91,20 @@ class Any;
 // When an meaningless type is needed.
 struct NoneType {};
 
-OpenMode CharsToMode(const char* str);
-std::string ModeToChars(OpenMode mode);
-
-OpenMode StreamModeToMode(std::ios_base::openmode stream_mode);
-std::ios_base::openmode ModeToStreamMode(OpenMode m);
-
 struct OpsResult {
   bool has_error = false;
   std::unique_ptr<Any> value;  // null if error.
   std::string errmsg;
 };
 
+// TODO: forbit exception..
 // Throw this exception will cause an error msg to be printed (via what()).
 class ArgumentError final : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
 };
 
-// Like std::string_view, but may be more suit our needs.
-// class absl::string_view {
-//  public:
-//   absl::string_view(const absl::string_view&) = default;
-//   absl::string_view& operator=(const absl::string_view&) = default;
-
-//   absl::string_view() = delete;
-//   absl::string_view(std::string&&) = delete;
-
-//   // data should be non-null and null-terminated.
-//   absl::string_view(const char* data);
-
-//   absl::string_view(const std::string& in) : absl::string_view(in.data(),
-//   in.size()) {}
-
-//   // Should be selected if data is a string literal.
-//   template <std::size_t N>
-//   absl::string_view(const char (&data)[N]) : absl::string_view(data, N - 1)
-//   {}
-
-//   // data should be non-null and null-terminated.
-//   absl::string_view(const char* data, std::size_t size);
-
-//   std::size_t size() const { return size_; }
-//   bool empty() const { return 0 == size(); }
-//   const char* data() const {
-//     ARGPARSE_DCHECK(data_);
-//     return data_;
-//   }
-
-//   std::string ToString() const { return std::string(data_, size_); }
-//   std::unique_ptr<char[]> ToCharArray() const;
-
-//   static int Compare(const absl::string_view& a, const absl::string_view& b);
-//   bool operator<(const absl::string_view& that) const {
-//     return Compare(*this, that) < 0;
-//   }
-//   bool operator==(const absl::string_view& that) const {
-//     return Compare(*this, that) == 0;
-//   }
-//   operator std::string() const { return ToString(); }
-
-//  private:
-//   // Not default-constructible.
-//   const char* data_;
-//   std::size_t size_;
-// };
-
-// std::ostream& operator<<(std::ostream& os, const absl::string_view& in);
-
+// TODO: find some replacement.
 const char* TypeNameImpl(const std::type_info& type);
 
 template <typename T>

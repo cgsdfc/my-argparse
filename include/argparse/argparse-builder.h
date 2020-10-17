@@ -6,6 +6,7 @@
 #pragma once
 
 #include "argparse/internal/argparse-internal.h"
+#include "argparse/argparse-open-mode.h"
 
 namespace argparse {
 
@@ -111,9 +112,9 @@ class Names : private internal::BuilderOf<internal::NamesInfo> {
 
 class FileType {
  public:
-  explicit FileType(const char* mode) : mode_(internal::CharsToMode(mode)) {}
+  explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
   explicit FileType(std::ios_base::openmode mode)
-      : mode_(internal::StreamModeToMode(mode)) {}
+      : mode_(StreamModeToMode(mode)) {}
 
  private:
   friend class internal::BuilderAccessor;

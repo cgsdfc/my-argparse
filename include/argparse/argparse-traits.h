@@ -17,9 +17,9 @@
 #include <fmt/core.h>
 #endif
 
-// This header is needed since we have impl code here.
 #include "argparse/argparse-result.h"
 #include "argparse/internal/argparse-numeric-parser.h"
+#include "argparse/argparse-open-mode.h"
 #include "argparse/internal/argparse-port.h"
 
 // Defines various traits that users can specialize to meet their needs.

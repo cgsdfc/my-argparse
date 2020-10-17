@@ -22,6 +22,7 @@ licenses(["notice"])
 cc_library(
     name = "argparse",
     srcs = [
+        "src/argparse-open-mode.cc",
         "src/argparse-internal.cc",
         "src/argparse.cc",
         "src/argparse-gflags-parser.cc",
@@ -29,6 +30,7 @@ cc_library(
         "src/argparse-info.cc",
     ],
     hdrs = [
+        "include/argparse/argparse-open-mode.h",
         "include/argparse/internal/argparse-any.h",
         "include/argparse/internal/argparse-arg-array.h",
         "include/argparse/internal/argparse-argp-parser.h",
