@@ -122,7 +122,8 @@ class TypeInfo {
  public:
   virtual ~TypeInfo() {}
   virtual void Run(const std::string& in, OpsResult* out) = 0;
-  virtual std::string GetTypeHint() = 0;
+  // TODO: typehint should be inferred from dest.
+  virtual std::string GetTypeHint() { return {}; }
 
   // Default version: parse a single string into value.
   static std::unique_ptr<TypeInfo> CreateDefault(Operations* ops);

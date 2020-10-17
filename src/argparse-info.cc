@@ -318,6 +318,11 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
   return absl::make_unique<TypeCallbackInfo>(std::move(cb));
 }
 
+// Invoke user's callback.
+std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(TypeFunction cb) {
+  return absl::make_unique<CustomCallbackTypeInfo>(std::move(cb));
+}
+
 std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
   return absl::make_unique<FlagNumArgsInfo>(flag);
 }
@@ -335,6 +340,10 @@ std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(ActionKind action_kind,
 std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(
     std::unique_ptr<ActionCallback> cb) {
   return absl::make_unique<ActionCallbackInfo>(std::move(cb));
+}
+
+std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(ActionFunction cb) {
+  return absl::make_unique<CustomCallbackActionInfo>(std::move(cb));
 }
 
 std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
