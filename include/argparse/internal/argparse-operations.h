@@ -30,9 +30,6 @@ enum class OpsKind {
   kMaxOpsKind,
 };
 
-// inline unsigned  GetMaxOpsKind() {return static_cast}
-// inline constexpr std::size_t kMaxOpsKind = std::size_t(OpsKind::kOpen) + 1;
-
 const char* OpsToString(OpsKind ops);
 
 // A handle to the function table.
@@ -153,10 +150,10 @@ void ConvertResults(Result<T>* in, OpsResult* out) {
 }
 
 template <OpsKind Ops, typename T, bool = IsOpsSupported<Ops, T>{}>
-struct OpsImpl;
+struct OpsMethod;
 
 template <OpsKind Ops, typename T>
-struct OpsImpl<Ops, T, false> {
+struct OpsMethod<Ops, T, false> {
   template <typename... Args>
   static void Run(Args&&...) {
     ARGPARSE_CHECK_F(
@@ -168,7 +165,7 @@ struct OpsImpl<Ops, T, false> {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kStore, T, true> {
+struct OpsMethod<OpsKind::kStore, T, true> {
   static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto value = AnyCast<T>(std::move(data));
@@ -178,14 +175,14 @@ struct OpsImpl<OpsKind::kStore, T, true> {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kStoreConst, T, true> {
+struct OpsMethod<OpsKind::kStoreConst, T, true> {
   static void Run(OpaquePtr dest, const Any& data) {
     dest.PutValue(AnyCast<T>(data));
   }
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kAppend, T, true> {
+struct OpsMethod<OpsKind::kAppend, T, true> {
   static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
       auto* ptr = dest.Cast<T>();
@@ -196,7 +193,7 @@ struct OpsImpl<OpsKind::kAppend, T, true> {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kAppendConst, T, true> {
+struct OpsMethod<OpsKind::kAppendConst, T, true> {
   static void Run(OpaquePtr dest, const Any& data) {
     auto* ptr = dest.Cast<T>();
     auto value = AnyCast<ValueTypeOf<T>>(data);
@@ -205,7 +202,7 @@ struct OpsImpl<OpsKind::kAppendConst, T, true> {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kCount, T, true> {
+struct OpsMethod<OpsKind::kCount, T, true> {
   static void Run(OpaquePtr dest) {
     auto* ptr = dest.Cast<T>();
     ++(*ptr);
@@ -213,7 +210,7 @@ struct OpsImpl<OpsKind::kCount, T, true> {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kParse, T, true> {
+struct OpsMethod<OpsKind::kParse, T, true> {
   static void Run(const std::string& in, OpsResult* out) {
     Result<T> result;
     ParseTraits<T>::Run(in, &result);
@@ -222,7 +219,7 @@ struct OpsImpl<OpsKind::kParse, T, true> {
 };
 
 template <typename T>
-struct OpsImpl<OpsKind::kOpen, T, true> {
+struct OpsMethod<OpsKind::kOpen, T, true> {
   static void Run(const std::string& in, OpenMode mode, OpsResult* out) {
     Result<T> result;
     OpenTraits<T>::Run(in, mode, &result);
@@ -232,40 +229,37 @@ struct OpsImpl<OpsKind::kOpen, T, true> {
 
 template <typename T, std::size_t... OpsIndices>
 bool OpsIsSupportedImpl(OpsKind ops, absl::index_sequence<OpsIndices...>) {
-  static constexpr std::size_t kMaxOps = sizeof...(OpsIndices);
-  static constexpr bool kArray[kMaxOps] = {
+  static constexpr bool kFlagArray[] = {
       (IsOpsSupported<static_cast<OpsKind>(OpsIndices), T>{})...};
-  auto index = std::size_t(ops);
-  ARGPARSE_DCHECK(index < kMaxOps);
-  return kArray[index];
+  return kFlagArray[std::size_t(ops)];
 }
 
 template <typename T>
 class OperationsImpl : public Operations {
  public:
   void Store(OpaquePtr dest, std::unique_ptr<Any> data) override {
-    OpsImpl<OpsKind::kStore, T>::Run(dest, std::move(data));
+    OpsMethod<OpsKind::kStore, T>::Run(dest, std::move(data));
   }
   void StoreConst(OpaquePtr dest, const Any& data) override {
-    OpsImpl<OpsKind::kStoreConst, T>::Run(dest, data);
+    OpsMethod<OpsKind::kStoreConst, T>::Run(dest, data);
   }
   void Append(OpaquePtr dest, std::unique_ptr<Any> data) override {
-    OpsImpl<OpsKind::kAppend, T>::Run(dest, std::move(data));
+    OpsMethod<OpsKind::kAppend, T>::Run(dest, std::move(data));
   }
   void AppendConst(OpaquePtr dest, const Any& data) override {
-    OpsImpl<OpsKind::kAppendConst, T>::Run(dest, data);
+    OpsMethod<OpsKind::kAppendConst, T>::Run(dest, data);
   }
   void Count(OpaquePtr dest) override {
-    OpsImpl<OpsKind::kCount, T>::Run(dest);
+    OpsMethod<OpsKind::kCount, T>::Run(dest);
   }
   void Parse(const std::string& in, OpsResult* out) override {
-    OpsImpl<OpsKind::kParse, T>::Run(in, out);
+    OpsMethod<OpsKind::kParse, T>::Run(in, out);
   }
   void Open(const std::string& in, OpenMode mode, OpsResult* out) override {
-    OpsImpl<OpsKind::kOpen, T>::Run(in, mode, out);
+    OpsMethod<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {
-    const auto kMaxOpsKind = static_cast<std::size_t>(OpsKind::kMaxOpsKind);
+    constexpr auto kMaxOpsKind = static_cast<std::size_t>(OpsKind::kMaxOpsKind);
     return OpsIsSupportedImpl<T>(ops, absl::make_index_sequence<kMaxOpsKind>{});
   }
   absl::string_view GetTypeName() override { return TypeName<T>(); }
@@ -277,17 +271,15 @@ class OperationsImpl : public Operations {
 };
 
 template <typename T, bool = IsAppendSupported<T>{}>
-struct CreateValueTypeOpsImpl;
+struct GetValueTypeOpsImpl;
 
 template <typename T>
-struct CreateValueTypeOpsImpl<T, false> {
+struct GetValueTypeOpsImpl<T, false> {
   static Operations* Run() { return nullptr; }
 };
 template <typename T>
-struct CreateValueTypeOpsImpl<T, true> {
-  static Operations* Run() {
-    return new OperationsImpl<ValueTypeOf<T>>;
-  }
+struct GetValueTypeOpsImpl<T, true> {
+  static Operations* Run() { return new OperationsImpl<ValueTypeOf<T>>; }
 };
 
 template <typename T>
@@ -295,25 +287,6 @@ Operations* GetOpsImpl() {
   static auto* g_operations = new OperationsImpl<T>;
   return g_operations;
 }
-
-template <typename T>
-Operations* GetValueTypeOpsImpl() {
-  return CreateValueTypeOpsImpl<T>::Run().release();
-}
-
-}  // namespace operations_internal
-
-template <typename T>
-Operations* Operations::GetOps() {
-  return operations_internal::GetOpsImpl<T>();
-}
-
-template <typename T>
-Operations* Operations::GetValueTypeOps() {
-  return operations_internal::GetValueTypeOpsImpl<T>();
-}
-
-namespace operations_internal {
 
 template <typename T>
 class TypeCallbackImpl : public TypeCallback {
@@ -414,6 +387,16 @@ std::unique_ptr<ActionCallback> MakeActionCallbackImpl(
 }
 
 }  // namespace operations_internal
+
+template <typename T>
+Operations* Operations::GetOps() {
+  return operations_internal::GetOpsImpl<T>();
+}
+
+template <typename T>
+Operations* Operations::GetValueTypeOps() {
+  return operations_internal::GetValueTypeOpsImpl<T>::Run();
+}
 
 template <typename Func, typename F = absl::decay_t<Func>>
 struct IsCallback
