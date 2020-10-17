@@ -69,11 +69,6 @@ enum OpenMode {
 
 namespace internal {
 
-class Any;
-
-// When an meaningless type is needed.
-struct NoneType {};
-
 struct SourceLocation {
   int line;
   const char* filename;
@@ -82,6 +77,28 @@ struct SourceLocation {
 
 ABSL_ATTRIBUTE_NORETURN void CheckFailed(SourceLocation loc, const char* fmt,
                                          ...);
+
+bool IsValidPositionalName(const std::string& name);
+
+// A valid option name is long or short option name and not '--', '-'.
+// This is only checked once and true for good.
+bool IsValidOptionName(const std::string& name);
+
+// These two predicates must be called only when IsValidOptionName() holds.
+inline bool IsLongOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() > 2;
+}
+
+inline bool IsShortOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() == 2;
+}
+
+class Any;
+
+// When an meaningless type is needed.
+struct NoneType {};
 
 OpenMode CharsToMode(const char* str);
 std::string ModeToChars(OpenMode mode);
