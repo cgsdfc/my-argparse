@@ -73,5 +73,11 @@ template <typename T, typename... Args>
 ConversionResult ConversionSuccess(Args&&... args) {
   return ConversionResult(internal::MakeAny<T>(std::forward<Args>(args)...));
 }
+// Single-value version of ConversionResult, which allows simple expression like
+// ConversionSuccess(1);
+template <typename T>
+ConversionResult ConversionSuccess(T&& value) {
+  return ConversionSuccess<absl::decay_t<T>>(std::forward<T>(value));
+}
 
 }  // namespace argparse

@@ -160,7 +160,8 @@ struct OpsMethod<Ops, T, false> {
     ARGPARSE_CHECK_F(
         false,
         "Operation %s is not supported by type %s. Please specialize one of "
-        "AppendTraits, ParseTraits and OpenTraits, or pass in a callback.",
+        "AppendTraits, ParseTraits, TypeHintTraits, FormatTraits, and "
+        "OpenTraits, or pass in a callback.",
         OpsToString(Ops), TypeName<T>());
   }
 };
@@ -239,25 +240,25 @@ template <typename T>
 class OperationsImpl : public Operations {
  public:
   void Store(OpaquePtr dest, std::unique_ptr<Any> data) override {
-    OpsMethod<OpsKind::kStore, T>::Run(dest, std::move(data));
+    return OpsMethod<OpsKind::kStore, T>::Run(dest, std::move(data));
   }
   void StoreConst(OpaquePtr dest, const Any& data) override {
-    OpsMethod<OpsKind::kStoreConst, T>::Run(dest, data);
+    return OpsMethod<OpsKind::kStoreConst, T>::Run(dest, data);
   }
   void Append(OpaquePtr dest, std::unique_ptr<Any> data) override {
-    OpsMethod<OpsKind::kAppend, T>::Run(dest, std::move(data));
+    return OpsMethod<OpsKind::kAppend, T>::Run(dest, std::move(data));
   }
   void AppendConst(OpaquePtr dest, const Any& data) override {
-    OpsMethod<OpsKind::kAppendConst, T>::Run(dest, data);
+    return OpsMethod<OpsKind::kAppendConst, T>::Run(dest, data);
   }
   void Count(OpaquePtr dest) override {
-    OpsMethod<OpsKind::kCount, T>::Run(dest);
+    return OpsMethod<OpsKind::kCount, T>::Run(dest);
   }
   void Parse(const std::string& in, OpsResult* out) override {
-    OpsMethod<OpsKind::kParse, T>::Run(in, out);
+    return OpsMethod<OpsKind::kParse, T>::Run(in, out);
   }
   void Open(const std::string& in, OpenMode mode, OpsResult* out) override {
-    OpsMethod<OpsKind::kOpen, T>::Run(in, mode, out);
+    return OpsMethod<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {
     constexpr auto kMaxOpsKind = static_cast<std::size_t>(OpsKind::kMaxOpsKind);

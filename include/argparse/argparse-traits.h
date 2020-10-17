@@ -17,9 +17,10 @@
 #include <fmt/core.h>
 #endif
 
+#include "argparse/argparse-conversion-result.h"
+#include "argparse/argparse-open-mode.h"
 #include "argparse/argparse-result.h"
 #include "argparse/internal/argparse-numeric-parser.h"
-#include "argparse/argparse-open-mode.h"
 #include "argparse/internal/argparse-port.h"
 
 // Defines various traits that users can specialize to meet their needs.
@@ -77,12 +78,21 @@ using ValueTypeOf = typename AppendTraits<T>::ValueType;
 // OpenTraits
 constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
 
+// TODO: these should goes into traits_internal.
 struct CFileOpenTraits {
   static void Run(const std::string& in, OpenMode mode, Result<FILE*>* out);
+  static ConversionResult Run(const std::string& in, OpenMode mode);
 };
 
 template <typename T>
 struct StreamOpenTraits {
+  static ConversionResult Run(const std::string& in, OpenMode mode) {
+    auto ios_mode = ModeToStreamMode(mode);
+    T stream(in, ios_mode);
+    if (stream.is_open()) return ConversionSuccess<T>(std::move(stream));
+    return ConversionFailure(kDefaultOpenFailureMsg);
+  }
+
   static void Run(const std::string& in, OpenMode mode, Result<T>* out) {
     auto ios_mode = ModeToStreamMode(mode);
     T stream(in, ios_mode);
@@ -160,6 +170,9 @@ struct DefaultParseTraits {
 
 template <>
 struct DefaultParseTraits<std::string> {
+  static ConversionResult Run(const std::string& in) {
+    return ConversionSuccess(in);
+  }
   static void Run(const std::string& in, Result<std::string>* out) {
     *out = in;
   }
@@ -167,6 +180,8 @@ struct DefaultParseTraits<std::string> {
 // char is an unquoted single character.
 template <>
 struct DefaultParseTraits<char> {
+  static ConversionResult Run(const std::string& in) ;
+
   static void Run(const std::string& in, Result<char>* out) {
     if (in.size() != 1)
       return out->SetError("char must be exactly one character");
@@ -176,6 +191,8 @@ struct DefaultParseTraits<char> {
 };
 template <>
 struct DefaultParseTraits<bool> {
+  static ConversionResult Run(const std::string& in);
+
   static void Run(const std::string& in, Result<bool>* out) {
     static const std::map<std::string, bool> kStringToBools{
         {"true", true},   {"True", true},   {"1", true},
@@ -188,8 +205,18 @@ struct DefaultParseTraits<bool> {
   }
 };
 
+// TODO: use absl strings numbers, which is much faster.
 template <typename T>
 struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
+  static ConversionResult Run(const std::string& in) {
+    try {
+      return ConversionSuccess(internal::STLParseNumeric<T>(in));
+    } catch (std::invalid_argument&) {
+      return ConversionFailure("invalid numeric format");
+    } catch (std::out_of_range&) {
+      return ConversionFailure("numeric value out of range");
+    }
+  }
   static void Run(const std::string& in, Result<T>* out) {
     try {
       *out = internal::STLParseNumeric<T>(in);
