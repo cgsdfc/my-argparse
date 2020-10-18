@@ -61,28 +61,6 @@ class AnyValue : private internal::BuilderOf<internal::Any> {
   friend class internal::BuilderAccessor;
 };
 
-class TypeCallback : private internal::BuilderOf<internal::TypeCallback> {
- public:
-  template <typename T, absl::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
-  TypeCallback(T&& cb) {
-    this->SetObject(internal::MakeTypeCallback(std::forward<T>(cb)));
-  }
-
- private:
-  friend class internal::BuilderAccessor;
-};
-
-class ActionCallback : private internal::BuilderOf<internal::ActionCallback> {
- public:
-  template <typename T, absl::enable_if_t<internal::IsCallback<T>{}>* = nullptr>
-  ActionCallback(T&& cb) {
-    this->SetObject(internal::MakeActionCallback(std::forward<T>(cb)));
-  }
-
- private:
-  friend class internal::BuilderAccessor;
-};
-
 // Creator of DestInfo. For those that need a DestInfo, just take Dest
 // as an arg.
 class Dest : private internal::BuilderOf<internal::DestInfo> {

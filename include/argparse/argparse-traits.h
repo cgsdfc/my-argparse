@@ -19,7 +19,6 @@
 
 #include "argparse/argparse-conversion-result.h"
 #include "argparse/argparse-open-mode.h"
-#include "argparse/argparse-result.h"
 #include "argparse/internal/argparse-numeric-parser.h"
 #include "argparse/internal/argparse-port.h"
 
@@ -83,7 +82,6 @@ constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
 
 // TODO: these should goes into traits_internal.
 struct CFileOpenTraits {
-  static void Run(const std::string& in, OpenMode mode, Result<FILE*>* out);
   static ConversionResult Run(const std::string& in, OpenMode mode);
 };
 
@@ -94,13 +92,6 @@ struct StreamOpenTraits {
     T stream(in, ios_mode);
     if (stream.is_open()) return ConversionSuccess<T>(std::move(stream));
     return ConversionFailure(kDefaultOpenFailureMsg);
-  }
-
-  static void Run(const std::string& in, OpenMode mode, Result<T>* out) {
-    auto ios_mode = ModeToStreamMode(mode);
-    T stream(in, ios_mode);
-    if (stream.is_open()) return out->SetValue(std::move(stream));
-    out->SetError(kDefaultOpenFailureMsg);
   }
 };
 
@@ -118,8 +109,7 @@ struct StringStreamFormatTraits {
   static std::string Run(const T& in) {
     std::ostringstream os;
     os << in;
-    ARGPARSE_CHECK_F(os.good(), "error formatting type %s: std::ostream failed",
-                     TypeName<T>());
+    ARGPARSE_CHECK_F(os.good(), "error formatting: std::ostream failed");
     return os.str();
   }
 };
@@ -176,36 +166,17 @@ struct DefaultParseTraits<std::string> {
   static ConversionResult Run(const std::string& in) {
     return ConversionSuccess(in);
   }
-  static void Run(const std::string& in, Result<std::string>* out) {
-    *out = in;
-  }
 };
+
 // char is an unquoted single character.
 template <>
 struct DefaultParseTraits<char> {
   static ConversionResult Run(const std::string& in) ;
-
-  static void Run(const std::string& in, Result<char>* out) {
-    if (in.size() != 1)
-      return out->SetError("char must be exactly one character");
-    if (!std::isprint(in[0])) return out->SetError("char must be printable");
-    *out = in[0];
-  }
 };
+
 template <>
 struct DefaultParseTraits<bool> {
   static ConversionResult Run(const std::string& in);
-
-  static void Run(const std::string& in, Result<bool>* out) {
-    static const std::map<std::string, bool> kStringToBools{
-        {"true", true},   {"True", true},   {"1", true},
-        {"false", false}, {"False", false}, {"0", false},
-    };
-    auto iter = kStringToBools.find(in);
-    if (iter == kStringToBools.end())
-      return out->SetError("not a valid bool value");
-    *out = iter->second;
-  }
 };
 
 // TODO: use absl strings numbers, which is much faster.
@@ -218,15 +189,6 @@ struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
       return ConversionFailure("invalid numeric format");
     } catch (std::out_of_range&) {
       return ConversionFailure("numeric value out of range");
-    }
-  }
-  static void Run(const std::string& in, Result<T>* out) {
-    try {
-      *out = internal::STLParseNumeric<T>(in);
-    } catch (std::invalid_argument&) {
-      out->SetError("invalid numeric format");
-    } catch (std::out_of_range&) {
-      out->SetError("numeric value out of range");
     }
   }
 };
@@ -312,7 +274,6 @@ struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
 // OpenTraits tells how to open a file of type T.
 template <typename T>
 struct OpenTraits {
-  // void Run(const std::string& in, OpenMode mode, Result<T>* out);
   static constexpr bool Run = false;
 };
 

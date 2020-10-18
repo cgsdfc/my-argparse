@@ -78,7 +78,6 @@ target_link_libraries(test_main argparse)
 
 add_executable(argparse_test
     test/argparse-any_test.cc
-    test/argparse-result_test.cc
     test/argparse-builder_test.cc
     test/argparse-opaque-ptr_test.cc
     test/argparse-conversion-result_test.cc

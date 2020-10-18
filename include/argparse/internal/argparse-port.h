@@ -67,7 +67,7 @@ struct SourceLocation {
 };
 
 ABSL_ATTRIBUTE_NORETURN void CheckFailed(SourceLocation loc, const char* fmt,
-                                         ...);
+                                         ...) ABSL_PRINTF_ATTRIBUTE(2, 3);
 
 bool IsValidPositionalName(const std::string& name);
 

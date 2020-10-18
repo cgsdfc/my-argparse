@@ -106,21 +106,6 @@ class CustomCallbackActionInfo : public ActionInfo {
   ActionFunction callback_;
 };
 
-
-// Adapt an ActionCallback to ActionInfo.
-class ActionCallbackInfo : public ActionInfo {
- public:
-  explicit ActionCallbackInfo(std::unique_ptr<ActionCallback> cb)
-      : action_callback_(std::move(cb)) {}
-
-  void Run(CallbackClient* client) override {
-    return action_callback_->Run(client->GetDestPtr(), client->GetData());
-  }
-
- private:
-  std::unique_ptr<ActionCallback> action_callback_;
-};
-
 // The default of TypeInfo: parse a single string into a value
 // using ParseTraits.
 class DefaultTypeInfo : public TypeInfo {
@@ -169,22 +154,6 @@ class CustomCallbackTypeInfo : public TypeInfo {
 
  private:
   TypeFunction callback_;
-};
-
-// TypeInfo that runs user's callback.
-class TypeCallbackInfo : public TypeInfo {
- public:
-  explicit TypeCallbackInfo(std::unique_ptr<TypeCallback> cb)
-      : type_callback_(std::move(cb)) {}
-
-  void Run(const std::string& in, OpsResult* out) override {
-    return type_callback_->Run(in, out);
-  }
-
-  std::string GetTypeHint() override { return type_callback_->GetTypeHint(); }
-
- private:
-  std::unique_ptr<TypeCallback> type_callback_;
 };
 
 void DefaultActionInfo::Run(CallbackClient* client) {
@@ -313,12 +282,6 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(Operations* ops,
 }
 
 // Invoke user's callback.
-std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(
-    std::unique_ptr<TypeCallback> cb) {
-  return absl::make_unique<TypeCallbackInfo>(std::move(cb));
-}
-
-// Invoke user's callback.
 std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(TypeFunction cb) {
   return absl::make_unique<CustomCallbackTypeInfo>(std::move(cb));
 }
@@ -335,11 +298,6 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
 std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(ActionKind action_kind,
                                                       Operations* ops) {
   return absl::make_unique<DefaultActionInfo>(action_kind, ops);
-}
-
-std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(
-    std::unique_ptr<ActionCallback> cb) {
-  return absl::make_unique<ActionCallbackInfo>(std::move(cb));
 }
 
 std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(ActionFunction cb) {

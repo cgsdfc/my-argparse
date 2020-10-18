@@ -34,18 +34,5 @@ ConversionResult CFileOpenTraits::Run(const std::string& in, OpenMode mode) {
   return ConversionFailure(std::move(error));
 }
 
-void CFileOpenTraits::Run(const std::string& in, OpenMode mode,
-                          Result<FILE*>* out) {
-  auto mode_str = ModeToChars(mode);
-  auto* file = std::fopen(in.c_str(), mode_str.c_str());
-  if (file) return out->SetValue(file);
-  if (int e = errno) {
-    errno = 0;
-    return out->SetError(std::strerror(e));
-  }
-  out->SetError(kDefaultOpenFailureMsg);
-}
-
-
 }  // namespace internal
 }  // namespace argparse

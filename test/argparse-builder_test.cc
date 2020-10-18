@@ -19,12 +19,5 @@ TEST(AnyValue, Build) {
   EXPECT_TRUE(val->GetType() == typeid(PlainType));
 }
 
-TEST(TypeCallback, BuildFromLambda) {
-  TypeCallback cb([](const std::string& in, Result<int>* out) {});
-  auto val = internal::GetBuiltObject(&cb);
-  EXPECT_TRUE(val);
-  EXPECT_TRUE(val->GetTypeHint() == "int");
-}
-
 }  // namespace
 }  // namespace argparse
