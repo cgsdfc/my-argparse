@@ -50,13 +50,11 @@ class Operations {
   virtual std::string GetTypeHint() = 0;
   virtual const std::type_info& GetTypeInfo() = 0;
   virtual std::string FormatValue(const Any& val) = 0;
+  virtual Operations* GetValueTypeOps() = 0;
   virtual ~Operations() {}
 
   template <typename T>
-  static Operations* GetOps();
-
-  template <typename T>
-  static Operations* GetValueTypeOps();
+  static Operations* GetInstance();
 };
 
 // Extracted the bool value from AppendTraits.
@@ -116,6 +114,7 @@ template <OpsKind Ops, typename T>
 struct OpsMethod<Ops, T, false> {
   template <typename... Args>
   static void Run(Args&&...) {
+    // TODO: this should at most send a warning, but not crashes the program.
     ARGPARSE_CHECK_F(
         false,
         "Operation %s is not supported by type %s. Please specialize one of "
@@ -227,36 +226,46 @@ class OperationsImpl : public Operations {
     return FormatTraits<T>::Run(AnyCast<T>(val));
   }
   const std::type_info& GetTypeInfo() override { return typeid(T); }
+  // See below.
+  Operations* GetValueTypeOps() override;
 };
+
+template <typename T>
+Operations* GetOperationsInstance();
 
 template <typename T, bool = IsAppendSupported<T>{}>
-struct GetValueTypeOpsImpl;
+struct GetValueTypeOperations;
 
 template <typename T>
-struct GetValueTypeOpsImpl<T, false> {
+struct GetValueTypeOperations<T, false> {
   static Operations* Run() { return nullptr; }
 };
+
 template <typename T>
-struct GetValueTypeOpsImpl<T, true> {
-  static Operations* Run() { return new OperationsImpl<ValueTypeOf<T>>; }
+struct GetValueTypeOperations<T, true> {
+  static Operations* Run() { 
+    using ValueType = ValueTypeOf<T>;
+    return GetOperationsInstance<ValueType>();
+  }
 };
 
 template <typename T>
-Operations* GetOpsImpl() {
+Operations* GetOperationsInstance() {
+  // TODO: absl mechanism to safeguard this.
   static auto* g_operations = new OperationsImpl<T>;
   return g_operations;
+}
+
+template <typename T>
+Operations* OperationsImpl<T>::GetValueTypeOps() {
+  return GetValueTypeOperations<T>::Run();
 }
 
 }  // namespace operations_internal
 
 template <typename T>
-Operations* Operations::GetOps() {
-  return operations_internal::GetOpsImpl<T>();
-}
-
-template <typename T>
-Operations* Operations::GetValueTypeOps() {
-  return operations_internal::GetValueTypeOpsImpl<T>::Run();
+Operations* Operations::GetInstance() {
+  return operations_internal::GetOperationsInstance<T>();
 }
 
 }  // namespace internal

@@ -47,7 +47,7 @@ class Argument {
   }
   template <typename T>
   Argument& SetType() {
-    builder_->SetTypeOperations(internal::Operations::GetOps<T>());
+    builder_->SetTypeOperations(internal::Operations::GetInstance<T>());
     return *this;
   }
   Argument& SetType(FileType file_type) {

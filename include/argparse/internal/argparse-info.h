@@ -77,7 +77,10 @@ class DestInfo {
  public:
   OpaquePtr GetDestPtr() const { return dest_ptr_; }
   Operations* GetOperations() const { return operations_; }
-  Operations* GetValueTypeOps() const { return value_type_ops_; }
+  // Query the Operations of value-type of T, if any.
+  Operations* GetValueTypeOps() const {
+    return GetOperations()->GetValueTypeOps();
+  }
   std::type_index GetType() const { return dest_ptr_.type(); }
 
   template <typename T>
@@ -86,13 +89,10 @@ class DestInfo {
  private:
   template <typename T>
   explicit DestInfo(T* ptr)
-      : dest_ptr_(OpaquePtr(ptr)),
-        operations_(Operations::GetOps<T>()),
-        value_type_ops_(Operations::GetValueTypeOps<T>()) {}
+      : dest_ptr_(ptr), operations_(Operations::GetInstance<T>()) {}
 
   OpaquePtr dest_ptr_;
   Operations* operations_;
-  Operations* value_type_ops_;
 };
 
 class CallbackClient {
