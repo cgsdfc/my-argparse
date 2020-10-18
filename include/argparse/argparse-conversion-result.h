@@ -28,9 +28,9 @@ class ConversionResult {
   bool HasError() const { return error_ != nullptr; }
 
   template <typename T>
-  T* GetValue() const {
+  const T& GetValue() const {
     ARGPARSE_DCHECK(HasValue());
-    return internal::AnyCast<T>(value_.get());
+    return internal::AnyCast<T>(*value_);
   }
 
   absl::string_view GetError() const {
@@ -41,6 +41,11 @@ class ConversionResult {
   template <typename T>
   T TakeValue() ABSL_MUST_USE_RESULT {
     return internal::AnyCast<T>(ReleaseValue());
+  }
+
+  template <typename T>
+  explicit operator const T&() const {
+    return GetValue<T>();
   }
 
  private:

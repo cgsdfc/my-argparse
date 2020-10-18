@@ -404,11 +404,15 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
     action_kind_ = StringToActions(str);
   }
 
+  void SetActionCallback(ActionFunction cb) override {
+    arg_->SetAction(ActionInfo::CreateFromCallback(std::move(cb)));
+  }
+
   void SetTypeOperations(Operations* ops) override {
     arg_->SetType(TypeInfo::CreateDefault(ops));
   }
 
-  void SetTypeCallback(std::unique_ptr<TypeCallback> cb) override {
+  void SetTypeCallback(TypeFunction cb) override {
     arg_->SetType(TypeInfo::CreateFromCallback(std::move(cb)));
   }
 
@@ -438,10 +442,6 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
   void SetHelp(std::string val) override {
     ARGPARSE_DCHECK(arg_);
     arg_->SetHelpDoc(std::move(val));
-  }
-
-  void SetActionCallback(std::unique_ptr<ActionCallback> cb) override {
-    arg_->SetAction(ActionInfo::CreateFromCallback(std::move(cb)));
   }
 
   std::unique_ptr<Argument> CreateArgument() override;

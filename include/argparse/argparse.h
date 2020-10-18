@@ -37,12 +37,12 @@ class Argument {
     builder_->SetActionString(str);
     return *this;
   }
-  Argument& SetAction(ActionCallback cb) {
-    builder_->SetActionCallback(internal::GetBuiltObject(&cb));
+  Argument& SetAction(ActionFunction cb) {
+    builder_->SetActionCallback(std::move(cb));
     return *this;
   }
-  Argument& SetType(TypeCallback cb) {
-    builder_->SetTypeCallback(internal::GetBuiltObject(&cb));
+  Argument& SetType(TypeFunction cb) {
+    builder_->SetTypeCallback(std::move(cb));
     return *this;
   }
   template <typename T>
