@@ -113,15 +113,7 @@ struct OpsMethod;
 template <OpsKind Ops, typename T>
 struct OpsMethod<Ops, T, false> {
   template <typename... Args>
-  static void Run(Args&&...) {
-    // TODO: this should at most send a warning, but not crashes the program.
-    ARGPARSE_CHECK_F(
-        false,
-        "Operation %s is not supported by type %s. Please specialize one of "
-        "AppendTraits, ParseTraits, TypeHintTraits, FormatTraits, and "
-        "OpenTraits, or pass in a callback.",
-        OpsToString(Ops), TypeName<T>().data());
-  }
+  static void Run(Args&&...) {}
 };
 
 template <typename T>

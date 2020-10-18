@@ -16,8 +16,6 @@ int main(int argc, char const* argv[]) {
                          .SetDest(&g_verbose_level)
                          .SetDefaultValue(1)
                          .SetAction([](argparse::ConversionResult val) {
-                           if (val.HasValue() && int(val) > 10)
-                             g_verbose_level = val.GetValue<int>();
                          }));
 
   parser.AddArgument(argparse::Argument("--log-level").SetDest(&g_log_level));

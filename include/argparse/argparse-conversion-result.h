@@ -43,10 +43,11 @@ class ConversionResult {
     return internal::AnyCast<T>(ReleaseValue());
   }
 
-  template <typename T>
-  explicit operator const T&() const {
-    return GetValue<T>();
-  }
+  // Template conversion operator does not work?
+  // template <typename T>
+  // explicit operator const T&() const {
+  //   return GetValue<T>();
+  // }
 
  private:
   friend class internal::OpsResult;
