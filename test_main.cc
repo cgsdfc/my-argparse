@@ -1,8 +1,8 @@
-#include <argparse/argparse-conversion-result.h>
-#include <argparse/argparse.h>
-#include <argparse/internal/argparse-gflags-parser.h>
-
 #include <iostream>
+
+#include "argparse/argparse-conversion-result.h"
+#include "argparse/argparse.h"
+#include "argparse/internal/argparse-gflags-parser.h"
 
 int g_verbose_level;
 int g_log_level;
@@ -15,8 +15,7 @@ int main(int argc, char const* argv[]) {
   parser.AddArgument(argparse::Argument("--verbose")
                          .SetDest(&g_verbose_level)
                          .SetDefaultValue(1)
-                         .SetAction([](argparse::ConversionResult val) {
-                         }));
+                         .SetAction([](argparse::ConversionResult val) {}));
 
   parser.AddArgument(argparse::Argument("--log-level").SetDest(&g_log_level));
   parser.ParseArgs(argc, argv);

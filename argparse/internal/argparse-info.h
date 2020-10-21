@@ -122,6 +122,8 @@ class ActionWithDest : public ActionInfo {
     ARGPARSE_DCHECK(dest);
   }
   DestInfo* GetDest() const { return dest_; }
+  Operations* GetOps() const { return GetDest()->GetOperations(); }
+  OpaquePtr GetPtr() const { return GetDest()->GetDestPtr(); }
 
  private:
   DestInfo* dest_;
@@ -130,10 +132,7 @@ class ActionWithDest : public ActionInfo {
 class CountAction : public ActionWithDest {
  public:
   using ActionWithDest::ActionWithDest;
-  void Run(std::unique_ptr<Any>) override {
-    auto* dest = GetDest();
-    dest->GetOperations()->Count(dest->GetDestPtr());
-  }
+  void Run(std::unique_ptr<Any>) override { GetOps()->Count(GetPtr()); }
 };
 
 // Actions that don't use the input data, but use a pre-set constant.
@@ -148,12 +147,35 @@ class ActionWithConst : public ActionWithDest {
 };
 
 class StoreConstAction : public ActionWithConst {
-public:
- using ActionWithConst::ActionWithConst;
- void Run(std::unique_ptr<Any>) override {
-  //  GetDest()->
- }
+ public:
+  using ActionWithConst::ActionWithConst;
+  void Run(std::unique_ptr<Any>) override {
+    GetOps()->StoreConst(GetPtr(), GetConstValue());
+  }
+};
 
+class AppendConstAction : public ActionWithConst {
+ public:
+  using ActionWithConst::ActionWithConst;
+  void Run(std::unique_ptr<Any>) override {
+    GetOps()->AppendConst(GetPtr(), GetConstValue());
+  }
+};
+
+class AppendAction : public ActionWithDest {
+ public:
+  using ActionWithDest::ActionWithDest;
+  void Run(std::unique_ptr<Any> data) override {
+    GetOps()->Append(GetPtr(), std::move(data));
+  }
+};
+
+class StoreAction : public ActionWithDest {
+ public:
+  using ActionWithDest::ActionWithDest;
+  void Run(std::unique_ptr<Any> data) override {
+    GetOps()->Store(GetPtr(), std::move(data));
+  }
 };
 
 class TypeInfo {
