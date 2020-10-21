@@ -108,12 +108,52 @@ class CallbackClient {
 class ActionInfo {
  public:
   virtual ~ActionInfo() {}
-
-  virtual void Run(CallbackClient* client) = 0;
-
+  virtual void Run(std::unique_ptr<Any> data) {}
+  virtual void Run(CallbackClient*) = 0;
   static std::unique_ptr<ActionInfo> CreateDefault(ActionKind action_kind,
                                                    Operations* ops);
   static std::unique_ptr<ActionInfo> CreateFromCallback(ActionFunction cb);
+};
+
+// The base class for all actions that manipulate around a dest.
+class ActionWithDest : public ActionInfo {
+ protected:
+  explicit ActionWithDest(DestInfo* dest) : dest_(dest) {
+    ARGPARSE_DCHECK(dest);
+  }
+  DestInfo* GetDest() const { return dest_; }
+
+ private:
+  DestInfo* dest_;
+};
+
+class CountAction : public ActionWithDest {
+ public:
+  using ActionWithDest::ActionWithDest;
+  void Run(std::unique_ptr<Any>) override {
+    auto* dest = GetDest();
+    dest->GetOperations()->Count(dest->GetDestPtr());
+  }
+};
+
+// Actions that don't use the input data, but use a pre-set constant.
+class ActionWithConst : public ActionWithDest {
+ protected:
+  ActionWithConst(DestInfo* dest, const Any* const_value);
+  const Any& GetConstValue() const;
+  using ActionWithDest::GetDest;
+
+ private:
+  const Any* const_value_;
+};
+
+class StoreConstAction : public ActionWithConst {
+public:
+ using ActionWithConst::ActionWithConst;
+ void Run(std::unique_ptr<Any>) override {
+  //  GetDest()->
+ }
+
 };
 
 class TypeInfo {

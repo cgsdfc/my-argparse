@@ -49,20 +49,20 @@ if (NOT HAVE_ARGP_H)
     message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
 endif()
 
-include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(${CMAKE_SOURCE_DIR})
 
 set(ARGPARSE_SOURCE 
-   ${CMAKE_SOURCE_DIR}/src/argparse.cc 
-   ${CMAKE_SOURCE_DIR}/src/argparse-internal.cc
-   ${CMAKE_SOURCE_DIR}/src/argparse-argp-parser.cc
-   ${CMAKE_SOURCE_DIR}/src/argparse-info.cc
-   ${CMAKE_SOURCE_DIR}/src/argparse-open-mode.cc
-   ${CMAKE_SOURCE_DIR}/src/argparse-traits.cc
+   ${CMAKE_SOURCE_DIR}/argparse/argparse.cc 
+   ${CMAKE_SOURCE_DIR}/argparse/argparse-open-mode.cc
+   ${CMAKE_SOURCE_DIR}/argparse/argparse-traits.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-internal.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-info.cc
 )
 
 if (ARGPARSE_USE_GFLAGS)
     list(APPEND ARGPARSE_SOURCE
-    ${CMAKE_SOURCE_DIR}/src/argparse-gflags-parser.cc)
+    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
 endif()
 
 add_library(argparse ${ARGPARSE_SOURCE})
@@ -77,10 +77,10 @@ add_executable(test_main test_main.cc)
 target_link_libraries(test_main argparse)
 
 add_executable(argparse_test
-    test/argparse-any_test.cc
-    test/argparse-builder_test.cc
-    test/argparse-opaque-ptr_test.cc
-    test/argparse-conversion-result_test.cc
+    argparse/internal/argparse-any_test.cc
+    argparse/internal/argparse-opaque-ptr_test.cc
+    argparse/argparse-builder_test.cc
+    argparse/argparse-conversion-result_test.cc
 )
 
 target_link_libraries(argparse_test argparse gtest gtest_main)
