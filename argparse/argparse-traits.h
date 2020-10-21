@@ -62,8 +62,64 @@ struct AppendTraits;
 using TypeFunction = std::function<ConversionResult(const std::string&)>;
 using ActionFunction = std::function<void(ConversionResult)>;
 
+template <typename T>
+using TypeCallback = auto(const std::string&, T*) -> bool;
+template <typename T>
+using ActionCallback = auto(T) -> bool;
+
 // Keep these impl here. This makes the code more coherent.
 namespace internal {
+
+namespace traits_internal {
+
+/// Strip the class from a method type
+template <typename T>
+struct remove_class {};
+template <typename C, typename R, typename... A>
+struct remove_class<R (C::*)(A...)> {
+  typedef R type(A...);
+};
+template <typename C, typename R, typename... A>
+struct remove_class<R (C::*)(A...) const> {
+  typedef R type(A...);
+};
+
+template <typename F>
+struct strip_function_object {
+  using type = typename remove_class<decltype(&F::operator())>::type;
+};
+
+// Extracts the function signature from a function, function pointer or lambda.
+template <typename Function, typename F = absl::remove_reference_t<Function>>
+using function_signature_t = absl::conditional_t<
+    std::is_function<F>::value, F,
+    typename absl::conditional_t<
+        std::is_pointer<F>::value || std::is_member_pointer<F>::value,
+        std::remove_pointer<F>, strip_function_object<F>>::type>;
+
+template <typename Func>
+struct MakeCallbackResultImpl {};
+
+template <typename T>
+struct MakeCallbackResultImpl<TypeCallback<T>> {
+  using type = std::function<TypeCallback<T>>;
+};
+
+template <typename T>
+struct MakeCallbackResultImpl<ActionCallback<T>> {
+  using type = std::function<ActionCallback<T>>;
+};
+
+template <typename Func>
+using MakeCallbackResult =
+    typename MakeCallbackResultImpl<function_signature_t<Func>>::type;
+
+}  // namespace traits_internal
+
+template <typename Func>
+traits_internal::MakeCallbackResult<Func> MakeCallback(Func&& func) {
+  return {std::forward<Func>(func)};
+}
 
 template <typename T>
 struct IsOpenSupported;

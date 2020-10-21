@@ -110,34 +110,25 @@ class CustomCallbackActionInfo : public ActionInfo {
 // using ParseTraits.
 class DefaultTypeInfo : public TypeInfo {
  public:
-  explicit DefaultTypeInfo(Operations* ops) : ops_(ops) {}
+  using TypeInfo::TypeInfo;
 
   void Run(const std::string& in, OpsResult* out) override {
-    return ops_->Parse(in, out);
+    return GetOps()->Parse(in, out);
   }
-
-  std::string GetTypeHint() override { return ops_->GetTypeHint(); }
-
- private:
-  Operations* ops_;
 };
 
 // TypeInfo that opens a file according to some mode.
 class FileTypeInfo : public TypeInfo {
  public:
-  // TODO: set up cache of Operations objs..
-  FileTypeInfo(Operations* ops, OpenMode mode) : ops_(ops), mode_(mode) {
+  FileTypeInfo(Operations* ops, OpenMode mode) : TypeInfo(ops), mode_(mode) {
     ARGPARSE_DCHECK(mode != kModeNoMode);
   }
 
   void Run(const std::string& in, OpsResult* out) override {
-    return ops_->Open(in, mode_, out);
+    return GetOps()->Open(in, mode_, out);
   }
 
-  std::string GetTypeHint() override { return ops_->GetTypeHint(); }
-
  private:
-  Operations* ops_;
   OpenMode mode_;
 };
 
@@ -145,7 +136,7 @@ class FileTypeInfo : public TypeInfo {
 class CustomCallbackTypeInfo : public TypeInfo {
  public:
   explicit CustomCallbackTypeInfo(TypeFunction callback)
-      : callback_(std::move(callback)) {
+      : TypeInfo(nullptr), callback_(std::move(callback)) {
     ARGPARSE_DCHECK(callback_);
   }
   void Run(const std::string& in, OpsResult* out) override {
@@ -336,6 +327,24 @@ bool IsValidOptionName(const std::string& name) {
   return std::all_of(name.begin() + 2, name.end(), [](char c) {
     return c == '-' || c == '_' || absl::ascii_isalnum(c);
   });
+}
+
+std::unique_ptr<ActionInfo> ActionInfo::CreateBuiltinAction(
+    ActionKind action_kind, DestInfo* dest, const Any* const_value) {
+  switch (action_kind) {
+    case ActionKind::kStore:
+      return absl::make_unique<StoreAction>(dest);
+    case ActionKind::kAppend:
+      return absl::make_unique<AppendAction>(dest);
+    case ActionKind::kCount:
+      return absl::make_unique<CountAction>(dest);
+    case ActionKind::kStoreConst:
+      return absl::make_unique<StoreConstAction>(dest, const_value);
+    case ActionKind::kAppendConst:
+      return absl::make_unique<AppendConstAction>(dest, const_value);
+    default:
+      return nullptr;
+  }
 }
 
 }  // namespace internal
