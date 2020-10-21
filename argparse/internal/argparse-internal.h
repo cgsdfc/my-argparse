@@ -62,6 +62,7 @@ class Argument {
   virtual const Any* GetConstValue() = 0;
   virtual const Any* GetDefaultValue() = 0;
 
+  virtual void SetNames(std::unique_ptr<NamesInfo> info) = 0;
   virtual void SetRequired(bool required) = 0;
   virtual void SetHelpDoc(std::string help_doc) = 0;
   virtual void SetMetaVar(std::string meta_var) = 0;
@@ -109,7 +110,7 @@ class Argument {
   static bool Less(Argument* lhs, Argument* rhs);
 
   virtual ~Argument() {}
-  static std::unique_ptr<Argument> Create(std::unique_ptr<NamesInfo> info);
+  static std::unique_ptr<Argument> Create();
 };
 
 class ArgumentHolder {

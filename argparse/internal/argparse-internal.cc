@@ -18,8 +18,7 @@ namespace internal {
 // Holds all meta-info about an argument.
 class ArgumentImpl : public Argument {
  public:
-  explicit ArgumentImpl(std::unique_ptr<NamesInfo> names)
-      : names_info_(std::move(names)) {}
+  ArgumentImpl() = default;
 
   DestInfo* GetDest() override { return dest_info_.get(); }
   TypeInfo* GetType() override { return type_info_.get(); }
@@ -32,6 +31,9 @@ class ArgumentImpl : public Argument {
   NamesInfo* GetNamesInfo() override { return names_info_.get(); }
   bool IsRequired() override { return is_required_; }
   absl::string_view GetHelpDoc() override { return help_doc_; }
+  void SetNames(std::unique_ptr<NamesInfo> info) override {
+    names_info_ = std::move(info);
+  }
   void SetRequired(bool required) override { is_required_ = required; }
   void SetHelpDoc(std::string help_doc) override {
     help_doc_ = std::move(help_doc);
@@ -393,7 +395,8 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
  public:
   void SetNames(std::unique_ptr<NamesInfo> info) override {
     ARGPARSE_DCHECK_F(!arg_, "SetNames should only be called once");
-    arg_ = Argument::Create(std::move(info));
+    arg_ = Argument::Create();
+    arg_->SetNames(std::move(info));
   }
 
   void SetDest(std::unique_ptr<DestInfo> info) override {
@@ -654,9 +657,8 @@ std::unique_ptr<ArgumentBuilder> ArgumentBuilder::Create() {
   return absl::make_unique<ArgumentBuilderImpl>();
 }
 
-std::unique_ptr<Argument> Argument::Create(std::unique_ptr<NamesInfo> info) {
-  ARGPARSE_DCHECK(info);
-  return absl::make_unique<ArgumentImpl>(std::move(info));
+std::unique_ptr<Argument> Argument::Create() {
+  return absl::make_unique<ArgumentImpl>();
 }
 
 std::unique_ptr<ArgumentHolder> ArgumentHolder::Create(SubCommand* cmd) {
