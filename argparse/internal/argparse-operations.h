@@ -193,6 +193,8 @@ class OperationsImpl : public Operations {
   void StoreConst(OpaquePtr dest, const Any& data) override {
     return OpsMethod<OpsKind::kStoreConst, T>::Run(dest, data);
   }
+  // absl::enable_if_t<IsOpsSupported<T, OpsKind::kAppend>{}>
+  // App
   void Append(OpaquePtr dest, std::unique_ptr<Any> data) override {
     return OpsMethod<OpsKind::kAppend, T>::Run(dest, std::move(data));
   }

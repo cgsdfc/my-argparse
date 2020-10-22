@@ -1,4 +1,12 @@
-project(argparse)
+set(ARGPARSE_VERSION 0.0.0)
+
+if (CMAKE_VERSION VERSION_LESS 3.0)
+  project(argparse CXX C)
+  set(PROJECT_VERSION ${ARGPARSE_VERSION})
+else()
+  cmake_policy(SET CMP0048 NEW)
+  project(argparse VERSION ${ARGPARSE_VERSION} LANGUAGES CXX C)
+endif()
 
 cmake_minimum_required(VERSION 3.10)
 

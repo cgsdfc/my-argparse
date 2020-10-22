@@ -393,9 +393,10 @@ static ActionKind StringToActions(const std::string& str) {
 
 class ArgumentBuilderImpl : public ArgumentBuilder {
  public:
+  ArgumentBuilderImpl() : arg_(Argument::Create()) {}
+
   void SetNames(std::unique_ptr<NamesInfo> info) override {
-    ARGPARSE_DCHECK_F(!arg_, "SetNames should only be called once");
-    arg_ = Argument::Create();
+    // ARGPARSE_DCHECK_F(!arg_, "SetNames should only be called once");
     arg_->SetNames(std::move(info));
   }
 
@@ -417,6 +418,14 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
 
   void SetTypeCallback(TypeFunction cb) override {
     arg_->SetType(TypeInfo::CreateFromCallback(std::move(cb)));
+  }
+
+  void SetTypeInfo(std::unique_ptr<TypeInfo> info) override {
+    if (info) arg_->SetType(std::move(info));
+  }
+
+  void SetActionInfo(std::unique_ptr<ActionInfo> info) override {
+    if (info) arg_->SetAction(std::move(info));
   }
 
   void SetTypeFileType(OpenMode mode) override { open_mode_ = mode; }

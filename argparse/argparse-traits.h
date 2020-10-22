@@ -63,9 +63,14 @@ using TypeFunction = std::function<ConversionResult(const std::string&)>;
 using ActionFunction = std::function<void(ConversionResult)>;
 
 template <typename T>
-using TypeCallback = auto(const std::string&, T*) -> bool;
+using TypeCallbackPrototype = auto(const std::string&, T*) -> bool;
 template <typename T>
-using ActionCallback = auto(T) -> bool;
+using ActionCallbackPrototype = auto(T) -> bool;
+
+template <typename T>
+using TypeCallback = std::function<TypeCallbackPrototype<T>>;
+template <typename T>
+using ActionCallback = std::function<ActionCallbackPrototype<T>>;
 
 // Keep these impl here. This makes the code more coherent.
 namespace internal {
@@ -101,13 +106,13 @@ template <typename Func>
 struct MakeCallbackResultImpl {};
 
 template <typename T>
-struct MakeCallbackResultImpl<TypeCallback<T>> {
-  using type = std::function<TypeCallback<T>>;
+struct MakeCallbackResultImpl<TypeCallbackPrototype<T>> {
+  using type = TypeCallback<T>;
 };
 
 template <typename T>
-struct MakeCallbackResultImpl<ActionCallback<T>> {
-  using type = std::function<ActionCallback<T>>;
+struct MakeCallbackResultImpl<ActionCallbackPrototype<T>> {
+  using type = ActionCallback<T>;
 };
 
 template <typename Func>

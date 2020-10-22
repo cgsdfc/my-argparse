@@ -241,6 +241,8 @@ class ArgumentBuilder {
   // action(<lambda>)
   virtual void SetActionCallback(ActionFunction cb) = 0;
 
+  virtual void SetActionInfo(std::unique_ptr<ActionInfo> info) = 0;
+
   // type<int>()
   virtual void SetTypeOperations(Operations* ops) = 0;
 
@@ -249,6 +251,8 @@ class ArgumentBuilder {
 
   // type(FileType())
   virtual void SetTypeFileType(OpenMode mode) = 0;
+
+  virtual void SetTypeInfo(std::unique_ptr<TypeInfo> info) = 0;
 
   // nargs('+')
   virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;

@@ -20,6 +20,62 @@ enum Flags {
   // kNoExit = ARGP_NO_EXIT,
 };
 
+namespace internal {
+class ArgBase {
+ public:
+ protected:
+  ArgBase() : builder_(internal::ArgumentBuilder::Create()) {}
+  internal::ArgumentBuilder* GetBuilder() const { return builder_.get(); }
+
+ private:
+  std::unique_ptr<internal::ArgumentBuilder> builder_;
+};
+
+template <typename T>
+class ArgWithDest : public ArgBase {
+ public:
+  explicit ArgWithDest(T* ptr) : ArgBase() {
+    GetBuilder()->SetDest(DestInfo::CreateFromPtr(ptr));
+  }
+
+  // ConstValue with T itself.
+  ArgWithDest& SetConstValue(T&& value) {
+    GetBuilder()->SetConstValue(MakeAny<T>(std::forward<T>(value)));
+    return *this;
+  }
+
+  // ConstValue with ValueType if T has a value_type.
+  template <typename U,
+            absl::enable_if_t<std::is_same<absl::decay_t<U>, ValueTypeOf<T>>{},
+                              int> = 0>
+  ArgWithDest& SetConstValue(U&& value) {
+    using ValueType = ValueTypeOf<T>;
+    GetBuilder()->SetConstValue(MakeAny<ValueType>(std::move(value)));
+    return *this;
+  }
+
+  ArgWithDest& SetType(TypeCallback<T>&& func) {
+    GetBuilder()->SetTypeInfo(TypeInfo::CreateCallbackType(std::move(func)));
+    return *this;
+  }
+
+  ArgWithDest& SetAction(ActionCallback<T>&& func) {
+    GetBuilder()->SetActionInfo(
+        ActionInfo::CreateCallbackAction(std::move(func)));
+    return *this;
+  }
+
+  // DefaultValue
+  ArgWithDest& SetDefaultValue(T&& value) {
+    GetBuilder()->SetDefaultValue(MakeAny<T>(std::move(value)));
+    return *this;
+  }
+
+};
+
+} // namespace internal
+
+// TODO: make this a typesafe class using template.
 class Argument {
  public:
   explicit Argument(Names names, Dest dest = {}, const char* help = {})

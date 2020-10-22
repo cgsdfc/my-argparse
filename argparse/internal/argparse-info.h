@@ -153,7 +153,7 @@ class ActionWithConst : public ActionWithDest {
   }
 
  protected:
-  const Any& GetConstValue() const;
+  const Any& GetConstValue() const { return *const_value_; }
   using ActionWithDest::GetDest;
 
  private:
@@ -195,9 +195,8 @@ class StoreAction final : public ActionWithDest {
 // An action that runs a user-supplied callback.
 template <typename T>
 class CallbackAction final : public ActionInfo {
-  using CallbackType = std::function<ActionCallback<T>>;
-
  public:
+  using CallbackType = ActionCallback<T>;
   explicit CallbackAction(CallbackType&& cb) : callback_(std::move(cb)) {}
   void Run(std::unique_ptr<Any> data) override {
     callback_(AnyCast<T>(std::move(data)));
@@ -223,7 +222,7 @@ class TypeInfo {
   template <typename T>
   static std::unique_ptr<TypeInfo> CreateCallbackType(TypeCallback<T> cb);
 
-  explicit TypeInfo(Operations* ops);
+  explicit TypeInfo(Operations* ops) : operations_(ops) {}
   Operations* GetOps() const { return operations_; }
   std::string GetTypeHint() const { return GetOps()->GetTypeHint(); }
 
@@ -234,7 +233,7 @@ class TypeInfo {
 template <typename T>
 class CallbackTypeInfo : public TypeInfo {
  public:
-  using CallbackType = std::function<TypeCallback<T>>;
+  using CallbackType = TypeCallback<T>;
   explicit CallbackTypeInfo(CallbackType&& cb)
       : TypeInfo(Operations::GetInstance<T>()), callback_(std::move(cb)) {}
 
