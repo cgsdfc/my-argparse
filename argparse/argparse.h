@@ -119,93 +119,39 @@ class Argument : public BasicMethods<Argument<T>>,
                  public ValueTypeMethods<T, Argument<T>>,
                  public FileTypeMethods<T, Argument<T>> {
  public:
-  explicit Argument(T* ptr) : builder_(internal::ArgumentBuilder::Create()) {
-    builder_->SetDest(DestInfo::CreateFromPtr(ptr));
+  Argument(T* ptr, Names names, absl::string_view help)
+      : builder_(internal::ArgumentBuilder::Create()) {
+    GetBuilder()->SetDest(DestInfo::CreateFromPtr(ptr));
+    GetBuilder()->SetNames(internal::GetBuiltObject(&names));
+    GetBuilder()->SetHelp(std::string(help));
   }
 
  private:
-  friend class BuilderAccessor;
   friend class BasicMethods<Argument<T>>;
   friend class DestTypeMethods<T, Argument<T>>;
   friend class ValueTypeMethods<T, Argument<T>>;
   friend class FileTypeMethods<T, Argument<T>>;
+  friend class internal::BuilderAccessor;
 
+  std::unique_ptr<internal::Argument> Build() {
+    return GetBuilder()->CreateArgument();
+  }
   internal::ArgumentBuilder* GetBuilder() { return builder_.get(); }
   std::unique_ptr<internal::ArgumentBuilder> builder_;
 };
 
 }  // namespace argument_internal
+
+template <typename T>
+using TypeSafeArgumentBuilder = argument_internal::Argument<T>;
+
 }  // namespace internal
 
-// TODO: make this a typesafe class using template.
-
-class Argument {
- public:
-  explicit Argument(Names names, Dest dest = {}, const char* help = {})
-      : builder_(internal::ArgumentBuilder::Create()) {
-    builder_->SetNames(internal::GetBuiltObject(&names));
-    builder_->SetDest(internal::GetBuiltObject(&dest));
-    if (help) builder_->SetHelp(help);
-  }
-
-  Argument& SetDest(Dest dest) {
-    builder_->SetDest(internal::GetBuiltObject(&dest));
-    return *this;
-  }
-  Argument& SetAction(const char* str) {
-    builder_->SetActionString(str);
-    return *this;
-  }
-  Argument& SetAction(ActionFunction cb) {
-    builder_->SetActionCallback(std::move(cb));
-    return *this;
-  }
-  Argument& SetType(TypeFunction cb) {
-    builder_->SetTypeCallback(std::move(cb));
-    return *this;
-  }
-  template <typename T>
-  Argument& SetType() {
-    builder_->SetTypeOperations(internal::Operations::GetInstance<T>());
-    return *this;
-  }
-  Argument& SetType(FileType file_type) {
-    builder_->SetTypeFileType(internal::GetBuiltObject(&file_type));
-    return *this;
-  }
-  Argument& SetConstValue(AnyValue val) {
-    builder_->SetConstValue(internal::GetBuiltObject(&val));
-    return *this;
-  }
-  Argument& SetDefaultValue(AnyValue val) {
-    builder_->SetDefaultValue(internal::GetBuiltObject(&val));
-    return *this;
-  }
-  Argument& SetHelp(std::string val) {
-    builder_->SetHelp(std::move(val));
-    return *this;
-  }
-  Argument& SetRequired(bool val) {
-    builder_->SetRequired(val);
-    return *this;
-  }
-  Argument& SetMetaVar(std::string val) {
-    builder_->SetMetaVar(std::move(val));
-    return *this;
-  }
-  Argument& SetNumArgs(NumArgs num_args) {
-    builder_->SetNumArgs(internal::GetBuiltObject(&num_args));
-    return *this;
-  }
-
- private:
-  friend class internal::BuilderAccessor;
-  std::unique_ptr<internal::Argument> Build() {
-    return builder_->CreateArgument();
-  }
-
-  std::unique_ptr<internal::ArgumentBuilder> builder_;
-};
+template <typename T>
+internal::TypeSafeArgumentBuilder<T> Argument(T* ptr, Names names,
+                                              absl::string_view help = {}) {
+  return internal::TypeSafeArgumentBuilder<T>(ptr, std::move(names), help);
+}
 
 // This is a helper that provides add_argument().
 // For derived, void AddArgumentImpl(std::unique_ptr<internal::Argument>) should
@@ -217,8 +163,7 @@ class SupportAddArgument {
   template <typename T>
   Derived& AddArgument(T&& arg) {
     auto* self = static_cast<Derived*>(this);
-    self->AddArgumentImpl(
-        std::unique_ptr<internal::Argument>(internal::GetBuiltObject(&arg)));
+    self->AddArgumentImpl(internal::GetBuiltObject(&arg));
     return *self;
   }
 };
