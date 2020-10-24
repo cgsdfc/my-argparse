@@ -66,6 +66,7 @@ set(ARGPARSE_SOURCE
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-internal.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-info.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-builder.cc
 )
 
 if (ARGPARSE_USE_GFLAGS)

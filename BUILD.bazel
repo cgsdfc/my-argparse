@@ -28,6 +28,7 @@ cc_library(
         "argparse/internal/argparse-gflags-parser.cc",
         "argparse/internal/argparse-argp-parser.cc",
         "argparse/internal/argparse-info.cc",
+        "argparse/internal/argparse-argument-builder.cc",
     ],
     hdrs = [
         "argparse/internal/argparse-any.h",
@@ -41,6 +42,7 @@ cc_library(
         "argparse/internal/argparse-opaque-ptr.h",
         "argparse/internal/argparse-operations.h",
         "argparse/internal/argparse-port.h",
+        "argparse/internal/argparse-argument-builder.h",
         "argparse/argparse-open-mode.h",
         "argparse/argparse-builder.h",
         "argparse/argparse-conversion-result.h",
