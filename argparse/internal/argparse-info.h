@@ -122,90 +122,6 @@ class ActionInfo {
       ActionCallback<T> func);
 };
 
-// The base class for all actions that manipulate around a dest.
-class ActionWithDest : public ActionInfo {
-  public:
-   explicit ActionWithDest(DestInfo* dest) : dest_(dest) {
-     ARGPARSE_DCHECK(dest);
-   }
-
-  protected:
-   DestInfo* GetDest() const { return dest_; }
-   Operations* GetOps() const { return GetDest()->GetOperations(); }
-   OpaquePtr GetPtr() const { return GetDest()->GetDestPtr(); }
-
-  private:
-   DestInfo* dest_;
-};
-
-class CountAction : public ActionWithDest {
- public:
-  using ActionWithDest::ActionWithDest;
-  void Run(std::unique_ptr<Any>) override { GetOps()->Count(GetPtr()); }
-};
-
-// Actions that don't use the input data, but use a pre-set constant.
-class ActionWithConst : public ActionWithDest {
- public:
-  ActionWithConst(DestInfo* dest, const Any* const_value)
-      : ActionWithDest(dest), const_value_(const_value) {
-    ARGPARSE_DCHECK(const_value_);
-  }
-
- protected:
-  const Any& GetConstValue() const { return *const_value_; }
-  using ActionWithDest::GetDest;
-
- private:
-  const Any* const_value_;
-};
-
-class StoreConstAction final : public ActionWithConst {
- public:
-  using ActionWithConst::ActionWithConst;
-  void Run(std::unique_ptr<Any>) override {
-    GetOps()->StoreConst(GetPtr(), GetConstValue());
-  }
-};
-
-class AppendConstAction final : public ActionWithConst {
- public:
-  using ActionWithConst::ActionWithConst;
-  void Run(std::unique_ptr<Any>) override {
-    GetOps()->AppendConst(GetPtr(), GetConstValue());
-  }
-};
-
-class AppendAction final : public ActionWithDest {
- public:
-  using ActionWithDest::ActionWithDest;
-  void Run(std::unique_ptr<Any> data) override {
-    GetOps()->Append(GetPtr(), std::move(data));
-  }
-};
-
-class StoreAction final : public ActionWithDest {
- public:
-  using ActionWithDest::ActionWithDest;
-  void Run(std::unique_ptr<Any> data) override {
-    GetOps()->Store(GetPtr(), std::move(data));
-  }
-};
-
-// An action that runs a user-supplied callback.
-template <typename T>
-class CallbackAction final : public ActionInfo {
- public:
-  using CallbackType = ActionCallback<T>;
-  explicit CallbackAction(CallbackType&& cb) : callback_(std::move(cb)) {}
-  void Run(std::unique_ptr<Any> data) override {
-    callback_(AnyCast<T>(std::move(data)));
-  }
-
-private:
-  CallbackType callback_;
-};
-
 class TypeInfo {
  public:
   virtual ~TypeInfo() {}
@@ -230,6 +146,8 @@ class TypeInfo {
   Operations* operations_;
 };
 
+namespace info_internal {
+
 template <typename T>
 class CallbackTypeInfo : public TypeInfo {
  public:
@@ -248,6 +166,22 @@ class CallbackTypeInfo : public TypeInfo {
   CallbackType callback_;
 };
 
+// An action that runs a user-supplied callback.
+template <typename T>
+class CallbackAction final : public ActionInfo {
+ public:
+  using CallbackType = ActionCallback<T>;
+  explicit CallbackAction(CallbackType&& cb) : callback_(std::move(cb)) {}
+  void Run(std::unique_ptr<Any> data) override {
+    callback_(AnyCast<T>(std::move(data)));
+  }
+
+ private:
+  CallbackType callback_;
+};
+
+}  // namespace info_internal
+
 // If we can make Operations indexable from type_index, then only an opaque-ptr
 // is needed here.
 template <typename T>
@@ -259,11 +193,13 @@ std::unique_ptr<DestInfo> DestInfo::CreateFromPtr(T* ptr) {
 template <typename T>
 std::unique_ptr<ActionInfo> ActionInfo::CreateCallbackAction(
     ActionCallback<T> func) {
+  using info_internal::CallbackAction;
   return absl::make_unique<CallbackAction<T>>(std::move(func));
 }
 
 template <typename T>
 std::unique_ptr<TypeInfo> TypeInfo::CreateCallbackType(TypeCallback<T> cb) {
+  using info_internal::CallbackTypeInfo;
   return absl::make_unique<CallbackTypeInfo<T>>(std::move(cb));
 }
 

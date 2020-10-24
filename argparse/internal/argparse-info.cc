@@ -261,6 +261,76 @@ class OptionalNames : public NamesInfo {
   std::vector<std::string> short_names_;
 };
 
+// The base class for all actions that manipulate around a dest.
+class ActionWithDest : public ActionInfo {
+ public:
+  explicit ActionWithDest(DestInfo* dest) : dest_(dest) {
+    ARGPARSE_DCHECK(dest);
+  }
+
+ protected:
+  DestInfo* GetDest() const { return dest_; }
+  Operations* GetOps() const { return GetDest()->GetOperations(); }
+  OpaquePtr GetPtr() const { return GetDest()->GetDestPtr(); }
+
+ private:
+  DestInfo* dest_;
+};
+
+class CountAction : public ActionWithDest {
+ public:
+  using ActionWithDest::ActionWithDest;
+  void Run(std::unique_ptr<Any>) override { GetOps()->Count(GetPtr()); }
+};
+
+// Actions that don't use the input data, but use a pre-set constant.
+class ActionWithConst : public ActionWithDest {
+ public:
+  ActionWithConst(DestInfo* dest, const Any* const_value)
+      : ActionWithDest(dest), const_value_(const_value) {
+    ARGPARSE_DCHECK(const_value_);
+  }
+
+ protected:
+  const Any& GetConstValue() const { return *const_value_; }
+  using ActionWithDest::GetDest;
+
+ private:
+  const Any* const_value_;
+};
+
+class StoreConstAction final : public ActionWithConst {
+ public:
+  using ActionWithConst::ActionWithConst;
+  void Run(std::unique_ptr<Any>) override {
+    GetOps()->StoreConst(GetPtr(), GetConstValue());
+  }
+};
+
+class AppendConstAction final : public ActionWithConst {
+ public:
+  using ActionWithConst::ActionWithConst;
+  void Run(std::unique_ptr<Any>) override {
+    GetOps()->AppendConst(GetPtr(), GetConstValue());
+  }
+};
+
+class AppendAction final : public ActionWithDest {
+ public:
+  using ActionWithDest::ActionWithDest;
+  void Run(std::unique_ptr<Any> data) override {
+    GetOps()->Append(GetPtr(), std::move(data));
+  }
+};
+
+class StoreAction final : public ActionWithDest {
+ public:
+  using ActionWithDest::ActionWithDest;
+  void Run(std::unique_ptr<Any> data) override {
+    GetOps()->Store(GetPtr(), std::move(data));
+  }
+};
+
 }  // namespace
 
 std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(Operations* ops) {
