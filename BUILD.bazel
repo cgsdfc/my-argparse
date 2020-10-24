@@ -29,6 +29,7 @@ cc_library(
         "argparse/internal/argparse-argp-parser.cc",
         "argparse/internal/argparse-info.cc",
         "argparse/internal/argparse-argument-builder.cc",
+        "argparse/internal/argparse-argument.cc",
     ],
     hdrs = [
         "argparse/internal/argparse-any.h",
@@ -43,6 +44,7 @@ cc_library(
         "argparse/internal/argparse-operations.h",
         "argparse/internal/argparse-port.h",
         "argparse/internal/argparse-argument-builder.h",
+        "argparse/internal/argparse-argument.h",
         "argparse/argparse-open-mode.h",
         "argparse/argparse-builder.h",
         "argparse/argparse-conversion-result.h",
