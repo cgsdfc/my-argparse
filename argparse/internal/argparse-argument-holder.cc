@@ -1,4 +1,11 @@
+// Copyright (c) 2020 Feng Cong
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 #include "argparse/internal/argparse-argument-holder.h"
+
+#include "argparse/internal/argparse-argument.h"
 
 namespace argparse {
 namespace internal {
@@ -29,7 +36,6 @@ ArgumentHolder::ArgumentHolder(Delegate* delegate) : delegate_(delegate) {
       "optional arguments:",
       "positional arguments:",
   };
-
   for (auto title : kDefaultGroupTitles) {
     AddArgumentGroup(std::string(title));
   }
@@ -42,6 +48,12 @@ ArgumentGroup* ArgumentHolder::AddArgumentGroup(std::string title) {
   groups_.push_back(std::move(group));
   delegate_->OnAddArgumentGroup(group_ptr, this);
   return group_ptr;
+}
+
+void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
+  ARGPARSE_DCHECK(arg);
+  auto index = static_cast<ArgumentGroup::GroupIndex>(arg->IsOption());
+  GetDefaultGroup(index)->AddArgument(std::move(arg));
 }
 
 }  // namespace internal
