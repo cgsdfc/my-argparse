@@ -41,7 +41,7 @@ enum class HelpFormatPolicy {
 class ArgumentGroup {
  public:
   virtual ~ArgumentGroup() {}
-  virtual absl::string_view GetHeader() = 0;
+  virtual absl::string_view GetTitle() = 0;
   // Visit each arg.
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   // Add an arg to this group.
@@ -62,7 +62,7 @@ class ArgumentHolder {
 
   virtual SubCommand* GetSubCommand() = 0;
   virtual void SetListener(std::unique_ptr<Listener> listener) {}
-  virtual ArgumentGroup* AddArgumentGroup(std::string header) = 0;
+  virtual ArgumentGroup* AddArgumentGroup(std::string title) = 0;
   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
   virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
   virtual unsigned GetArgumentCount() = 0;

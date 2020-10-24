@@ -19,7 +19,7 @@ class ArgumentHolderImpl : public ArgumentHolder {
  public:
   explicit ArgumentHolderImpl(SubCommand* cmd);
 
-  ArgumentGroup* AddArgumentGroup(std::string header) override;
+  ArgumentGroup* AddArgumentGroup(std::string title) override;
 
   SubCommand* GetSubCommand() override { return subcmd_; }
   void AddArgument(std::unique_ptr<Argument> arg) override {
@@ -101,8 +101,8 @@ bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
 
 class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
  public:
-  GroupImpl(ArgumentHolderImpl* holder, std::string header)
-      : holder_(holder), header_(std::move(header)) {
+  GroupImpl(ArgumentHolderImpl* holder, std::string title)
+      : holder_(holder), header_(std::move(title)) {
     if (header_.back() != ':') header_.push_back(':');
   }
 
@@ -110,7 +110,7 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
     ++members_;
     holder_->AddArgumentToGroup(std::move(arg), this);
   }
-  absl::string_view GetHeader() override { return header_; }
+  absl::string_view GetTitle() override { return header_; }
 
   unsigned GetArgumentCount() override { return members_; }
 
@@ -131,8 +131,8 @@ class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
   unsigned members_ = 0;
 };
 
-ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(std::string header) {
-  auto* group = new GroupImpl(this, header);
+ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(std::string title) {
+  auto* group = new GroupImpl(this, title);
   groups_.emplace_back(group);
 
   if (pending_default_groups_notification_) {

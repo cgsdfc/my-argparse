@@ -284,9 +284,9 @@ template <typename Derived>
 class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
  public:
   // Add an argument group to this object.
-  ArgumentGroup AddArgumentGroup(std::string header) {
+  ArgumentGroup AddArgumentGroup(std::string title) {
     auto* self = static_cast<Derived*>(this);
-    return self->AddArgumentGroupImpl(std::move(header));
+    return self->AddArgumentGroupImpl(std::move(title));
   }
 };
 
@@ -303,8 +303,8 @@ class SubCommandProxy
     return sub_->GetHolder()->AddArgument(std::move(arg));
   }
   // SupportAddArgumentGroup:
-  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) {
-    return sub_->GetHolder()->AddArgumentGroup(std::move(header));
+  internal::ArgumentGroup* AddArgumentGroupImpl(std::string title) {
+    return sub_->GetHolder()->AddArgumentGroup(std::move(title));
   }
   friend class SupportAddArgumentGroup<SubCommandProxy>;
   internal::SubCommand* sub_;
@@ -420,8 +420,8 @@ class ArgumentParser
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {
     return controller_->AddArgument(std::move(arg));
   }
-  internal::ArgumentGroup* AddArgumentGroupImpl(std::string header) {
-    return controller_->AddArgumentGroup(std::move(header));
+  internal::ArgumentGroup* AddArgumentGroupImpl(std::string title) {
+    return controller_->AddArgumentGroup(std::move(title));
   }
   internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) {
