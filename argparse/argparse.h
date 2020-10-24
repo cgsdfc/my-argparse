@@ -21,61 +21,124 @@ enum Flags {
 };
 
 namespace internal {
-class ArgBase {
+namespace argument_internal {
+
+template <typename Derived>
+class BasicMethods {
  public:
- protected:
-  ArgBase() : builder_(internal::ArgumentBuilder::Create()) {}
-  internal::ArgumentBuilder* GetBuilder() const { return builder_.get(); }
+  Derived& SetHelp(std::string val) {
+    builder()->SetHelp(std::move(val));
+    return derived_this();
+  }
+  Derived& SetRequired(bool val) {
+    builder()->SetRequired(val);
+    return derived_this();
+  }
+  Derived& SetMetaVar(std::string val) {
+    builder()->SetMetaVar(std::move(val));
+    return derived_this();
+  }
+  Derived& SetNumArgs(NumArgs num_args) {
+    builder()->SetNumArgs(internal::GetBuiltObject(&num_args));
+    return derived_this();
+  }
 
  private:
+  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
+  Derived& derived_this() { return static_cast<Derived&>(*this); }
+};
+
+template <typename T, typename Derived>
+class DestTypeMethods {
+ public:
+  Derived& SetConstValue(T&& value) {
+    builder()->SetConstValue(MakeAny<T>(std::forward<T>(value)));
+    return derived_this();
+  }
+  Derived& SetDefaultValue(T&& value) {
+    builder()->SetDefaultValue(MakeAny<T>(std::move(value)));
+    return derived_this();
+  }
+  Derived& SetAction(ActionCallback<T>&& func) {
+    builder()->SetActionInfo(ActionInfo::CreateCallbackAction(std::move(func)));
+    return derived_this();
+  }
+  Derived& SetAction(const char* str) {
+    builder()->SetActionString(str);
+    return derived_this();
+  }
+  Derived& SetType(TypeCallback<T>&& func) {
+    builder()->SetTypeInfo(TypeInfo::CreateCallbackType(std::move(func)));
+    return derived_this();
+  }
+
+ private:
+  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
+  Derived& derived_this() { return static_cast<Derived&>(*this); }
+};
+
+template <typename T, typename Derived, typename ValueType = ValueTypeOf<T>>
+class ValueTypeMethods {
+ public:
+  Derived& SetValueTypeConst(ValueType&& value) {
+    builder()->SetConstValue(MakeAny<ValueType>(std::move(value)));
+    return derived_this();
+  }
+  Derived& SetValueType(TypeCallback<ValueType>&& func) {
+    builder()->SetTypeInfo(TypeInfo::CreateCallbackType(std::move(func)));
+    return derived_this();
+  }
+
+ private:
+  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
+  Derived& derived_this() { return static_cast<Derived&>(*this); }
+};
+
+template <typename T, typename Derived>
+class ValueTypeMethods<T, Derived, void> {};
+
+template <typename T, typename Derived, bool = IsOpenSupported<T>{}>
+class FileTypeMethods {
+ public:
+  Derived& SetType(FileType file_type) {
+    builder()->SetTypeFileType(internal::GetBuiltObject(&file_type));
+    return derived_this();
+  }
+
+ private:
+  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
+  Derived& derived_this() { return static_cast<Derived&>(*this); }
+};
+
+template <typename T, typename Derived>
+class FileTypeMethods<T, Derived, false> {};
+
+template <typename T>
+class Argument : public BasicMethods<Argument<T>>,
+                 public DestTypeMethods<T, Argument<T>>,
+                 public ValueTypeMethods<T, Argument<T>>,
+                 public FileTypeMethods<T, Argument<T>> {
+ public:
+  explicit Argument(T* ptr) : builder_(internal::ArgumentBuilder::Create()) {
+    builder_->SetDest(DestInfo::CreateFromPtr(ptr));
+  }
+
+ private:
+  friend class BuilderAccessor;
+  friend class BasicMethods<Argument<T>>;
+  friend class DestTypeMethods<T, Argument<T>>;
+  friend class ValueTypeMethods<T, Argument<T>>;
+  friend class FileTypeMethods<T, Argument<T>>;
+
+  internal::ArgumentBuilder* GetBuilder() { return builder_.get(); }
   std::unique_ptr<internal::ArgumentBuilder> builder_;
 };
 
-template <typename T>
-class ArgWithDest : public ArgBase {
- public:
-  explicit ArgWithDest(T* ptr) : ArgBase() {
-    GetBuilder()->SetDest(DestInfo::CreateFromPtr(ptr));
-  }
-
-  // ConstValue with T itself.
-  ArgWithDest& SetConstValue(T&& value) {
-    GetBuilder()->SetConstValue(MakeAny<T>(std::forward<T>(value)));
-    return *this;
-  }
-
-  // ConstValue with ValueType if T has a value_type.
-  template <typename U,
-            absl::enable_if_t<std::is_same<absl::decay_t<U>, ValueTypeOf<T>>{},
-                              int> = 0>
-  ArgWithDest& SetConstValue(U&& value) {
-    using ValueType = ValueTypeOf<T>;
-    GetBuilder()->SetConstValue(MakeAny<ValueType>(std::move(value)));
-    return *this;
-  }
-
-  ArgWithDest& SetType(TypeCallback<T>&& func) {
-    GetBuilder()->SetTypeInfo(TypeInfo::CreateCallbackType(std::move(func)));
-    return *this;
-  }
-
-  ArgWithDest& SetAction(ActionCallback<T>&& func) {
-    GetBuilder()->SetActionInfo(
-        ActionInfo::CreateCallbackAction(std::move(func)));
-    return *this;
-  }
-
-  // DefaultValue
-  ArgWithDest& SetDefaultValue(T&& value) {
-    GetBuilder()->SetDefaultValue(MakeAny<T>(std::move(value)));
-    return *this;
-  }
-
-};
-
-} // namespace internal
+}  // namespace argument_internal
+}  // namespace internal
 
 // TODO: make this a typesafe class using template.
+
 class Argument {
  public:
   explicit Argument(Names names, Dest dest = {}, const char* help = {})
@@ -189,8 +252,7 @@ class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
   }
 };
 
-class SubCommandProxy
-    : public SupportAddArgumentGroup<SubCommandProxy> {
+class SubCommandProxy : public SupportAddArgumentGroup<SubCommandProxy> {
  public:
   SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
 

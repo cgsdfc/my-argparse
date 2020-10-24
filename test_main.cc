@@ -9,8 +9,15 @@ int g_log_level;
 
 int main(int argc, char const* argv[]) {
   std::vector<int> arr;
-  argparse::internal::ArgWithDest<std::vector<int>> arg(&arr);
-  arg.SetConstValue(0);
+  using argparse::internal::argument_internal::Argument;
+
+  Argument<std::vector<int>>(&arr)
+      // .SetConstValue(0)
+      .SetDefaultValue({})
+      .SetRequired(false)
+      .SetHelp("aaaaa");
+
+  Argument<int> var(&g_verbose_level);
 
   auto parser = argparse::ArgumentParser();
 
