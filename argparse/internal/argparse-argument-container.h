@@ -8,6 +8,7 @@
 
 namespace argparse {
 namespace internal {
+
 class SubCommand;
 class SubCommandGroup;
 
@@ -32,7 +33,6 @@ class ArgumentContainer final : private ArgumentHolder::Delegate {
 
   explicit ArgumentContainer(Delegate* delegate);
   ArgumentHolder* GetMainHolder() { return &main_holder_; }
-  //   SubCommandHolder* GetSubCommandHolder();
 
  private:
   // Notifications from the main_holder:
