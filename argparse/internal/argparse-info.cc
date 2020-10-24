@@ -92,20 +92,6 @@ class DefaultActionInfo : public ActionInfo {
   Operations* ops_;
 };
 
-class CustomCallbackActionInfo : public ActionInfo {
- public:
-  explicit CustomCallbackActionInfo(ActionFunction callback)
-      : callback_(std::move(callback)) {}
-
-  void Run(CallbackClient* client) override {
-    ConversionResult result(client->GetData());
-    return callback_(std::move(result));
-  }
-
- private:
-  ActionFunction callback_;
-};
-
 // The default of TypeInfo: parse a single string into a value
 // using ParseTraits.
 class DefaultTypeInfo : public TypeInfo {
@@ -130,21 +116,6 @@ class FileTypeInfo : public TypeInfo {
 
  private:
   OpenMode mode_;
-};
-
-// TypeInfo that runs user's callback.
-class CustomCallbackTypeInfo : public TypeInfo {
- public:
-  explicit CustomCallbackTypeInfo(TypeFunction callback)
-      : TypeInfo(nullptr), callback_(std::move(callback)) {
-    ARGPARSE_DCHECK(callback_);
-  }
-  void Run(const std::string& in, OpsResult* out) override {
-    *out = OpsResult(callback_(in));
-  }
-
- private:
-  TypeFunction callback_;
 };
 
 void DefaultActionInfo::Run(CallbackClient* client) {
@@ -342,11 +313,6 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(Operations* ops,
   return absl::make_unique<FileTypeInfo>(ops, mode);
 }
 
-// Invoke user's callback.
-std::unique_ptr<TypeInfo> TypeInfo::CreateFromCallback(TypeFunction cb) {
-  return absl::make_unique<CustomCallbackTypeInfo>(std::move(cb));
-}
-
 std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
   return absl::make_unique<FlagNumArgsInfo>(flag);
 }
@@ -359,10 +325,6 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
 std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(ActionKind action_kind,
                                                       Operations* ops) {
   return absl::make_unique<DefaultActionInfo>(action_kind, ops);
-}
-
-std::unique_ptr<ActionInfo> ActionInfo::CreateFromCallback(ActionFunction cb) {
-  return absl::make_unique<CustomCallbackActionInfo>(std::move(cb));
 }
 
 std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {

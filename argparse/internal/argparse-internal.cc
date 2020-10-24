@@ -408,16 +408,8 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
     action_kind_ = StringToActions(str);
   }
 
-  void SetActionCallback(ActionFunction cb) override {
-    arg_->SetAction(ActionInfo::CreateFromCallback(std::move(cb)));
-  }
-
   void SetTypeOperations(Operations* ops) override {
     arg_->SetType(TypeInfo::CreateDefault(ops));
-  }
-
-  void SetTypeCallback(TypeFunction cb) override {
-    arg_->SetType(TypeInfo::CreateFromCallback(std::move(cb)));
   }
 
   void SetTypeInfo(std::unique_ptr<TypeInfo> info) override {

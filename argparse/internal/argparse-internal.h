@@ -238,16 +238,10 @@ class ArgumentBuilder {
   // action("store")
   virtual void SetActionString(const char* str) = 0;
 
-  // action(<lambda>)
-  virtual void SetActionCallback(ActionFunction cb) = 0;
-
   virtual void SetActionInfo(std::unique_ptr<ActionInfo> info) = 0;
 
   // type<int>()
   virtual void SetTypeOperations(Operations* ops) = 0;
-
-  // type(<lambda>)
-  virtual void SetTypeCallback(TypeFunction cb) = 0;
 
   // type(FileType())
   virtual void SetTypeFileType(OpenMode mode) = 0;

@@ -59,9 +59,6 @@ struct MetaTypeOf : MetaTypeContant<MetaTypes::kUnknown> {};
 template <typename T>
 struct AppendTraits;
 
-using TypeFunction = std::function<ConversionResult(const std::string&)>;
-using ActionFunction = std::function<void(ConversionResult)>;
-
 template <typename T>
 using TypeCallbackPrototype = auto(const std::string&, T*) -> bool;
 template <typename T>

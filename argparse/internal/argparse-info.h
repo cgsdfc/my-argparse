@@ -113,7 +113,6 @@ class ActionInfo {
 
   static std::unique_ptr<ActionInfo> CreateDefault(ActionKind action_kind,
                                                    Operations* ops);
-  static std::unique_ptr<ActionInfo> CreateFromCallback(ActionFunction cb);
 
   static std::unique_ptr<ActionInfo> CreateBuiltinAction(
       ActionKind action_kind, DestInfo* dest, const Any* const_value);
@@ -132,8 +131,6 @@ class TypeInfo {
   // Open a file.
   static std::unique_ptr<TypeInfo> CreateFileType(Operations* ops,
                                                   OpenMode mode);
-  // Invoke user's callback.
-  static std::unique_ptr<TypeInfo> CreateFromCallback(TypeFunction cb);
 
   template <typename T>
   static std::unique_ptr<TypeInfo> CreateCallbackType(TypeCallback<T> cb);
