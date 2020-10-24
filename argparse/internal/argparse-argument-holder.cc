@@ -56,9 +56,15 @@ void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
   GetDefaultGroup(index)->AddArgument(std::move(arg));
 }
 
+void ArgumentHolder::OnAddArgument(Argument* arg, ArgumentGroup* group) {
+  CheckNamesConflict(arg);
+  delegate_->OnAddArgument(arg, group);
+}
+
 // All names should be checked, including positional names.
-void ArgumentHolder::CheckNamesConflict(NamesInfo* info) {
+void ArgumentHolder::CheckNamesConflict(Argument* arg) {
   bool ok = true;
+  auto* info = arg->GetNamesInfo();
   info->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
     // If ok becomes false, don't bother inserting any more.
     ok = ok && name_set_.insert(in).second;

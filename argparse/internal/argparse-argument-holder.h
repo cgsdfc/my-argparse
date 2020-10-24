@@ -5,10 +5,12 @@
 
 #pragma once
 
+#include "argparse/internal/argparse-argument.h"
 #include "argparse/internal/argparse-port.h"
 
 namespace argparse {
 namespace internal {
+
 class Argument;
 class ArgumentHolder;
 
@@ -81,12 +83,9 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
   void AddArgument(std::unique_ptr<Argument> arg);
 
  private:
-  void CheckNamesConflict(NamesInfo* info);
+  void CheckNamesConflict(Argument* arg);
   // ArgumentGroup::Delegate:
-  void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
-    CheckNamesConflict(arg->GetNamesInfo());
-    delegate_->OnAddArgument(arg, group);
-  }
+  void OnAddArgument(Argument* arg, ArgumentGroup* group) override;
 
   Delegate* delegate_;
   // In many cases, there are just default groups, so make the capacity 2.
