@@ -1,6 +1,9 @@
-#pragma once
+// Copyright (c) 2020 Feng Cong
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
 
-#include <array>
+#pragma once
 
 #include "argparse/internal/argparse-port.h"
 
@@ -11,38 +14,50 @@ class ArgumentHolder;
 
 class ArgumentGroup {
  public:
+  // This is needed to send out notification.
+  class Delegate {
+   public:
+    virtual void OnAddArgument(Argument* arg, ArgumentGroup* group) {}
+    virtual ~Delegate() {}
+  };
+
   enum GroupIndex {
     kOptionalGroupIndex = 0,
     kPositionalGroupIndex = 1,
   };
 
-  ~ArgumentGroup() {}
-  absl::string_view GetTitle();
-//   GroupKind GetGroupKind() const;
+  absl::string_view GetTitle() const { return title_; }
+  void SetTitle(absl::string_view title);
+
   // Add an arg to this group.
   void AddArgument(std::unique_ptr<Argument> arg);
   // Allow fast iteration over all arguments:
   // for (auto i = 0; i < g->GetArgumentCount(); ++i)
   //    g->GetArgument(i);
-  std::size_t GetArgumentCount();
+  std::size_t GetArgumentCount() const { return arguments_.size(); }
   Argument* GetArgument(std::size_t i);
 
   // ArgumentGroup is allocated on the heap.
-  static std::unique_ptr<ArgumentGroup> Create(absl::string_view title);
+  static std::unique_ptr<ArgumentGroup> Create(Delegate* delegate) {
+    return absl::WrapUnique(new ArgumentGroup(delegate));
+  }
 
  private:
+  explicit ArgumentGroup(Delegate* delegate) : delegate_(delegate) {}
+  Delegate* delegate_;
   std::string title_;
-  std::vector<std::unique_ptr<Argument>> arguments_;
+  absl::InlinedVector<std::unique_ptr<Argument>, 4> arguments_;
 };
 
-class ArgumentHolder {
+class ArgumentHolder final : private ArgumentGroup::Delegate {
  public:
   // Notify outside some event.
   class Delegate {
    public:
-   virtual void OnAddArgument(Argument* arg) {}
-   virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
-   virtual ~Delegate() {}
+    virtual void OnAddArgument(Argument* arg, ArgumentGroup* group) {}
+    virtual void OnAddArgumentGroup(ArgumentGroup* group,
+                                    ArgumentHolder* holder) {}
+    virtual ~Delegate() {}
   };
 
   // Allocated directly.
@@ -50,18 +65,27 @@ class ArgumentHolder {
   explicit ArgumentHolder(Delegate* delegate);
 
   // Allow fast iteration over all ArgumentGroups.
-  std::size_t GetArgumentGroupCount();
+  std::size_t GetArgumentGroupCount() const { return groups_.size(); }
   // Helper to access the default groups.
-  ArgumentGroup* GetDefaultGroup(ArgumentGroup::GroupIndex index);
+  ArgumentGroup* GetDefaultGroup(ArgumentGroup::GroupIndex index) const {
+    return GetArgumentGroup(index);
+  }
   // 0 is for default option group. 1 is for default positional group.
-  ArgumentGroup* GetArgumentGroup(std::size_t i);
+  ArgumentGroup* GetArgumentGroup(std::size_t i) const {
+    ARGPARSE_DCHECK(i < GetArgumentGroupCount());
+    return groups_[i].get();
+  }
   ArgumentGroup* AddArgumentGroup(std::string title);
 
   // method to add arg to default group (inferred from arg).
   void AddArgument(std::unique_ptr<Argument> arg);
-  ~ArgumentHolder() {}
 
  private:
+  // ArgumentGroup::Delegate:
+  void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
+    delegate_->OnAddArgument(arg, group);
+  }
+
   Delegate* delegate_;
   // In many cases, there are just default groups, so make the capacity 2.
   absl::InlinedVector<std::unique_ptr<ArgumentGroup>, 2> groups_;
