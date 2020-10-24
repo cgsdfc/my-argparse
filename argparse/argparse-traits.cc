@@ -30,8 +30,9 @@ ConversionResult CFileOpenTraits::Run(const std::string& in, OpenMode mode) {
   auto mode_str = ModeToChars(mode);
   auto* file = std::fopen(in.c_str(), mode_str.c_str());
   if (file) return ConversionSuccess(file);
-  auto error = absl::base_internal::StrError(errno);
-  return ConversionFailure(std::move(error));
+  // TODO: make error msg simple.
+  // auto error = absl::base_internal::StrError(errno);
+  return ConversionFailure();
 }
 
 }  // namespace internal

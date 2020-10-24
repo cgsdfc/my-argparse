@@ -19,6 +19,10 @@ int main(int argc, char const* argv[]) {
 
   Argument<int> var(&g_verbose_level);
 
+  FILE* f;
+  Argument<FILE*> var_f(&f);
+  var_f.SetFileType(argparse::FileType("xxx"));
+
   auto parser = argparse::ArgumentParser();
 
   parser.SetDescription("a program").SetBugReportEmail("xx@xx.com");

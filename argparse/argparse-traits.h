@@ -277,7 +277,7 @@ struct MetaTypeHint {
       case MetaTypes::kChar:
         return "char";
       case MetaTypes::kNumber:
-        return TypeName<T>();
+        return std::string(TypeName<T>());
       default:
         // List
         ARGPARSE_DCHECK(false);

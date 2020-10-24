@@ -100,7 +100,7 @@ class ValueTypeMethods<T, Derived, void> {};
 template <typename T, typename Derived, bool = IsOpenSupported<T>{}>
 class FileTypeMethods {
  public:
-  Derived& SetType(FileType file_type) {
+  Derived& SetFileType(FileType file_type) {
     builder()->SetTypeFileType(internal::GetBuiltObject(&file_type));
     return derived_this();
   }
