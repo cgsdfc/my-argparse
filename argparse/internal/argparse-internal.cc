@@ -15,134 +15,134 @@
 namespace argparse {
 namespace internal {
 
-class ArgumentHolderImpl : public ArgumentHolder {
- public:
-  explicit ArgumentHolderImpl(SubCommand* cmd);
+// class ArgumentHolderImpl : public ArgumentHolder {
+//  public:
+//   explicit ArgumentHolderImpl(SubCommand* cmd);
 
-  ArgumentGroup* AddArgumentGroup(std::string title) override;
+//   ArgumentGroup* AddArgumentGroup(std::string title) override;
 
-  SubCommand* GetSubCommand() override { return subcmd_; }
-  void AddArgument(std::unique_ptr<Argument> arg) override {
-    auto* group =
-        arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
-    return group->AddArgument(std::move(arg));
-  }
+//   SubCommand* GetSubCommand() override { return subcmd_; }
+//   void AddArgument(std::unique_ptr<Argument> arg) override {
+//     auto* group =
+//         arg->IsOption() ? GetDefaultOptionGroup() : GetDefaultPositionalGroup();
+//     return group->AddArgument(std::move(arg));
+//   }
 
-  void ForEachArgument(std::function<void(Argument*)> callback) override {
-    for (auto& arg : arguments_) callback(arg.get());
-  }
-  void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
-    for (auto& group : groups_) callback(group.get());
-  }
+//   void ForEachArgument(std::function<void(Argument*)> callback) override {
+//     for (auto& arg : arguments_) callback(arg.get());
+//   }
+//   void ForEachGroup(std::function<void(ArgumentGroup*)> callback) override {
+//     for (auto& group : groups_) callback(group.get());
+//   }
 
-  unsigned GetArgumentCount() override { return arguments_.size(); }
+//   unsigned GetArgumentCount() override { return arguments_.size(); }
 
-  void SetListener(std::unique_ptr<Listener> listener) override {
-    listener_ = std::move(listener);
-  }
+//   void SetListener(std::unique_ptr<Listener> listener) override {
+//     listener_ = std::move(listener);
+//   }
 
- private:
-  enum GroupID {
-    kOptionGroup = 0,
-    kPositionalGroup = 1,
-  };
+//  private:
+//   enum GroupID {
+//     kOptionGroup = 0,
+//     kPositionalGroup = 1,
+//   };
 
-  class GroupImpl;
+//   class GroupImpl;
 
-  // Add an arg to a specific group.
-  void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
+//   // Add an arg to a specific group.
+//   void AddArgumentToGroup(std::unique_ptr<Argument> arg, ArgumentGroup* group);
 
-  ArgumentGroup* GetDefaultOptionGroup() const {
-    return groups_[kOptionGroup].get();
-  }
-  ArgumentGroup* GetDefaultPositionalGroup() const {
-    return groups_[kPositionalGroup].get();
-  }
+//   ArgumentGroup* GetDefaultOptionGroup() const {
+//     return groups_[kOptionGroup].get();
+//   }
+//   ArgumentGroup* GetDefaultPositionalGroup() const {
+//     return groups_[kPositionalGroup].get();
+//   }
 
-  bool CheckNamesConflict(NamesInfo* names);
+//   bool CheckNamesConflict(NamesInfo* names);
 
-  void NotifyAddArgumentGroup(ArgumentGroup* group) {
-    if (!listener_) return;
-    listener_->OnAddArgumentGroup(group);
-  }
+//   void NotifyAddArgumentGroup(ArgumentGroup* group) {
+//     if (!listener_) return;
+//     listener_->OnAddArgumentGroup(group);
+//   }
 
-  SubCommand* subcmd_ = nullptr;
-  bool pending_default_groups_notification_ = true;
-  std::unique_ptr<Listener> listener_;
-  // Hold the storage of all args.
-  std::vector<std::unique_ptr<Argument>> arguments_;
-  std::vector<std::unique_ptr<ArgumentGroup>> groups_;
-  // Conflicts checking.
-  std::set<std::string> name_set_;
-};
+//   SubCommand* subcmd_ = nullptr;
+//   bool pending_default_groups_notification_ = true;
+//   std::unique_ptr<Listener> listener_;
+//   // Hold the storage of all args.
+//   std::vector<std::unique_ptr<Argument>> arguments_;
+//   std::vector<std::unique_ptr<ArgumentGroup>> groups_;
+//   // Conflicts checking.
+//   std::set<std::string> name_set_;
+// };
 
-void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
-                                            ArgumentGroup* group) {
-  // First check if this arg will conflict with existing ones.
-  ARGPARSE_CHECK_F(CheckNamesConflict(arg->GetNamesInfo()),
-                   "Argument names conflict with existing names!");
-  arg->SetGroup(group);
-  if (listener_) listener_->OnAddArgument(arg.get());
-  arguments_.push_back(std::move(arg));
-}
+// void ArgumentHolderImpl::AddArgumentToGroup(std::unique_ptr<Argument> arg,
+//                                             ArgumentGroup* group) {
+//   // First check if this arg will conflict with existing ones.
+//   ARGPARSE_CHECK_F(CheckNamesConflict(arg->GetNamesInfo()),
+//                    "Argument names conflict with existing names!");
+//   arg->SetGroup(group);
+//   if (listener_) listener_->OnAddArgument(arg.get());
+//   arguments_.push_back(std::move(arg));
+// }
 
-ArgumentHolderImpl::ArgumentHolderImpl(SubCommand* cmd) : subcmd_(cmd) {
-  AddArgumentGroup("optional arguments");
-  AddArgumentGroup("positional arguments");
-}
+// ArgumentHolderImpl::ArgumentHolderImpl(SubCommand* cmd) : subcmd_(cmd) {
+//   AddArgumentGroup("optional arguments");
+//   AddArgumentGroup("positional arguments");
+// }
 
-bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
-  bool ok = true;
-  names->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
-    if (!name_set_.insert(in).second) ok = false;
-  });
-  return ok;
-}
+// bool ArgumentHolderImpl::CheckNamesConflict(NamesInfo* names) {
+//   bool ok = true;
+//   names->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
+//     if (!name_set_.insert(in).second) ok = false;
+//   });
+//   return ok;
+// }
 
-class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
- public:
-  GroupImpl(ArgumentHolderImpl* holder, std::string title)
-      : holder_(holder), header_(std::move(title)) {
-    if (header_.back() != ':') header_.push_back(':');
-  }
+// class ArgumentHolderImpl::GroupImpl : public ArgumentGroup {
+//  public:
+//   GroupImpl(ArgumentHolderImpl* holder, std::string title)
+//       : holder_(holder), header_(std::move(title)) {
+//     if (header_.back() != ':') header_.push_back(':');
+//   }
 
-  void AddArgument(std::unique_ptr<Argument> arg) override {
-    ++members_;
-    holder_->AddArgumentToGroup(std::move(arg), this);
-  }
-  absl::string_view GetTitle() override { return header_; }
+//   void AddArgument(std::unique_ptr<Argument> arg) override {
+//     ++members_;
+//     holder_->AddArgumentToGroup(std::move(arg), this);
+//   }
+//   absl::string_view GetTitle() override { return header_; }
 
-  unsigned GetArgumentCount() override { return members_; }
+//   unsigned GetArgumentCount() override { return members_; }
 
-  void ForEachArgument(std::function<void(Argument*)> callback) override {
-    for (auto& arg : holder_->arguments_) {
-      if (arg->GetGroup() == this) callback(arg.get());
-    }
-  }
+//   void ForEachArgument(std::function<void(Argument*)> callback) override {
+//     for (auto& arg : holder_->arguments_) {
+//       if (arg->GetGroup() == this) callback(arg.get());
+//     }
+//   }
 
-  ArgumentHolder* GetHolder() override {
-    ARGPARSE_DCHECK(holder_);
-    return holder_;
-  }
+//   ArgumentHolder* GetHolder() override {
+//     ARGPARSE_DCHECK(holder_);
+//     return holder_;
+//   }
 
- private:
-  ArgumentHolderImpl* holder_;
-  std::string header_;  // the text provided by user plus a ':'.
-  unsigned members_ = 0;
-};
+//  private:
+//   ArgumentHolderImpl* holder_;
+//   std::string header_;  // the text provided by user plus a ':'.
+//   unsigned members_ = 0;
+// };
 
-ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(std::string title) {
-  auto* group = new GroupImpl(this, title);
-  groups_.emplace_back(group);
+// ArgumentGroup* ArgumentHolderImpl::AddArgumentGroup(std::string title) {
+//   auto* group = new GroupImpl(this, title);
+//   groups_.emplace_back(group);
 
-  if (pending_default_groups_notification_) {
-    pending_default_groups_notification_ = false;
-    NotifyAddArgumentGroup(GetDefaultOptionGroup());
-    NotifyAddArgumentGroup(GetDefaultPositionalGroup());
-  }
-  NotifyAddArgumentGroup(group);
-  return group;
-}
+//   if (pending_default_groups_notification_) {
+//     pending_default_groups_notification_ = false;
+//     NotifyAddArgumentGroup(GetDefaultOptionGroup());
+//     NotifyAddArgumentGroup(GetDefaultPositionalGroup());
+//   }
+//   NotifyAddArgumentGroup(group);
+//   return group;
+// }
 
 class SubCommandImpl : public SubCommand {
  public:
@@ -438,9 +438,9 @@ std::unique_ptr<SubCommandGroup> SubCommandGroup::Create() {
   return absl::make_unique<GroupImpl>();
 }
 
-std::unique_ptr<ArgumentHolder> ArgumentHolder::Create(SubCommand* cmd) {
-  return absl::make_unique<ArgumentHolderImpl>(cmd);
-}
+// std::unique_ptr<ArgumentHolder> ArgumentHolder::Create(SubCommand* cmd) {
+//   return absl::make_unique<ArgumentHolderImpl>(cmd);
+// }
 
 std::unique_ptr<SubCommand> SubCommand::Create(std::string name) {
   return absl::make_unique<SubCommandImpl>(std::move(name));

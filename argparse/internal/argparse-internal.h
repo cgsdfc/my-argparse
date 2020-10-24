@@ -11,9 +11,10 @@
 
 #include "argparse/internal/argparse-arg-array.h"
 #include "argparse/internal/argparse-argument-builder.h"
+#include "argparse/internal/argparse-argument-holder.h"
+#include "argparse/internal/argparse-argument.h"
 #include "argparse/internal/argparse-info.h"
 #include "argparse/internal/argparse-port.h"
-#include "argparse/internal/argparse-argument.h"
 
 // For now, this file should only hold interfaces of core classes.
 namespace argparse {
@@ -38,53 +39,53 @@ enum class HelpFormatPolicy {
   kDefaultValueHint,  // add (default: <default-value>) to help doc.
 };
 
-class ArgumentGroup {
- public:
-  virtual ~ArgumentGroup() {}
-  virtual absl::string_view GetTitle() = 0;
-  // Visit each arg.
-  virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
-  // Add an arg to this group.
-  virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
-  virtual unsigned GetArgumentCount() = 0;
-  virtual ArgumentHolder* GetHolder() = 0;
-};
+// class ArgumentGroup {
+//  public:
+//   virtual ~ArgumentGroup() {}
+//   virtual absl::string_view GetTitle() = 0;
+//   // Visit each arg.
+//   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
+//   // Add an arg to this group.
+//   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
+//   virtual unsigned GetArgumentCount() = 0;
+//   virtual ArgumentHolder* GetHolder() = 0;
+// };
 
-class ArgumentHolder {
- public:
-  // Notify outside some event.
-  class Listener {
-   public:
-    virtual void OnAddArgument(Argument* arg) {}
-    virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
-    virtual ~Listener() {}
-  };
+// class ArgumentHolder {
+//  public:
+//   // Notify outside some event.
+//   class Delegate {
+//    public:
+//     virtual void OnAddArgument(Argument* arg) {}
+//     virtual void OnAddArgumentGroup(ArgumentGroup* group) {}
+//     virtual ~Delegate() {}
+//   };
 
-  virtual SubCommand* GetSubCommand() = 0;
-  virtual void SetListener(std::unique_ptr<Listener> listener) {}
-  virtual ArgumentGroup* AddArgumentGroup(std::string title) = 0;
-  virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
-  virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
-  virtual unsigned GetArgumentCount() = 0;
-  // method to add arg to default group.
-  virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
-  virtual ~ArgumentHolder() {}
-  static std::unique_ptr<ArgumentHolder> Create(SubCommand* cmd);
+//   virtual SubCommand* GetSubCommand() = 0;
+//   virtual void SetListener(std::unique_ptr<Delegate> listener) {}
+//   virtual ArgumentGroup* AddArgumentGroup(std::string title) = 0;
+//   virtual void ForEachArgument(std::function<void(Argument*)> callback) = 0;
+//   virtual void ForEachGroup(std::function<void(ArgumentGroup*)> callback) = 0;
+//   virtual unsigned GetArgumentCount() = 0;
+//   // method to add arg to default group.
+//   virtual void AddArgument(std::unique_ptr<Argument> arg) = 0;
+//   virtual ~ArgumentHolder() {}
+//   static std::unique_ptr<ArgumentHolder> Create(SubCommand* cmd);
 
-  void CopyArguments(std::vector<Argument*>* out) {
-    out->clear();
-    out->reserve(GetArgumentCount());
-    ForEachArgument([out](Argument* arg) { out->push_back(arg); });
-  }
+//   void CopyArguments(std::vector<Argument*>* out) {
+//     out->clear();
+//     out->reserve(GetArgumentCount());
+//     ForEachArgument([out](Argument* arg) { out->push_back(arg); });
+//   }
 
-  // Get a sorted list of Argument.
-  void SortArguments(
-      std::vector<Argument*>* out,
-      std::function<bool(Argument*, Argument*)> cmp = &Argument::BeforeInUsage) {
-    CopyArguments(out);
-    std::sort(out->begin(), out->end(), std::move(cmp));
-  }
-};
+//   // Get a sorted list of Argument.
+//   void SortArguments(
+//       std::vector<Argument*>* out,
+//       std::function<bool(Argument*, Argument*)> cmp = &Argument::BeforeInUsage) {
+//     CopyArguments(out);
+//     std::sort(out->begin(), out->end(), std::move(cmp));
+//   }
+// };
 
 class SubCommand {
  public:

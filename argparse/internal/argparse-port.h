@@ -10,6 +10,7 @@
 #include <string>
 
 #include "absl/base/attributes.h"
+#include "absl/container/inlined_vector.h"
 #include "absl/memory/memory.h"
 #include "absl/meta/type_traits.h"
 #include "absl/strings/string_view.h"
