@@ -81,8 +81,10 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
   void AddArgument(std::unique_ptr<Argument> arg);
 
  private:
+  void CheckNamesConflict(NamesInfo* info);
   // ArgumentGroup::Delegate:
   void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
+    CheckNamesConflict(arg->GetNamesInfo());
     delegate_->OnAddArgument(arg, group);
   }
 

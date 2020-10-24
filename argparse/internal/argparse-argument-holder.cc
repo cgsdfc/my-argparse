@@ -56,5 +56,15 @@ void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
   GetDefaultGroup(index)->AddArgument(std::move(arg));
 }
 
+// All names should be checked, including positional names.
+void ArgumentHolder::CheckNamesConflict(NamesInfo* info) {
+  bool ok = true;
+  info->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
+    // If ok becomes false, don't bother inserting any more.
+    ok = ok && name_set_.insert(in).second;
+  });
+  ARGPARSE_CHECK_F(ok, "Argument names conflict with existing names!");
+}
+
 }  // namespace internal
 }  // namespace argparse
