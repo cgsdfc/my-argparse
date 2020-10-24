@@ -243,9 +243,8 @@ struct GetValueTypeOperations<T, true> {
 
 template <typename T>
 Operations* GetOperationsInstance() {
-  // TODO: absl mechanism to safeguard this.
-  static auto* g_operations = new OperationsImpl<T>;
-  return g_operations;
+  static OperationsImpl<T> g_operations;
+  return &g_operations;
 }
 
 template <typename T>
