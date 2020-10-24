@@ -5,15 +5,15 @@
 
 #include "argparse/internal/argparse-argp-parser.h"
 
+#include <argp.h>
+
 namespace argparse {
 namespace internal {
 
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
-  // using argp_parser_internal::ArgpArgumentParser;
-  // return absl::make_unique<ArgpArgumentParser>();
-  return nullptr;
+  using argp_parser_internal::ArgpArgumentParser;
+  return absl::make_unique<ArgpArgumentParser>();
 }
-
 
 }  // namespace internal
 }  // namespace argparse
