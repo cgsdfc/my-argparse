@@ -50,6 +50,45 @@ auto GetBuiltObject(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
   return BuilderAccessor::Build(b);
 }
 
+// Creator of DestInfo. For those that need a DestInfo, just take Dest
+// as an arg.
+class Dest : private SimpleBuilder<internal::DestInfo> {
+ public:
+  template <typename T>
+  Dest(T* ptr) {
+    this->SetObject(internal::DestInfo::CreateFromPtr(ptr));
+  }
+  // Dest() = default;
+
+ private:
+  friend class BuilderAccessor;
+};
+
+class Names : private SimpleBuilder<internal::NamesInfo> {
+ public:
+  Names(const char* name) : Names(std::string(name)) {
+    ARGPARSE_CHECK_F(name, "name should not be null");
+  }
+  Names(std::string name);
+  Names(std::initializer_list<std::string> names);
+
+ private:
+  friend class BuilderAccessor;
+};
+
+class NumArgs : private SimpleBuilder<internal::NumArgsInfo> {
+ public:
+  NumArgs(int number) {
+    this->SetObject(internal::NumArgsInfo::CreateFromNum(number));
+  }
+  NumArgs(char flag) {
+    this->SetObject(internal::NumArgsInfo::CreateFromFlag(flag));
+  }
+
+ private:
+  friend class BuilderAccessor;
+};
+
 }  // namespace builder_internal
 
 class AnyValue : private builder_internal::SimpleBuilder<internal::Any> {
@@ -65,32 +104,6 @@ class AnyValue : private builder_internal::SimpleBuilder<internal::Any> {
   friend class builder_internal::BuilderAccessor;
 };
 
-// Creator of DestInfo. For those that need a DestInfo, just take Dest
-// as an arg.
-class Dest : private builder_internal::SimpleBuilder<internal::DestInfo> {
- public:
-  template <typename T>
-  Dest(T* ptr) {
-    this->SetObject(internal::DestInfo::CreateFromPtr(ptr));
-  }
-  Dest() = default;
-
- private:
-  friend class builder_internal::BuilderAccessor;
-};
-
-class Names : private builder_internal::SimpleBuilder<internal::NamesInfo> {
- public:
-  Names(const char* name) : Names(std::string(name)) {
-    ARGPARSE_CHECK_F(name, "name should not be null");
-  }
-  Names(std::string name);
-  Names(std::initializer_list<std::string> names);
-
- private:
-  friend class builder_internal::BuilderAccessor;
-};
-
 class FileType {
  public:
   explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
@@ -101,19 +114,6 @@ class FileType {
   friend class builder_internal::BuilderAccessor;
   OpenMode Build() const { return mode_; }
   OpenMode mode_;
-};
-
-class NumArgs : private builder_internal::SimpleBuilder<internal::NumArgsInfo> {
- public:
-  NumArgs(int number) {
-    this->SetObject(internal::NumArgsInfo::CreateFromNum(number));
-  }
-  NumArgs(char flag) {
-    this->SetObject(internal::NumArgsInfo::CreateFromFlag(flag));
-  }
-
- private:
-  friend class builder_internal::BuilderAccessor;
 };
 
 namespace builder_internal {
@@ -263,11 +263,8 @@ class SupportAddArgument {
   }
 };
 
-}  // namespace builder_internal
-
 // ArgumentGroup: a group of arguments that share the same title.
-class ArgumentGroup
-    : public builder_internal::SupportAddArgument<ArgumentGroup> {
+class ArgumentGroup : public SupportAddArgument<ArgumentGroup> {
  public:
   ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
 
@@ -277,11 +274,10 @@ class ArgumentGroup
     group_->AddArgument(std::move(arg));
   }
 
-  friend class builder_internal::SupportAddArgument<ArgumentGroup>;
+  friend class SupportAddArgument<ArgumentGroup>;
   internal::ArgumentGroup* group_;
 };
 
-namespace builder_internal {
 // If we can do add_argument_group(), add_argument() is always possible.
 // For derived, void AddArgumentGroupImpl(std::string) should be implemented.
 template <typename Derived>
@@ -366,7 +362,8 @@ class SubCommandGroup
     this->GetObject()->SetHelpDoc(std::move(val));
     return *this;
   }
-  SubCommandGroup& SetDest(Dest val) {
+  // TODO: this should be stronge-typed.
+  SubCommandGroup& SetDest(builder_internal::Dest val) {
     this->GetObject()->SetDest(builder_internal::GetBuiltObject(&val));
     return *this;
   }
@@ -440,7 +437,8 @@ class ArgumentParser
 };
 
 template <typename T>
-builder_internal::ArgumentBuilder<T> Argument(Names names, T* dest,
+builder_internal::ArgumentBuilder<T> Argument(builder_internal::Names names,
+                                              T* dest,
                                               absl::string_view help = {}) {
   return {std::move(names), dest, help};
 }
