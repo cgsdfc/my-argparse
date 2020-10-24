@@ -25,45 +25,18 @@ class Argument;
 class ArgumentBuilder {
  public:
   virtual ~ArgumentBuilder() {}
-
-  // names
   virtual void SetNames(std::unique_ptr<NamesInfo> info) = 0;
-
-  // dest(&obj)
   virtual void SetDest(std::unique_ptr<DestInfo> info) = 0;
-
-  // action("store")
   virtual void SetActionString(const char* str) = 0;
-
   virtual void SetActionInfo(std::unique_ptr<ActionInfo> info) = 0;
-
-  // type<int>()
-  virtual void SetTypeOperations(Operations* ops) = 0;
-
-  // type(FileType())
   virtual void SetTypeFileType(OpenMode mode) = 0;
-
   virtual void SetTypeInfo(std::unique_ptr<TypeInfo> info) = 0;
-
-  // nargs('+')
   virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
-
-  // const_value(...)
   virtual void SetConstValue(std::unique_ptr<Any> val) = 0;
-
-  // default_value(...)
   virtual void SetDefaultValue(std::unique_ptr<Any> val) = 0;
-
-  // required(false)
   virtual void SetRequired(bool val) = 0;
-
-  // help(xxx)
   virtual void SetHelp(std::string val) = 0;
-
-  // meta_var(xxx)
   virtual void SetMetaVar(std::string val) = 0;
-
-  // Finally..
   virtual std::unique_ptr<Argument> CreateArgument() = 0;
 
   static std::unique_ptr<ArgumentBuilder> Create();

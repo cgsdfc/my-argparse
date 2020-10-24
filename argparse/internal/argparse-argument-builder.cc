@@ -54,10 +54,6 @@ class ArgumentBuilderImpl : public ArgumentBuilder {
     action_kind_ = StringToActions(str);
   }
 
-  void SetTypeOperations(Operations* ops) override {
-    arg_->SetType(TypeInfo::CreateDefault(ops));
-  }
-
   void SetTypeInfo(std::unique_ptr<TypeInfo> info) override {
     if (info) arg_->SetType(std::move(info));
   }
