@@ -111,9 +111,6 @@ class ActionInfo {
   virtual void Run(std::unique_ptr<Any> data) {}
   virtual void Run(CallbackClient*) {}
 
-  static std::unique_ptr<ActionInfo> CreateDefault(ActionKind action_kind,
-                                                   Operations* ops);
-
   static std::unique_ptr<ActionInfo> CreateBuiltinAction(
       ActionKind action_kind, DestInfo* dest, const Any* const_value);
   template <typename T>

@@ -122,12 +122,13 @@ std::unique_ptr<Argument> ArgumentBuilderImpl::CreateArgument() {
 
   if (!arg_->GetAction()) {
     // We assume a default store action but only if has dest.
-    if (action_kind_ == ActionKind::kNoAction && dest)
+    if (action_kind_ == ActionKind::kNoAction && dest) {
       action_kind_ = ActionKind::kStore;
+    }
     // Some action don't need an ops, like print_help, we perhaps need to
     // distinct that..
-    auto* ops = dest ? dest->GetOperations() : nullptr;
-    arg_->SetAction(ActionInfo::CreateDefault(action_kind_, ops));
+    arg_->SetAction(ActionInfo::CreateBuiltinAction(action_kind_, dest,
+                                                    arg_->GetConstValue()));
   }
 
   if (!arg_->GetType()) {

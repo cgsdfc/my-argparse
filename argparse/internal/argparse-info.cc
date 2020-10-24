@@ -78,20 +78,6 @@ FlagNumArgsInfo::FlagNumArgsInfo(char flag) : flag_(flag) {
                    flag);
 }
 
-// ActionInfo for builtin actions like store and append.
-class DefaultActionInfo : public ActionInfo {
- public:
-  DefaultActionInfo(ActionKind action_kind, Operations* ops)
-      : action_kind_(action_kind), ops_(ops) {}
-
-  void Run(CallbackClient* client) override;
-
- private:
-  // Since kind of action is too much, we use a switch instead of subclasses.
-  ActionKind action_kind_;
-  Operations* ops_;
-};
-
 // The default of TypeInfo: parse a single string into a value
 // using ParseTraits.
 class DefaultTypeInfo : public TypeInfo {
@@ -107,6 +93,7 @@ class DefaultTypeInfo : public TypeInfo {
 class FileTypeInfo : public TypeInfo {
  public:
   FileTypeInfo(Operations* ops, OpenMode mode) : TypeInfo(ops), mode_(mode) {
+    ARGPARSE_DCHECK(ops->IsSupported(OpsKind::kOpen));
     ARGPARSE_DCHECK(mode != kModeNoMode);
   }
 
@@ -117,41 +104,6 @@ class FileTypeInfo : public TypeInfo {
  private:
   OpenMode mode_;
 };
-
-void DefaultActionInfo::Run(CallbackClient* client) {
-  auto dest_ptr = client->GetDestPtr();
-  auto data = client->GetData();
-
-  switch (action_kind_) {
-    case ActionKind::kNoAction:
-      break;
-    case ActionKind::kStore:
-      ops_->Store(dest_ptr, std::move(data));
-      break;
-    case ActionKind::kStoreTrue:
-    case ActionKind::kStoreFalse:
-    case ActionKind::kStoreConst:
-      ops_->StoreConst(dest_ptr, *client->GetConstValue());
-      break;
-    case ActionKind::kAppend:
-      ops_->Append(dest_ptr, std::move(data));
-      break;
-    case ActionKind::kAppendConst:
-      ops_->AppendConst(dest_ptr, *client->GetConstValue());
-      break;
-    case ActionKind::kPrintHelp:
-      client->PrintHelp();
-      break;
-    case ActionKind::kPrintUsage:
-      client->PrintUsage();
-      break;
-    case ActionKind::kCustom:
-      break;
-    case ActionKind::kCount:
-      ops_->Count(dest_ptr);
-      break;
-  }
-}
 
 class PositionalName : public NamesInfo {
  public:
@@ -296,6 +248,7 @@ class AppendAction final : public ActionWithDest {
 
 class StoreAction final : public ActionWithDest {
  public:
+  // TODO: should check supportness in ctor.
   using ActionWithDest::ActionWithDest;
   void Run(std::unique_ptr<Any> data) override {
     GetOps()->Store(GetPtr(), std::move(data));
@@ -320,11 +273,6 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
 std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
   ARGPARSE_CHECK_F(num >= 0, "nargs number must be >= 0");
   return absl::make_unique<NumberNumArgsInfo>(num);
-}
-
-std::unique_ptr<ActionInfo> ActionInfo::CreateDefault(ActionKind action_kind,
-                                                      Operations* ops) {
-  return absl::make_unique<DefaultActionInfo>(action_kind, ops);
 }
 
 std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
