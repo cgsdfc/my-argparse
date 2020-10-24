@@ -454,10 +454,6 @@ namespace internal {
 //   return absl::make_unique<ArgumentContainerImpl>();
 // }
 
-// std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
-//   return nullptr;
-// }
-
 // std::unique_ptr<ArgumentController> ArgumentController::Create() {
 //   return absl::make_unique<ArgumentControllerImpl>();
 // }

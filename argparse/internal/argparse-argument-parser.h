@@ -6,6 +6,7 @@
 #pragma once
 
 #include "argparse/internal/argparse-arg-array.h"
+#include "argparse/internal/argparse-argument.h"
 
 namespace argparse {
 namespace internal {
@@ -31,7 +32,7 @@ class OptionsListener {
 class ArgumentParser {
  public:
   virtual ~ArgumentParser() {}
-  virtual std::unique_ptr<OptionsListener> CreateOptionsListener() = 0;
+  virtual OptionsListener* GetOptionsListener() = 0;
   virtual void AddArgument(Argument* arg, SubCommand* cmd) = 0;
   virtual void AddArgumentGroup(ArgumentGroup* group) = 0;
   //   virtual void AddSubCommand(SubCommand* cmd) = 0;

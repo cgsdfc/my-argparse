@@ -52,20 +52,39 @@ class ArgumentContainer final : private ArgumentHolder::Delegate {
 // This combines the functionality of ArgumentContainer and ArgumentParser and
 // connects them. It exposes an interface that is directly usable by the wrapper
 // layers.
-class ArgumentController : private ArgumentContainer::Delegate {
+class ArgumentController final : private ArgumentContainer::Delegate {
  public:
   ArgumentController();
 
   // Methods forwarded from ArgumentContainer.
-  void AddArgument(std::unique_ptr<Argument> arg);
-  ArgumentGroup* AddArgumentGroup(std::string title);
-  SubCommandGroup* AddSubCommandGroup(std::unique_ptr<SubCommandGroup> group);
+  void AddArgument(std::unique_ptr<Argument> arg) {
+    container_->GetMainHolder()->AddArgument(std::move(arg));
+  }
+  ArgumentGroup* AddArgumentGroup(std::string title) {
+    container_->GetMainHolder()->AddArgumentGroup(std::move(title));
+  }
+  SubCommandGroup* AddSubCommandGroup(std::unique_ptr<SubCommandGroup> group) {
+    return nullptr;
+  }
 
   // Methods forwarded from ArgumentParser.
-  OptionsListener* GetOptionsListener();
-  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);
+  OptionsListener* GetOptionsListener() {
+    return parser_->GetOptionsListener();
+  }
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) {
+    return parser_->ParseKnownArgs(args, out);
+  }
 
  private:
+  // ArgumentContainer::Delegate.
+  void OnAddArgument(Argument* arg, ArgumentGroup* group,
+                     SubCommand* cmd) override {
+    parser_->AddArgument(arg, nullptr);
+  }
+  void OnAddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) override {
+    parser_->AddArgumentGroup(group);
+  }
+
   std::unique_ptr<ArgumentContainer> container_;
   std::unique_ptr<ArgumentParser> parser_;
 };

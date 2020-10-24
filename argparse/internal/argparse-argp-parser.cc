@@ -1,30 +1,19 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-#include <argp.h>
-
-#include "argparse/internal/argparse-internal.h"
+#include "argparse/internal/argparse-argp-parser.h"
 
 namespace argparse {
 namespace internal {
 
-class ArgumentNamespace {
-public:
-    virtual ~ArgumentNamespace() {}
-    // virtual Argument* 
-};
+std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
+  // using argp_parser_internal::ArgpArgumentParser;
+  // return absl::make_unique<ArgpArgumentParser>();
+  return nullptr;
+}
 
-class SubCommandNamespace {
-
-};
-
-class ArgpArgumentParser : public ArgumentParser {
- public:
-  void AddArgument(Argument* arg) override {}
-
-};
 
 }  // namespace internal
 }  // namespace argparse
