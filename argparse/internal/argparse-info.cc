@@ -85,6 +85,7 @@ class DefaultTypeInfo : public TypeInfo {
   using TypeInfo::TypeInfo;
 
   void Run(const std::string& in, OpsResult* out) override {
+    ARGPARSE_DCHECK(GetOps()->IsSupported(OpsKind::kParse));
     return GetOps()->Parse(in, out);
   }
 };

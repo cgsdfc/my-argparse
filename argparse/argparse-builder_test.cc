@@ -14,7 +14,7 @@ namespace {
 
 TEST(AnyValue, Build) {
   AnyValue any_value(PlainType{});
-  auto val = internal::GetBuiltObject(&any_value);
+  auto val = builder_internal::GetBuiltObject(&any_value);
   EXPECT_TRUE(val);
   EXPECT_TRUE(val->GetType() == typeid(PlainType));
 }

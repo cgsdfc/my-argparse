@@ -229,6 +229,7 @@ struct DefaultParseTraits<std::string> {
 // char is an unquoted single character.
 template <>
 struct DefaultParseTraits<char> {
+  // static bool Run(absl::string_view in, char* out);
   static ConversionResult Run(const std::string& in) ;
 };
 

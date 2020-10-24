@@ -39,7 +39,7 @@ class ConversionResult {
   }
 
   template <typename T>
-  T TakeValue() ABSL_MUST_USE_RESULT {
+  ABSL_MUST_USE_RESULT T TakeValue() {
     return internal::AnyCast<T>(ReleaseValue());
   }
 
