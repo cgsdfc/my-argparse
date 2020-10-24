@@ -80,7 +80,7 @@ class ArgumentHolder {
   // Get a sorted list of Argument.
   void SortArguments(
       std::vector<Argument*>* out,
-      std::function<bool(Argument*, Argument*)> cmp = &Argument::Less) {
+      std::function<bool(Argument*, Argument*)> cmp = &Argument::BeforeInUsage) {
     CopyArguments(out);
     std::sort(out->begin(), out->end(), std::move(cmp));
   }

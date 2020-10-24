@@ -80,7 +80,24 @@ std::unique_ptr<Argument> Argument::Create() {
   return absl::make_unique<ArgumentImpl>();
 }
 
-bool Argument::Less(Argument* a, Argument* b) {
+bool Argument::AppendTypeHint(std::string* out) {
+  if (auto* type = GetType()) {
+    out->append(type->GetTypeHint());
+    return true;
+  }
+  return false;
+}
+
+bool Argument::AppendDefaultValueAsString(std::string* out) {
+  if (GetDefaultValue() && GetDest()) {
+    auto str = GetDest()->GetOperations()->FormatValue(*GetDefaultValue());
+    out->append(std::move(str));
+    return true;
+  }
+  return false;
+}
+
+bool Argument::BeforeInUsage(Argument* a, Argument* b) {
   // options go before positionals.
   if (a->IsOption() != b->IsOption()) return a->IsOption();
 

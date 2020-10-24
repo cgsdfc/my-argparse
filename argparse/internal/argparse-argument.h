@@ -53,24 +53,13 @@ class Argument {
   }
 
   // If a typehint exists, return true and set out.
-  bool GetTypeHint(std::string* out) {
-    if (auto* type = GetType()) {
-      *out = type->GetTypeHint();
-      return true;
-    }
-    return false;
-  }
-  // If a default-value exists, return true and set out.
-  bool FormatDefaultValue(std::string* out) {
-    if (GetDefaultValue() && GetDest()) {
-      *out = GetDest()->GetOperations()->FormatValue(*GetDefaultValue());
-      return true;
-    }
-    return false;
-  }
+  bool AppendTypeHint(std::string* out);
 
-  // Default comparison of Argument.
-  static bool Less(Argument* lhs, Argument* rhs);
+  // Append the string form of the default value.
+  bool AppendDefaultValueAsString(std::string* out);
+
+  // Return true if `lhs` should appear before `rhs` in a usage message.
+  static bool BeforeInUsage(Argument* lhs, Argument* rhs);
 
   virtual ~Argument() {}
   static std::unique_ptr<Argument> Create();
