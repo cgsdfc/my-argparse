@@ -99,29 +99,7 @@ using function_signature_t = absl::conditional_t<
         std::is_pointer<F>::value || std::is_member_pointer<F>::value,
         std::remove_pointer<F>, strip_function_object<F>>::type>;
 
-template <typename Func>
-struct MakeCallbackResultImpl {};
-
-template <typename T>
-struct MakeCallbackResultImpl<TypeCallbackPrototype<T>> {
-  using type = TypeCallback<T>;
-};
-
-template <typename T>
-struct MakeCallbackResultImpl<ActionCallbackPrototype<T>> {
-  using type = ActionCallback<T>;
-};
-
-template <typename Func>
-using MakeCallbackResult =
-    typename MakeCallbackResultImpl<function_signature_t<Func>>::type;
-
 }  // namespace traits_internal
-
-template <typename Func>
-traits_internal::MakeCallbackResult<Func> MakeCallback(Func&& func) {
-  return {std::forward<Func>(func)};
-}
 
 template <typename T>
 struct IsOpenSupported;
