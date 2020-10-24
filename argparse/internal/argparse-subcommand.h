@@ -14,6 +14,11 @@ namespace internal {
 // Arguments.
 class SubCommand final : private ArgumentHolder::Delegate {
  public:
+  // Used to iterate over all aliases:
+  // Example:
+  // for (auto i = SubCommand::kAliasIndex; i < cmd->GetNameOrAliasCount(); ++i)
+  //    cmd->GetNameOrAlias(i);
+  enum { kNameIndex = 0, kAliasIndex = 1 };
   class Delegate {
    public:
     virtual void OnAddArgument(Argument* arg, ArgumentGroup* group,
@@ -21,30 +26,43 @@ class SubCommand final : private ArgumentHolder::Delegate {
     virtual void OnAddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) {}
   };
 
-  void SetAliases(std::vector<std::string> val);
-  void SetHelp(std::string val);
-  void SetName(std::string val);
-  absl::string_view GetName();
-  absl::string_view GetHelp();
-  ArgumentHolder* GetHolder();
+  void SetAliases(std::vector<std::string> val) {
+    ARGPARSE_DCHECK(!names_.empty());
+    // Append the aliases to names.
+    std::move(val.begin(), val.end(), std::back_inserter(names_));
+  }
+  void SetHelp(std::string val) { help_ = std::move(val); }
+  void SetName(std::string val) { names_.front() = std::move(val); }
 
-  static std::unique_ptr<SubCommand> Create();
+  std::size_t GetNameOrAliasCount() const { return names_.size(); }
+  absl::string_view GetNameOrAlias(std::size_t i) const {
+    ARGPARSE_DCHECK(i < GetNameOrAliasCount());
+    return names_[i];
+  }
+  absl::string_view GetName() const { return GetNameOrAlias(kNameIndex); }
+  absl::string_view GetHelp() const { return help_; }
+  ArgumentHolder* GetHolder() { return &holder_; }
+
+  static std::unique_ptr<SubCommand> Create(Delegate* delegate) {
+    return absl::WrapUnique(new SubCommand(delegate));
+  }
 
  private:
+  explicit SubCommand(Delegate* delegate);
+
   void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
-    
-
+    delegate_->OnAddArgument(arg, group, this);
+  }
+  void OnAddArgumentGroup(ArgumentGroup* group,
+                          ArgumentHolder* holder) override {
+    delegate_->OnAddArgumentGroup(group, this);
   }
 
-  void OnAddArgumentGroup(ArgumentGroup* group, ArgumentHolder* holder) override {
-
-  }
-  
   Delegate* delegate_;
-  // Name as well as aliases.
-  std::vector<std::string> names_;
-  std::string help_;
   ArgumentHolder holder_;
+  // Name as well as aliases.
+  absl::InlinedVector<std::string, 1> names_;
+  std::string help_;
 };
 
 // A group of SubCommands, which can have things like description...
@@ -59,7 +77,6 @@ class SubCommandGroup {
   void SetRequired(bool val);
   void SetHelpDoc(std::string val);
   void SetMetaVar(std::string val);
-  void SetHolder(SubCommandHolder* holder);
 
   absl::string_view GetTitle();
   absl::string_view GetDescription();
@@ -68,7 +85,6 @@ class SubCommandGroup {
   bool IsRequired();
   absl::string_view GetHelpDoc();
   absl::string_view GetMetaVar();
-  SubCommandHolder* GetHolder();
 
   static std::unique_ptr<SubCommandGroup> Create();
 
