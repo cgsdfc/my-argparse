@@ -5,6 +5,7 @@
 
 #pragma once
 #include "argparse/internal/argparse-argument-holder.h"
+#include "argparse/internal/argparse-argument-parser.h"
 
 namespace argparse {
 namespace internal {
@@ -46,6 +47,27 @@ class ArgumentContainer final : private ArgumentHolder::Delegate {
 
   Delegate* delegate_;
   ArgumentHolder main_holder_;
+};
+
+// This combines the functionality of ArgumentContainer and ArgumentParser and
+// connects them. It exposes an interface that is directly usable by the wrapper
+// layers.
+class ArgumentController : private ArgumentContainer::Delegate {
+ public:
+  ArgumentController();
+
+  // Methods forwarded from ArgumentContainer.
+  void AddArgument(std::unique_ptr<Argument> arg);
+  ArgumentGroup* AddArgumentGroup(std::string title);
+  SubCommandGroup* AddSubCommandGroup(std::unique_ptr<SubCommandGroup> group);
+
+  // Methods forwarded from ArgumentParser.
+  OptionsListener* GetOptionsListener();
+  bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);
+
+ private:
+  std::unique_ptr<ArgumentContainer> container_;
+  std::unique_ptr<ArgumentParser> parser_;
 };
 
 }  // namespace internal

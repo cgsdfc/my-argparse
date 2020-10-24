@@ -43,12 +43,15 @@ class SubCommand final : private ArgumentHolder::Delegate {
   absl::string_view GetHelp() const { return help_; }
   ArgumentHolder* GetHolder() { return &holder_; }
 
+  static std::unique_ptr<SubCommand> Create(std::string) {}
+
   static std::unique_ptr<SubCommand> Create(Delegate* delegate) {
     return absl::WrapUnique(new SubCommand(delegate));
   }
 
  private:
   explicit SubCommand(Delegate* delegate);
+  SubCommand(std::string) : SubCommand(nullptr) {}
 
   void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
     delegate_->OnAddArgument(arg, group, this);

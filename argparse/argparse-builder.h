@@ -315,14 +315,14 @@ class SubCommand
  public:
   explicit SubCommand(std::string name, const char* help = {}) {
     this->SetObject(internal::SubCommand::Create(std::move(name)));
-    if (help) this->GetObject()->SetHelpDoc(help);
+    if (help) this->GetObject()->SetHelp(help);
   }
   SubCommand& SetAliases(std::vector<std::string> als) {
     this->GetObject()->SetAliases(std::move(als));
     return *this;
   }
   SubCommand& SetHelp(std::string val) {
-    this->GetObject()->SetHelpDoc(std::move(val));
+    this->GetObject()->SetHelp(std::move(val));
     return *this;
   }
 
@@ -375,7 +375,7 @@ class SubCommandGroup
 class ArgumentParser
     : public builder_internal::SupportAddArgumentGroup<ArgumentParser> {
  public:
-  ArgumentParser() : controller_(internal::ArgumentController::Create()) {}
+  ArgumentParser() = default;
 
   ArgumentParser& SetDescription(std::string val) {
     GetOptions()->SetDescription(std::move(val));
@@ -415,25 +415,25 @@ class ArgumentParser
  private:
   bool ParseArgsImpl(internal::ArgArray args, std::vector<std::string>* out) {
     ARGPARSE_DCHECK(out);
-    return controller_->ParseKnownArgs(args, out);
+    return controller_.ParseKnownArgs(args, out);
   }
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {
-    return controller_->AddArgument(std::move(arg));
+    return controller_.AddArgument(std::move(arg));
   }
   internal::ArgumentGroup* AddArgumentGroupImpl(std::string title) {
-    return controller_->AddArgumentGroup(std::move(title));
+    return controller_.AddArgumentGroup(std::move(title));
   }
   internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) {
-    return controller_->AddSubCommandGroup(std::move(group));
+    return controller_.AddSubCommandGroup(std::move(group));
   }
   internal::OptionsListener* GetOptions() {
-    return controller_->GetOptionsListener();
+    return controller_.GetOptionsListener();
   }
 
   friend class SupportAddArgument<ArgumentParser>;
   friend class SupportAddArgumentGroup<ArgumentParser>;
-  std::unique_ptr<internal::ArgumentController> controller_;
+  internal::ArgumentController controller_;
 };
 
 template <typename T>

@@ -64,7 +64,7 @@ set(ARGPARSE_SOURCE
    ${CMAKE_SOURCE_DIR}/argparse/argparse-open-mode.cc
    ${CMAKE_SOURCE_DIR}/argparse/argparse-traits.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-internal.cc
-   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc
+#    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-info.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-builder.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-holder.cc
@@ -75,8 +75,8 @@ set(ARGPARSE_SOURCE
 )
 
 if (ARGPARSE_USE_GFLAGS)
-    list(APPEND ARGPARSE_SOURCE
-    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
+    # list(APPEND ARGPARSE_SOURCE
+    # ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
 endif()
 
 add_library(argparse ${ARGPARSE_SOURCE})
