@@ -20,39 +20,19 @@ class SubCommandGroup;
 // It's main role is to receive and hold things, providing iteration methods,
 // etc.
 // It should be directly allocated.
-class ArgumentContainer final : private ArgumentHolder::Delegate {
+class ArgumentContainer final {
  public:
-  class Delegate {
-   public:
-    virtual ~Delegate() {}
-    virtual void OnAddArgument(Argument* arg, ArgumentGroup* group,
-                               SubCommand* cmd) {}
-    virtual void OnAddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) {}
-    virtual void OnAddSubCommand(SubCommand* cmd, SubCommandGroup* group) {}
-    virtual void OnAddSubCommandGroup(SubCommandGroup* group) {}
-  };
-
-  explicit ArgumentContainer(Delegate* delegate);
+  ArgumentContainer();
   ArgumentHolder* GetMainHolder() { return &main_holder_; }
 
  private:
-  // Notifications from the main_holder:
-  void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
-    delegate_->OnAddArgument(arg, group, nullptr);
-  }
-  void OnAddArgumentGroup(ArgumentGroup* group,
-                          ArgumentHolder* holder) override {
-    delegate_->OnAddArgumentGroup(group, nullptr);
-  }
-
-  Delegate* delegate_;
   ArgumentHolder main_holder_;
 };
 
 // This combines the functionality of ArgumentContainer and ArgumentParser and
 // connects them. It exposes an interface that is directly usable by the wrapper
 // layers.
-class ArgumentController final : private ArgumentContainer::Delegate {
+class ArgumentController final {
  public:
   ArgumentController();
 
@@ -76,15 +56,6 @@ class ArgumentController final : private ArgumentContainer::Delegate {
   }
 
  private:
-  // ArgumentContainer::Delegate.
-  void OnAddArgument(Argument* arg, ArgumentGroup* group,
-                     SubCommand* cmd) override {
-    parser_->AddArgument(arg, nullptr);
-  }
-  void OnAddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) override {
-    parser_->AddArgumentGroup(group);
-  }
-
   std::unique_ptr<ArgumentContainer> container_;
   std::unique_ptr<ArgumentParser> parser_;
 };
