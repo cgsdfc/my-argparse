@@ -298,12 +298,6 @@ bool IsValidOptionName(const std::string& name) {
   if (len < 2 || name[0] != '-') return false;
   if (len == 2)  // This rules out -?, -* -@ -= --
     return absl::ascii_isalnum(name[1]);
-  // check for long-ness.
-  // TODO: fixthis.
-  ARGPARSE_CHECK_F(
-      name[1] == '-',
-      "Single-dash long option (i.e., -jar) is not supported. Please use "
-      "GNU-style long option (double-dash)");
 
   return std::all_of(name.begin() + 2, name.end(), [](char c) {
     return c == '-' || c == '_' || absl::ascii_isalnum(c);

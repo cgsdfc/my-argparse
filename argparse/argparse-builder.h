@@ -414,7 +414,6 @@ class ArgumentParser
 
  private:
   bool ParseArgsImpl(internal::ArgArray args, std::vector<std::string>* out) {
-    ARGPARSE_DCHECK(out);
     return controller_.ParseKnownArgs(args, out);
   }
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {

@@ -18,8 +18,5 @@ int main(int argc, char const* argv[]) {
                          .SetMetaVar("VERY_VERBOSE")
                          .SetHelp("Whether to be very verbose"));
 
-  parser.AddArgumentGroup("").AddArgument(Argument("output", &g_log_level));
-  parser.AddArgument("output", &g_log_level, "Logging level");
-
   parser.ParseArgs(argc, argv);
 }

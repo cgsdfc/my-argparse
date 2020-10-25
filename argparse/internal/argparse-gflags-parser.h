@@ -28,8 +28,6 @@ class GflagsArgument {
   }
 
  private:
-  static bool IsValidNamesInfo(NamesInfo* info);
-
   const char* name_;
   const char* help_;
   const char* filename_;
