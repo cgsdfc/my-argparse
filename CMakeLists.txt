@@ -71,6 +71,7 @@ set(ARGPARSE_SOURCE
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-subcommand.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-port.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-container.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-controller.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument.cc
 )
 

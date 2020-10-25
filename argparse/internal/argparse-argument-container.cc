@@ -5,9 +5,5 @@ namespace internal {
 
 ArgumentContainer::ArgumentContainer() {}
 
-ArgumentController::ArgumentController()
-    : container_(new ArgumentContainer),
-      parser_(ArgumentParser::CreateDefault()) {}
-
 }  // namespace internal
 }  // namespace argparse
