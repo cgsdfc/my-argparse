@@ -53,18 +53,9 @@ class ArgumentGroup {
 
 class ArgumentHolder final : private ArgumentGroup::Delegate {
  public:
-  // Notify outside some event.
-  class Delegate {
-   public:
-    virtual void OnAddArgument(Argument* arg, ArgumentGroup* group) {}
-    virtual void OnAddArgumentGroup(ArgumentGroup* group,
-                                    ArgumentHolder* holder) {}
-    virtual ~Delegate() {}
-  };
-
   // Allocated directly.
   // Two default groups will be created and delegate will be notified.
-  explicit ArgumentHolder(Delegate* delegate);
+  ArgumentHolder();
 
   // Allow fast iteration over all ArgumentGroups.
   std::size_t GetArgumentGroupCount() const { return groups_.size(); }
@@ -87,7 +78,6 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
   // ArgumentGroup::Delegate:
   void OnAddArgument(Argument* arg, ArgumentGroup* group) override;
 
-  Delegate* delegate_;
   // In many cases, there are just default groups, so make the capacity 2.
   absl::InlinedVector<std::unique_ptr<ArgumentGroup>, 2> groups_;
   std::set<std::string> name_set_;

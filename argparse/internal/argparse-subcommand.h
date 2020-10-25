@@ -12,19 +12,13 @@ namespace internal {
 
 // A SubCommand is like a positional argument, but it holds a group of
 // Arguments.
-class SubCommand final : private ArgumentHolder::Delegate {
+class SubCommand final {
  public:
   // Used to iterate over all aliases:
   // Example:
   // for (auto i = SubCommand::kAliasIndex; i < cmd->GetNameOrAliasCount(); ++i)
   //    cmd->GetNameOrAlias(i);
   enum { kNameIndex = 0, kAliasIndex = 1 };
-  class Delegate {
-   public:
-    virtual void OnAddArgument(Argument* arg, ArgumentGroup* group,
-                               SubCommand* cmd) {}
-    virtual void OnAddArgumentGroup(ArgumentGroup* group, SubCommand* cmd) {}
-  };
 
   void SetAliases(std::vector<std::string> val) {
     ARGPARSE_DCHECK(!names_.empty());
@@ -43,25 +37,19 @@ class SubCommand final : private ArgumentHolder::Delegate {
   absl::string_view GetHelp() const { return help_; }
   ArgumentHolder* GetHolder() { return &holder_; }
 
-  static std::unique_ptr<SubCommand> Create(std::string) {}
+  static std::unique_ptr<SubCommand> Create(std::string name) {
+    auto cmd = Create();
+    cmd->SetName(std::move(name));
+    return cmd;
+  }
 
-  static std::unique_ptr<SubCommand> Create(Delegate* delegate) {
-    return absl::WrapUnique(new SubCommand(delegate));
+  static std::unique_ptr<SubCommand> Create() {
+    return absl::WrapUnique(new SubCommand);
   }
 
  private:
-  explicit SubCommand(Delegate* delegate);
-  SubCommand(std::string) : SubCommand(nullptr) {}
+  SubCommand();
 
-  void OnAddArgument(Argument* arg, ArgumentGroup* group) override {
-    delegate_->OnAddArgument(arg, group, this);
-  }
-  void OnAddArgumentGroup(ArgumentGroup* group,
-                          ArgumentHolder* holder) override {
-    delegate_->OnAddArgumentGroup(group, this);
-  }
-
-  Delegate* delegate_;
   ArgumentHolder holder_;
   // Name as well as aliases.
   absl::InlinedVector<std::string, 1> names_;

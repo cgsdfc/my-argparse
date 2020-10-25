@@ -3,11 +3,10 @@
 namespace argparse {
 namespace internal {
 
-ArgumentContainer::ArgumentContainer(Delegate* delegate)
-    : delegate_(delegate), main_holder_(this) {}
+ArgumentContainer::ArgumentContainer() {}
 
 ArgumentController::ArgumentController()
-    : container_(new ArgumentContainer(this)),
+    : container_(new ArgumentContainer),
       parser_(ArgumentParser::CreateDefault()) {}
 
 }  // namespace internal

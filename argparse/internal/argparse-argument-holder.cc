@@ -30,8 +30,7 @@ void ArgumentGroup::SetTitle(absl::string_view title) {
   }
 }
 
-ArgumentHolder::ArgumentHolder(Delegate* delegate) : delegate_(delegate) {
-  ARGPARSE_DCHECK(delegate_);
+ArgumentHolder::ArgumentHolder() {
   constexpr absl::string_view kDefaultGroupTitles[] = {
       "optional arguments:",
       "positional arguments:",
@@ -46,7 +45,6 @@ ArgumentGroup* ArgumentHolder::AddArgumentGroup(std::string title) {
   group->SetTitle(title);
   auto* group_ptr = group.get();
   groups_.push_back(std::move(group));
-  delegate_->OnAddArgumentGroup(group_ptr, this);
   return group_ptr;
 }
 
@@ -58,7 +56,6 @@ void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
 
 void ArgumentHolder::OnAddArgument(Argument* arg, ArgumentGroup* group) {
   CheckNamesConflict(arg);
-  delegate_->OnAddArgument(arg, group);
 }
 
 // All names should be checked, including positional names.

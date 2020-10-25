@@ -3,8 +3,7 @@
 namespace argparse {
 namespace internal {
 
-SubCommand::SubCommand(Delegate* delegate)
-    : delegate_(delegate), holder_(this) {
+SubCommand::SubCommand() {
   // Place for the primary name.
   names_.resize(1);
 }

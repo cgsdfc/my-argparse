@@ -38,10 +38,10 @@ class ArgumentController final {
 
   // Methods forwarded from ArgumentContainer.
   void AddArgument(std::unique_ptr<Argument> arg) {
-    container_->GetMainHolder()->AddArgument(std::move(arg));
+    return container_->GetMainHolder()->AddArgument(std::move(arg));
   }
   ArgumentGroup* AddArgumentGroup(std::string title) {
-    container_->GetMainHolder()->AddArgumentGroup(std::move(title));
+    return container_->GetMainHolder()->AddArgumentGroup(std::move(title));
   }
   SubCommandGroup* AddSubCommandGroup(std::unique_ptr<SubCommandGroup> group) {
     return nullptr;
