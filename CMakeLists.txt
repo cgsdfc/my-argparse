@@ -76,8 +76,8 @@ set(ARGPARSE_SOURCE
 )
 
 if (ARGPARSE_USE_GFLAGS)
-    # list(APPEND ARGPARSE_SOURCE
-    # ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
+    list(APPEND ARGPARSE_SOURCE
+    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
 endif()
 
 add_library(argparse ${ARGPARSE_SOURCE})

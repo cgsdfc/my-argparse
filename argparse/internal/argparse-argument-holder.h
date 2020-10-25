@@ -24,8 +24,8 @@ class ArgumentGroup {
   };
 
   enum GroupIndex {
-    kOptionalGroupIndex = 0,
-    kPositionalGroupIndex = 1,
+    kPositionalGroupIndex = 0,
+    kOptionalGroupIndex = 1,
   };
 
   absl::string_view GetTitle() const { return title_; }

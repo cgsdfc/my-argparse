@@ -32,8 +32,8 @@ void ArgumentGroup::SetTitle(absl::string_view title) {
 
 ArgumentHolder::ArgumentHolder() {
   constexpr absl::string_view kDefaultGroupTitles[] = {
-      "optional arguments:",
       "positional arguments:",
+      "optional arguments:",
   };
   for (auto title : kDefaultGroupTitles) {
     AddArgumentGroup(std::string(title));
@@ -50,6 +50,7 @@ ArgumentGroup* ArgumentHolder::AddArgumentGroup(std::string title) {
 
 void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
   ARGPARSE_DCHECK(arg);
+  // True == isOption() == OptionalGroupIndex == 1
   auto index = static_cast<ArgumentGroup::GroupIndex>(arg->IsOption());
   GetDefaultGroup(index)->AddArgument(std::move(arg));
 }
