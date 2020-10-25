@@ -427,7 +427,7 @@ class ArgumentParser
       std::unique_ptr<internal::SubCommandGroup> group) {
     return controller_.AddSubCommandGroup(std::move(group));
   }
-  internal::OptionsListener* GetOptions() {
+  internal::ArgumentParser* GetOptions() {
     return controller_.GetOptionsListener();
   }
 

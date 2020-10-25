@@ -48,11 +48,19 @@ class ArgumentController final {
   }
 
   // Methods forwarded from ArgumentParser.
-  OptionsListener* GetOptionsListener() {
-    return parser_->GetOptionsListener();
-  }
+  ArgumentParser* GetOptionsListener() { return parser_.get(); }
+
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) {
+    bool rv = parser_->Initialize(container_.get());
+    ARGPARSE_DCHECK_F(rv, "Cannot initialize the ArgumentParser");
     return parser_->ParseKnownArgs(args, out);
+  }
+
+  // Clean all the memory of this object, after that no methods other than dtor
+  // should be invoked.
+  void Shutdown() {
+    container_.reset();
+    parser_.reset();
   }
 
  private:

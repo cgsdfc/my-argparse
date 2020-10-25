@@ -12,12 +12,13 @@ namespace internal {
 
 namespace argp_parser_internal {
 
-class ArgpArgumentParser : public ArgumentParser {
+// Maybe option listener should be AP itself.
+class ArgpArgumentParser : public ArgumentParser{
  public:
-  OptionsListener* GetOptionsListener() override {}
-  void AddArgument(Argument* arg, SubCommand* cmd) override {}
-  void AddArgumentGroup(ArgumentGroup* group) override {}
+  bool Initialize(ArgumentContainer* container) override {}
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) override {}
+
+  private:
 };
 
 }  // namespace argp_parser_internal

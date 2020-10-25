@@ -11,17 +11,7 @@
 namespace argparse {
 namespace internal {
 class SubCommand;
-
-// ArgumentParser has some standard options to tune its behaviours.
-class OptionsListener {
- public:
-  virtual ~OptionsListener() {}
-  virtual void SetProgramVersion(std::string val) = 0;
-  virtual void SetDescription(std::string val) = 0;
-  virtual void SetBugReportEmail(std::string val) = 0;
-  virtual void SetProgramName(std::string val) = 0;
-  virtual void SetProgramUsage(std::string usage) = 0;
-};
+class ArgumentContainer;
 
 // internal::ArgumentParser is the analogy of argparse::ArgumentParser,
 // except that its methods take internal objects as inputs.
@@ -32,11 +22,17 @@ class OptionsListener {
 class ArgumentParser {
  public:
   virtual ~ArgumentParser() {}
-  virtual OptionsListener* GetOptionsListener() = 0;
-  virtual void AddArgument(Argument* arg, SubCommand* cmd) = 0;
-  virtual void AddArgumentGroup(ArgumentGroup* group) = 0;
-  //   virtual void AddSubCommand(SubCommand* cmd) = 0;
-  //   virtual void AddSubCommandGroup(SubCommandGroup* group) = 0;
+  // Receive various options from user.
+  virtual void SetProgramVersion(std::string val) {}
+  virtual void SetDescription(std::string val) {}
+  virtual void SetBugReportEmail(std::string val) {}
+  virtual void SetProgramName(std::string val) {}
+  virtual void SetProgramUsage(std::string usage) {}
+
+  // Read the content of the ArgumentContainer and prepare for parsing.
+  // The container is guaranteed to have longer lifetime than the parser.
+  // In case any failure, return false to indicate that.
+  virtual bool Initialize(ArgumentContainer* container) = 0;
   // Parse args, if rest is null, exit on error. Otherwise put unknown ones into
   // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;
