@@ -55,7 +55,7 @@ GflagsArgument::GflagsArgument(Argument* arg) {
   help_ = arg->GetHelpDoc().data();
   // ARGPARSE_DCHECK(arg->GetConstValue());
   // filename_ = AnyCast<absl::string_view>(arg->GetConstValue())->data();
-  filename_ = nullptr;
+  filename_ = "";
   dest_ptr_ = arg->GetDest()->GetDestPtr();
   default_value_ = const_cast<Any*>(arg->GetDefaultValue());
   ARGPARSE_DCHECK(default_value_);
@@ -102,10 +102,6 @@ bool GflagsParser::Initialize(ArgumentContainer* container) {
 GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }
 
 }  // namespace gflags_parser_internal
-
-// std::unique_ptr<ArgumentParser> GflagsParserFactory::CreateParser() {
-//   return absl::make_unique<GflagsParser>();
-// }
 
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
   return absl::make_unique<gflags_parser_internal::GflagsParser>();
