@@ -10,10 +10,10 @@
 namespace argparse {
 namespace internal {
 
-// std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
-//   using argp_parser_internal::ArgpArgumentParser;
-//   return absl::make_unique<ArgpArgumentParser>();
-// }
+std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
+  using argp_parser_internal::ArgpArgumentParser;
+  return absl::make_unique<ArgpArgumentParser>();
+}
 
 }  // namespace internal
 }  // namespace argparse

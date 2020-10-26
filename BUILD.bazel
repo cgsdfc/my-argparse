@@ -9,10 +9,10 @@ package(default_visibility = ["//visibility:public"])
 
 licenses(["notice"])
 
-# config_setting(
-#     name = "has_gflags",
-#     values = {"define": "gflags=1"},
-# )
+config_setting(
+    name = "with_gflags",
+    values = {"define": "with_gflags=1"},
+)
 
 # config_setting(
 #     name = "has_absl",
@@ -33,12 +33,15 @@ cc_library(
         "argparse/internal/argparse-argument-controller.cc",
         "argparse/internal/argparse-argument-container.cc",
         "argparse/internal/argparse-argument-holder.cc",
-    ],
+    ] + select({
+        ":with_gflags": [ "argparse/internal/argparse-gflags-parser.cc", ],
+        "//conditions:default": [],
+    }),
+
     hdrs = [
         "argparse/internal/argparse-any.h",
         "argparse/internal/argparse-arg-array.h",
         "argparse/internal/argparse-argp-parser.h",
-        "argparse/internal/argparse-gflags-parser.h",
         "argparse/internal/argparse-info.h",
         "argparse/internal/argparse-internal.h",
         "argparse/internal/argparse-ops-result.h",
@@ -58,25 +61,25 @@ cc_library(
         "argparse/argparse-conversion-result.h",
         "argparse/argparse-traits.h",
         "argparse/argparse.h",
-    ],
+    ] + select({
+        ":with_gflags": [ "argparse/internal/argparse-gflags-parser.h" ],
+        "//conditions:default": [],
+    }),
+
     includes = [
-        "include/",
+        "argparse/",
     ],
+
     deps = [
         "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/utility",
         "@com_google_absl//absl/memory",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/container:inlined_vector",
-        "@gflags//:gflags",
-    ]
-    # deps = select({
-    #     ":has_absl": [
-    #     ],
-    #     ":has_gflags": [
-    #     ],
-    #     "//conditions:default": [],
-    # }),
+    ] + select({
+        ":with_gflags": ["@gflags//:gflags"],
+        "//conditions:default": [],
+    }),
 )
 
 cc_test(
