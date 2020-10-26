@@ -11,7 +11,7 @@ namespace argparse {
 namespace internal {
 class ArgumentGroup;
 
-class Argument {
+class Argument : public SupportUserData {
  public:
   virtual bool IsRequired() = 0;
   virtual absl::string_view GetHelpDoc() = 0;

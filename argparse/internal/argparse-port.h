@@ -111,5 +111,21 @@ absl::string_view TypeName() {
 template <typename...>
 struct TypeList {};
 
+// Support holding a piece of opaque data by subclass.
+class SupportUserData {
+ public:
+  struct UserData {
+    virtual ~UserData() {}
+  };
+
+  UserData* GetUserData() const { return data_.get(); }
+  void SetUserData(std::unique_ptr<UserData> data) { data_ = std::move(data); }
+
+  SupportUserData() = default;
+
+ private:
+  std::unique_ptr<UserData> data_;
+};
+
 }  // namespace internal
 }  // namespace argparse

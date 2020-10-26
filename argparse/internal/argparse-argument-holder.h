@@ -14,7 +14,7 @@ namespace internal {
 class Argument;
 class ArgumentHolder;
 
-class ArgumentGroup {
+class ArgumentGroup : public SupportUserData {
  public:
   // This is needed to send out notification.
   class Delegate {
