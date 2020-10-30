@@ -5,10 +5,15 @@
 
 #include "argparse/internal/argparse-argp-parser.h"
 
-#include <argp.h>
-
 namespace argparse {
 namespace internal {
+namespace argp_parser_internal {
+
+bool ArgpArgumentParser::Initialize(ArgumentContainer* container) {}
+
+bool ArgpArgumentParser::ParseKnownArgs(ArgArray args,
+                                        std::vector<std::string>* out) {}
+}
 
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
   using argp_parser_internal::ArgpArgumentParser;
