@@ -66,11 +66,12 @@ class Dest : private SimpleBuilder<internal::DestInfo> {
 
 class Names : private SimpleBuilder<internal::NamesInfo> {
  public:
-  Names(const char* name) : Names(std::string(name)) {
-    ARGPARSE_CHECK_F(name, "name should not be null");
+  Names(const char* name) {
+    this->SetObject(internal::NamesInfo::CreateFromStr({name}));
   }
-  Names(std::string name);
-  Names(std::initializer_list<std::string> names);
+  Names(std::initializer_list<absl::string_view> names) {
+    this->SetObject(internal::NamesInfo::CreateFromStrings(names));
+  }
 
  private:
   friend class BuilderAccessor;

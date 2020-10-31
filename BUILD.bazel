@@ -22,7 +22,6 @@ config_setting(
 cc_library(
     name = "argparse",
     srcs = [
-        "argparse/argparse-builder.cc",
         "argparse/argparse-open-mode.cc",
         "argparse/internal/argparse-internal.cc",
         "argparse/internal/argparse-argp-parser.cc",

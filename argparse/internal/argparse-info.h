@@ -6,6 +6,7 @@
 #pragma once
 
 #include <memory.h>
+#include <initializer_list>
 
 #include "absl/strings/string_view.h"
 #include "argparse/internal/argparse-operations.h"
@@ -61,6 +62,10 @@ class NamesInfo {
   static std::unique_ptr<NamesInfo> CreatePositional(std::string in);
   static std::unique_ptr<NamesInfo> CreateOptional(
       const std::vector<std::string>& in);
+
+  static std::unique_ptr<NamesInfo> CreateFromStr(absl::string_view name);
+  static std::unique_ptr<NamesInfo> CreateFromStrings(
+      std::initializer_list<absl::string_view> names);
 };
 
 class NumArgsInfo {
