@@ -9,21 +9,47 @@
 
 namespace argparse {
 namespace internal {
+
 class ArgumentGroup;
+class ArgumentBuilder;
 
 class Argument : public SupportUserData {
  public:
-  DestInfo* GetDest() { return dest_info_.get(); }
-  TypeInfo* GetType() { return type_info_.get(); }
-  ActionInfo* GetAction() { return action_info_.get(); }
-  NumArgsInfo* GetNumArgs() { return num_args_.get(); }
-  const Any* GetConstValue() { return const_value_.get(); }
-  const Any* GetDefaultValue() { return default_value_.get(); }
-  absl::string_view GetMetaVar() { return meta_var_; }
-  ArgumentGroup* GetGroup() { return group_; }
-  NamesInfo* GetNamesInfo() { return names_info_.get(); }
-  bool IsRequired() { return is_required_; }
-  absl::string_view GetHelpDoc() { return help_doc_; }
+  DestInfo* GetDest() const { return dest_info_.get(); }
+  TypeInfo* GetType() const { return type_info_.get(); }
+  ActionInfo* GetAction() const { return action_info_.get(); }
+  NumArgsInfo* GetNumArgs() const { return num_args_.get(); }
+  const Any* GetConstValue() const { return const_value_.get(); }
+  const Any* GetDefaultValue() const { return default_value_.get(); }
+  absl::string_view GetMetaVar() const { return meta_var_; }
+  ArgumentGroup* GetGroup() const { return group_; }
+  NamesInfo* GetNamesInfo() const { return names_info_.get(); }
+  bool IsRequired() const { return is_required_; }
+  absl::string_view GetHelpDoc() const { return help_doc_; }
+  bool IsOptional() const { return GetNamesInfo()->IsOptional(); }
+  bool IsPositional() const { return GetNamesInfo()->IsPositional(); }
+
+  // TODO: fix this.
+  // Flag is an option that only has short names.
+  bool IsFlag() { return false; }
+
+  // TODO: fix this.
+  // For positional, this will be PosName. For Option, this will be
+  // the first long name or first short name (if no long name).
+  absl::string_view GetName() { return {}; }
+
+  // If a typehint exists, return true and set out.
+  bool AppendTypeHint(std::string* out);
+
+  // Append the string form of the default value.
+  bool AppendDefaultValueAsString(std::string* out);
+
+  // Return true if `lhs` should appear before `rhs` in a usage message.
+  static bool BeforeInUsage(Argument* lhs, Argument* rhs);
+
+  static std::unique_ptr<Argument> Create();
+
+ private:
   void SetNames(std::unique_ptr<NamesInfo> info) {
     names_info_ = std::move(info);
   }
@@ -53,35 +79,13 @@ class Argument : public SupportUserData {
     if (info) num_args_ = std::move(info);
   }
 
-  bool IsOptional() { return GetNamesInfo()->IsOptional(); }
-  bool IsPositional() { return GetNamesInfo()->IsPositional(); }
+  // Only ArgumentBuilder can access the setters.
+  friend class ArgumentBuilder;
 
-  // TODO: fix this.
-  // Flag is an option that only has short names.
-  bool IsFlag() { return false; }
-
-  // TODO: fix this.
-  // For positional, this will be PosName. For Option, this will be
-  // the first long name or first short name (if no long name).
-  absl::string_view GetName() { return {}; }
-
-  // If a typehint exists, return true and set out.
-  bool AppendTypeHint(std::string* out);
-
-  // Append the string form of the default value.
-  bool AppendDefaultValueAsString(std::string* out);
-
-  // Return true if `lhs` should appear before `rhs` in a usage message.
-  static bool BeforeInUsage(Argument* lhs, Argument* rhs);
-
-  static std::unique_ptr<Argument> Create();
-
- private:
   ArgumentGroup* group_ = nullptr;
   std::string help_doc_;
   std::string meta_var_;
   bool is_required_ = false;
-
   std::unique_ptr<NamesInfo> names_info_;
   std::unique_ptr<DestInfo> dest_info_;
   std::unique_ptr<ActionInfo> action_info_;

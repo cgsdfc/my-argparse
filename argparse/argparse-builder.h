@@ -236,7 +236,7 @@ class ArgumentBuilder : public BasicMethods<ArgumentBuilder<T>>,
 
   // For being a Builder.
   std::unique_ptr<internal::Argument> Build() {
-    return GetBuilder()->CreateArgument();
+    return GetBuilder()->Build();
   }
   // For CRTP base classes.
   internal::ArgumentBuilder* GetBuilder() { return builder_.get(); }

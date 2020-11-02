@@ -10,6 +10,7 @@ namespace internal {
 
 namespace {
 
+// TODO: move them to info.
 bool ActionNeedsBool(ActionKind in) {
   return in == ActionKind::kStoreFalse || in == ActionKind::kStoreTrue;
 }
@@ -20,8 +21,8 @@ bool ActionNeedsValueType(ActionKind in) {
 
 }  // namespace
 
-ActionKind ArgumentBuilder::StringToActions(const std::string& str) {
-  static const std::map<std::string, ActionKind> kStringToActions{
+ActionKind ArgumentBuilder::StringToActions(absl::string_view str) {
+  static const std::map<absl::string_view, ActionKind> kStringToActions{
       {"store", ActionKind::kStore},
       {"store_const", ActionKind::kStoreConst},
       {"store_true", ActionKind::kStoreTrue},
@@ -34,11 +35,11 @@ ActionKind ArgumentBuilder::StringToActions(const std::string& str) {
   };
   auto iter = kStringToActions.find(str);
   ARGPARSE_CHECK_F(iter != kStringToActions.end(),
-                   "Unknown action string '%s' passed in", str.c_str());
+                   "Unknown action string: '%s'", str.data());
   return iter->second;
 }
 
-std::unique_ptr<Argument> ArgumentBuilder::CreateArgument() {
+std::unique_ptr<Argument> ArgumentBuilder::Build() {
   ARGPARSE_DCHECK(arg_);
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
                              : arg_->GetNamesInfo()->GetDefaultMetaVar());

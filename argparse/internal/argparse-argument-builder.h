@@ -21,18 +21,19 @@ namespace internal {
 // abstraction is right needed.
 class ArgumentBuilder {
  public:
-  // virtual ~ArgumentBuilder() {}
   ArgumentBuilder() : arg_(Argument::Create()) {}
 
   void SetNames(std::unique_ptr<NamesInfo> info) {
-    arg_->SetNames(std::move(info));
+    if (info) arg_->SetNames(std::move(info));
   }
 
   void SetDest(std::unique_ptr<DestInfo> info) {
-    arg_->SetDest(std::move(info));
+    if (info) arg_->SetDest(std::move(info));
   }
 
-  void SetActionString(const char* str) { action_kind_ = StringToActions(str); }
+  void SetActionString(absl::string_view str) {
+    action_kind_ = StringToActions(str);
+  }
 
   void SetTypeInfo(std::unique_ptr<TypeInfo> info) {
     if (info) arg_->SetType(std::move(info));
@@ -60,22 +61,16 @@ class ArgumentBuilder {
     meta_var_ = absl::make_unique<std::string>(std::move(val));
   }
 
-  void SetRequired(bool val) {
-    ARGPARSE_DCHECK(arg_);
-    arg_->SetRequired(val);
-  }
+  void SetRequired(bool val) { arg_->SetRequired(val); }
 
-  void SetHelp(std::string val) {
-    ARGPARSE_DCHECK(arg_);
-    arg_->SetHelpDoc(std::move(val));
-  }
+  void SetHelp(std::string val) { arg_->SetHelpDoc(std::move(val)); }
 
-  std::unique_ptr<Argument> CreateArgument();
+  std::unique_ptr<Argument> Build();
 
   static std::unique_ptr<ArgumentBuilder> Create();
 
  private:
-  ActionKind StringToActions(const std::string& str);
+  ActionKind StringToActions(absl::string_view str);
 
   // Some options are directly fed into arg.
   std::unique_ptr<Argument> arg_;
