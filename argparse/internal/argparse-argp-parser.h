@@ -32,7 +32,7 @@ class ArgpArgumentParser : public ArgumentParser{
     using OptionVector = std::vector<struct argp_option>;
 
     struct argp parser_;
-    OptionVector option_vector_;
+    OptionVector options_;
 };
 
 }  // namespace argp_parser_internal

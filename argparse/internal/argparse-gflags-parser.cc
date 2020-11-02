@@ -26,6 +26,7 @@ static bool IsValidNamesInfo(NamesInfo* info) {
   // if (!info->IsOption()) return false;
   // auto count_all = info->GetLongNamesCount() + info->GetShortNamesCount();
   // return count_all == 1;
+  return false;
 }
 
 template <typename... Types>

@@ -43,6 +43,7 @@ class Argument : public SupportUserData {
   bool IsFlag() {
     // auto* names = GetNamesInfo();
     // return names->IsOption() && 0 == names->GetLongNamesCount();
+    return false;
   }
 
   // For positional, this will be PosName. For Option, this will be
@@ -50,6 +51,7 @@ class Argument : public SupportUserData {
   absl::string_view GetName() {
     // ARGPARSE_DCHECK(GetNamesInfo());
     // return GetNamesInfo()->GetName();
+    return {};
   }
 
   // If a typehint exists, return true and set out.

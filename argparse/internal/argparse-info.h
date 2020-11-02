@@ -35,43 +35,46 @@ enum class TypeKind {
   kCustom,
 };
 
-bool IsValidPositionalName(const std::string& name);
+// bool IsValidPositionalName(const std::string& name);
 
-// A valid option name is long or short option name and not '--', '-'.
-// This is only checked once and true for good.
-bool IsValidOptionName(const std::string& name);
+// // A valid option name is long or short option name and not '--', '-'.
+// // This is only checked once and true for good.
+// bool IsValidOptionName(const std::string& name);
 
-// These two predicates must be called only when IsValidOptionName() holds.
-inline bool IsLongOptionName(const std::string& name) {
-  ARGPARSE_DCHECK(IsValidOptionName(name));
-  return name.size() > 2;
-}
+// // These two predicates must be called only when IsValidOptionName() holds.
+// inline bool IsLongOptionName(const std::string& name) {
+//   ARGPARSE_DCHECK(IsValidOptionName(name));
+//   return name.size() > 2;
+// }
 
-inline bool IsShortOptionName(const std::string& name) {
-  ARGPARSE_DCHECK(IsValidOptionName(name));
-  return name.size() == 2;
-}
+// inline bool IsShortOptionName(const std::string& name) {
+//   ARGPARSE_DCHECK(IsValidOptionName(name));
+//   return name.size() == 2;
+// }
 
 class NamesInfo {
  public:
-  // For iterating all names.
+  // Return the total number of names.
   std::size_t GetNameCount() const { return names_.size(); }
 
+  // Return the name at index `i`.
   absl::string_view GetName(std::size_t i) const { return names_[i]; }
 
   // Tells whether this is a positional name -- like 'output'.
-  bool IsPositional() const;
-  // Return the name if this is a positional name, or die.
-  absl::string_view GetPositionalName() const;
+  bool IsPositional() const { return !IsOptional(); }
+
+  // Return the name if this is a positional name or die.
+  absl::string_view GetPositionalName() const {
+    ARGPARSE_DCHECK(IsPositional());
+    return GetName(0);
+  }
 
   // Tells whether this is an (or a list of) optional name(s).
   bool IsOptional() const { return flags_ & kIsOptional; }
-  // // For an optional name, return 
-  // absl::string_view GetFirstOptionalName() const;
 
-  // Flag is a special optional that only has one short optional name, like
+  // Flag is a special optional name that only has one short optional name, like
   // '-c'.
-  bool IsFlag() const;
+  bool IsFlag() const { return flags_ & kIsFlag; }
 
   // For a positional, this is the positional name.
   // For an optional, this is the first long name (or first short name).
@@ -90,11 +93,32 @@ class NamesInfo {
     }
   }
 
+  // If `name` has any prefix chars like '-' or '--', strip them.
+  // If there isn't any, just return `name`.
+  static absl::string_view StripPrefixChars(absl::string_view name);
+
   // Various predicates about a name.
-  static bool IsOptionalName(absl::string_view name);
-  static bool IsPositionalName(absl::string_view name);
-  static bool IsLongOptionalName(absl::string_view name);
-  static bool IsShortOptionalName(absl::string_view name);
+  static bool IsOptionalName(absl::string_view name) {
+    ARGPARSE_DCHECK(IsValidOptionalName(name));
+    return name.front() == kOptionalPrefixChar;
+  }
+
+  // Return whether a name is a positional one.
+  // A positional name is similar to optional one, except they don't have
+  // leading prefix chars like '-' or '--'.
+  static bool IsPositionalName(absl::string_view name) {
+    return !IsOptionalName(name);
+  }
+
+  // A long-optional name is an optional name that has more than two chars.
+  // For example, '-jar', '--dir'.
+  static bool IsLongOptionalName(absl::string_view name) {
+    return IsOptionalName(name) && name.size() > 2;
+  }
+
+  static bool IsShortOptionalName(absl::string_view name) {
+    return IsOptionalName(name) && name.size() == 2;
+  }
 
   static std::unique_ptr<NamesInfo> CreatePositional(absl::string_view name);
 
@@ -102,19 +126,33 @@ class NamesInfo {
   static std::unique_ptr<NamesInfo> CreateFromStrings(
       std::initializer_list<absl::string_view> names);
 
-  std::string GetDefaultMetaVar() const {}
+  std::string GetDefaultMetaVar() const { return {}; }
 
  private:
+  static constexpr char kOptionalPrefixChar = '-';
+  static constexpr char kUnderscoreChar = '_';
+
+  static bool IsValidPositionalName(absl::string_view name);
+  static bool IsValidOptionalName(absl::string_view name);
+
   struct PositionalTag {};
   struct OptionalTag {};
 
-  NamesInfo(absl::string_view name, PositionalTag);
+  // Ctor for a single name.
+  NamesInfo(absl::string_view name);
+
+  // Ctor for a list of name, mostly used for 
+  NamesInfo(std::initializer_list<absl::string_view> names);
+
+  // Used in the ctors to add a name.
+  void AddName(absl::string_view name);
 
   enum {
     kIsPositional = 0,
     kIsOptional = 1,
     kIsFlag = 2,
   };
+
   int flags_ = 0;
   absl::InlinedVector<std::string, 1> names_;
 };
