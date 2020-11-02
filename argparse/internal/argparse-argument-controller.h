@@ -6,6 +6,7 @@
 #pragma once
 
 #include "argparse/internal/argparse-argument-container.h"
+#include "argparse/internal/argparse-argument-parser.h"
 
 namespace argparse {
 namespace internal {

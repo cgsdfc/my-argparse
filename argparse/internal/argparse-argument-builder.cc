@@ -4,15 +4,23 @@
 // https://opensource.org/licenses/MIT
 
 #include "argparse/internal/argparse-argument-builder.h"
-#include "argparse/internal/argparse-internal.h"
 
-// Implementation of internal::ArgumentBuilder.
 namespace argparse {
 namespace internal {
 
 namespace {
 
-ActionKind StringToActions(const std::string& str) {
+bool ActionNeedsBool(ActionKind in) {
+  return in == ActionKind::kStoreFalse || in == ActionKind::kStoreTrue;
+}
+
+bool ActionNeedsValueType(ActionKind in) {
+  return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
+}
+
+}  // namespace
+
+ActionKind ArgumentBuilder::StringToActions(const std::string& str) {
   static const std::map<std::string, ActionKind> kStringToActions{
       {"store", ActionKind::kStore},
       {"store_const", ActionKind::kStoreConst},
@@ -30,78 +38,7 @@ ActionKind StringToActions(const std::string& str) {
   return iter->second;
 }
 
-bool ActionNeedsBool(ActionKind in) {
-  return in == ActionKind::kStoreFalse || in == ActionKind::kStoreTrue;
-}
-
-bool ActionNeedsValueType(ActionKind in) {
-  return in == ActionKind::kAppend || in == ActionKind::kAppendConst;
-}
-
-class ArgumentBuilderImpl : public ArgumentBuilder {
- public:
-  ArgumentBuilderImpl() : arg_(Argument::Create()) {}
-
-  void SetNames(std::unique_ptr<NamesInfo> info) override {
-    arg_->SetNames(std::move(info));
-  }
-
-  void SetDest(std::unique_ptr<DestInfo> info) override {
-    arg_->SetDest(std::move(info));
-  }
-
-  void SetActionString(const char* str) override {
-    action_kind_ = StringToActions(str);
-  }
-
-  void SetTypeInfo(std::unique_ptr<TypeInfo> info) override {
-    if (info) arg_->SetType(std::move(info));
-  }
-
-  void SetActionInfo(std::unique_ptr<ActionInfo> info) override {
-    if (info) arg_->SetAction(std::move(info));
-  }
-
-  void SetTypeFileType(OpenMode mode) override { open_mode_ = mode; }
-
-  void SetNumArgs(std::unique_ptr<NumArgsInfo> info) override {
-    if (info) arg_->SetNumArgs(std::move(info));
-  }
-
-  void SetConstValue(std::unique_ptr<Any> val) override {
-    arg_->SetConstValue(std::move(val));
-  }
-
-  void SetDefaultValue(std::unique_ptr<Any> val) override {
-    arg_->SetDefaultValue(std::move(val));
-  }
-
-  void SetMetaVar(std::string val) override {
-    meta_var_ = absl::make_unique<std::string>(std::move(val));
-  }
-
-  void SetRequired(bool val) override {
-    ARGPARSE_DCHECK(arg_);
-    arg_->SetRequired(val);
-  }
-
-  void SetHelp(std::string val) override {
-    ARGPARSE_DCHECK(arg_);
-    arg_->SetHelpDoc(std::move(val));
-  }
-
-  std::unique_ptr<Argument> CreateArgument() override;
-
- private:
-  // Some options are directly fed into arg.
-  std::unique_ptr<Argument> arg_;
-  // If not given, use default from NamesInfo.
-  std::unique_ptr<std::string> meta_var_;
-  ActionKind action_kind_ = ActionKind::kNoAction;
-  OpenMode open_mode_ = kModeNoMode;
-};
-
-std::unique_ptr<Argument> ArgumentBuilderImpl::CreateArgument() {
+std::unique_ptr<Argument> ArgumentBuilder::CreateArgument() {
   ARGPARSE_DCHECK(arg_);
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
                              : arg_->GetNamesInfo()->GetDefaultMetaVar());
@@ -141,10 +78,8 @@ std::unique_ptr<Argument> ArgumentBuilderImpl::CreateArgument() {
   return std::move(arg_);
 }
 
-}  // namespace
-
 std::unique_ptr<ArgumentBuilder> ArgumentBuilder::Create() {
-  return absl::make_unique<ArgumentBuilderImpl>();
+  return absl::make_unique<ArgumentBuilder>();
 }
 
 }  // namespace internal
