@@ -106,84 +106,84 @@ class FileTypeInfo : public TypeInfo {
   OpenMode mode_;
 };
 
-class PositionalName : public NamesInfo {
- public:
-  explicit PositionalName(std::string name) : name_(std::move(name)) {}
+// class PositionalName : public NamesInfo {
+//  public:
+//   explicit PositionalName(std::string name) : name_(std::move(name)) {}
 
-  bool IsOption() override { return false; }
-  std::string GetDefaultMetaVar() override {
-    return absl::AsciiStrToUpper(name_);
-  }
-  void ForEachName(NameKind name_kind,
-                   std::function<void(const std::string&)> callback) override {
-    if (name_kind == kPosName) callback(name_);
-  }
-  absl::string_view GetName() override { return name_; }
+//   bool IsOption() override { return false; }
+//   std::string GetDefaultMetaVar() override {
+//     return absl::AsciiStrToUpper(name_);
+//   }
+//   void ForEachName(NameKind name_kind,
+//                    std::function<void(const std::string&)> callback) override {
+//     if (name_kind == kPosName) callback(name_);
+//   }
+//   absl::string_view GetName() override { return name_; }
 
- private:
-  std::string name_;
-};
+//  private:
+//   std::string name_;
+// };
 
-class OptionalNames : public NamesInfo {
- public:
-  explicit OptionalNames(const std::vector<std::string>& names) {
-    for (auto& name : names) {
-      ARGPARSE_CHECK_F(IsValidOptionName(name), "Not a valid option name: %s",
-                       name.c_str());
-      if (IsLongOptionName(name)) {
-        long_names_.push_back(name);
-      } else {
-        ARGPARSE_DCHECK(IsShortOptionName(name));
-        short_names_.push_back(name);
-      }
-    }
-  }
+// class OptionalNames : public NamesInfo {
+//  public:
+//   explicit OptionalNames(const std::vector<std::string>& names) {
+//     for (auto& name : names) {
+//       ARGPARSE_CHECK_F(IsValidOptionName(name), "Not a valid option name: %s",
+//                        name.c_str());
+//       if (IsLongOptionName(name)) {
+//         long_names_.push_back(name);
+//       } else {
+//         ARGPARSE_DCHECK(IsShortOptionName(name));
+//         short_names_.push_back(name);
+//       }
+//     }
+//   }
 
-  bool IsOption() override { return true; }
-  unsigned GetLongNamesCount() override { return long_names_.size(); }
-  unsigned GetShortNamesCount() override { return short_names_.size(); }
+//   bool IsOption() override { return true; }
+//   unsigned GetLongNamesCount() override { return long_names_.size(); }
+//   unsigned GetShortNamesCount() override { return short_names_.size(); }
 
-  std::string GetDefaultMetaVar() override {
-    std::string in =
-        long_names_.empty() ? short_names_.front() : long_names_.front();
-    absl::StrReplaceAll({{"-", "_"}}, &in);
-    absl::AsciiStrToUpper(&in);
-    return in;
-  }
+//   std::string GetDefaultMetaVar() override {
+//     std::string in =
+//         long_names_.empty() ? short_names_.front() : long_names_.front();
+//     absl::StrReplaceAll({{"-", "_"}}, &in);
+//     absl::AsciiStrToUpper(&in);
+//     return in;
+//   }
 
-  void ForEachName(NameKind name_kind,
-                   std::function<void(const std::string&)> callback) override {
-    switch (name_kind) {
-      case kPosName:
-        return;
-      case kLongName: {
-        for (auto& name : long_names_) callback(name);
-        break;
-      }
-      case kShortName: {
-        for (auto& name : short_names_) callback(name);
-        break;
-      }
-      case kAllNames: {
-        for (auto& name : long_names_) callback(name);
-        for (auto& name : short_names_) callback(name);
-        break;
-      }
-      default:
-        break;
-    }
-  }
+//   void ForEachName(NameKind name_kind,
+//                    std::function<void(const std::string&)> callback) override {
+//     switch (name_kind) {
+//       case kPosName:
+//         return;
+//       case kLongName: {
+//         for (auto& name : long_names_) callback(name);
+//         break;
+//       }
+//       case kShortName: {
+//         for (auto& name : short_names_) callback(name);
+//         break;
+//       }
+//       case kAllNames: {
+//         for (auto& name : long_names_) callback(name);
+//         for (auto& name : short_names_) callback(name);
+//         break;
+//       }
+//       default:
+//         break;
+//     }
+//   }
 
-  absl::string_view GetName() override {
-    const auto& name =
-        long_names_.empty() ? short_names_.front() : long_names_.front();
-    return name;
-  }
+//   absl::string_view GetName() override {
+//     const auto& name =
+//         long_names_.empty() ? short_names_.front() : long_names_.front();
+//     return name;
+//   }
 
- private:
-  std::vector<std::string> long_names_;
-  std::vector<std::string> short_names_;
-};
+//  private:
+//   std::vector<std::string> long_names_;
+//   std::vector<std::string> short_names_;
+// };
 
 // The base class for all actions that manipulate around a dest.
 class ActionWithDest : public ActionInfo {
@@ -258,6 +258,11 @@ class StoreAction final : public ActionWithDest {
 
 }  // namespace
 
+NamesInfo::NamesInfo(absl::string_view name, PositionalTag) {
+  flags_ |= kIsPositional;
+  names_.push_back(std::string(name));
+}
+
 std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(Operations* ops) {
   return absl::make_unique<DefaultTypeInfo>(ops);
 }
@@ -276,14 +281,14 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
   return absl::make_unique<NumberNumArgsInfo>(num);
 }
 
-std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
-  return absl::make_unique<PositionalName>(std::move(in));
-}
+// std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
+//   return absl::make_unique<PositionalName>(std::move(in));
+// }
 
-std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
-    const std::vector<std::string>& in) {
-  return absl::make_unique<OptionalNames>(in);
-}
+// std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
+//     const std::vector<std::string>& in) {
+//   return absl::make_unique<OptionalNames>(in);
+// }
 
 bool IsValidPositionalName(const std::string& name) {
   if (name.size() == 0 || !absl::ascii_isalpha(name[0])) return false;

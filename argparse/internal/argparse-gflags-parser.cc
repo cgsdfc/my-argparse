@@ -23,9 +23,9 @@ inline const char* GetGflagsSupportedTypeAsString() {
 }
 
 static bool IsValidNamesInfo(NamesInfo* info) {
-  if (!info->IsOption()) return false;
-  auto count_all = info->GetLongNamesCount() + info->GetShortNamesCount();
-  return count_all == 1;
+  // if (!info->IsOption()) return false;
+  // auto count_all = info->GetLongNamesCount() + info->GetShortNamesCount();
+  // return count_all == 1;
 }
 
 template <typename... Types>
@@ -51,7 +51,7 @@ GflagsArgument::GflagsArgument(Argument* arg) {
   ARGPARSE_CHECK_F(IsGflagsSupportedType(arg->GetDest()->GetType()),
                    "Not a gflags-supported type. Supported types are:\n%s",
                    GetGflagsSupportedTypeAsString());
-  name_ = arg->GetNamesInfo()->GetName().data();
+  // name_ = arg->GetNamesInfo()->GetName().data();
   help_ = arg->GetHelpDoc().data();
   // ARGPARSE_DCHECK(arg->GetConstValue());
   // filename_ = AnyCast<absl::string_view>(arg->GetConstValue())->data();

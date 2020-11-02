@@ -80,7 +80,8 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
 
   // In many cases, there are just default groups, so make the capacity 2.
   absl::InlinedVector<std::unique_ptr<ArgumentGroup>, 2> groups_;
-  std::set<std::string> name_set_;
+  // The strings are kept alive by NamesInfo.
+  std::set<absl::string_view> name_set_;
 };
 
 }  // namespace internal

@@ -17,6 +17,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/utility/utility.h"
 
+// TODO: we need a logging module to deal with these checks systematically.
 #define ARGPARSE_SOURCE_LOCATION_CURRENT() \
   (internal::SourceLocation{__LINE__, __FILE__, __func__})
 
@@ -70,23 +71,6 @@ struct SourceLocation {
 
 ABSL_ATTRIBUTE_NORETURN void CheckFailed(SourceLocation loc, const char* fmt,
                                          ...) ABSL_PRINTF_ATTRIBUTE(2, 3);
-
-bool IsValidPositionalName(const std::string& name);
-
-// A valid option name is long or short option name and not '--', '-'.
-// This is only checked once and true for good.
-bool IsValidOptionName(const std::string& name);
-
-// These two predicates must be called only when IsValidOptionName() holds.
-inline bool IsLongOptionName(const std::string& name) {
-  ARGPARSE_DCHECK(IsValidOptionName(name));
-  return name.size() > 2;
-}
-
-inline bool IsShortOptionName(const std::string& name) {
-  ARGPARSE_DCHECK(IsValidOptionName(name));
-  return name.size() == 2;
-}
 
 class Any;
 

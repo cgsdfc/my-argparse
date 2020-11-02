@@ -61,13 +61,13 @@ void ArgumentHolder::OnAddArgument(Argument* arg, ArgumentGroup* group) {
 
 // All names should be checked, including positional names.
 void ArgumentHolder::CheckNamesConflict(Argument* arg) {
-  bool ok = true;
   auto* info = arg->GetNamesInfo();
-  info->ForEachName(NamesInfo::kAllNames, [this, &ok](const std::string& in) {
-    // If ok becomes false, don't bother inserting any more.
-    ok = ok && name_set_.insert(in).second;
-  });
-  ARGPARSE_CHECK_F(ok, "Argument names conflict with existing names!");
+  for (size_t i = 0; i < info->GetNameCount(); ++i) {
+    auto name = info->GetName(i);
+    bool ok = name_set_.insert(name).second;
+    ARGPARSE_CHECK_F(ok, "Argument name %s conflict with existing names!",
+                     name.data());
+  }
 }
 
 }  // namespace internal

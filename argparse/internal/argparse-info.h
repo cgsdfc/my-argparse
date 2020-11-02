@@ -35,37 +35,88 @@ enum class TypeKind {
   kCustom,
 };
 
+bool IsValidPositionalName(const std::string& name);
+
+// A valid option name is long or short option name and not '--', '-'.
+// This is only checked once and true for good.
+bool IsValidOptionName(const std::string& name);
+
+// These two predicates must be called only when IsValidOptionName() holds.
+inline bool IsLongOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() > 2;
+}
+
+inline bool IsShortOptionName(const std::string& name) {
+  ARGPARSE_DCHECK(IsValidOptionName(name));
+  return name.size() == 2;
+}
+
 class NamesInfo {
  public:
-  virtual ~NamesInfo() {}
-  virtual bool IsOption() = 0;
-  virtual unsigned GetLongNamesCount() { return 0; }
-  virtual unsigned GetShortNamesCount() { return 0; }
-  bool HasLongNames() { return GetLongNamesCount(); }
-  bool HasShortNames() { return GetShortNamesCount(); }
+  // For iterating all names.
+  std::size_t GetNameCount() const { return names_.size(); }
 
-  virtual std::string GetDefaultMetaVar() = 0;
+  absl::string_view GetName(std::size_t i) const { return names_[i]; }
 
-  enum NameKind {
-    kLongName,
-    kShortName,
-    kPosName,
-    kAllNames,
-  };
+  // Tells whether this is a positional name -- like 'output'.
+  bool IsPositional() const;
+  // Return the name if this is a positional name, or die.
+  absl::string_view GetPositionalName() const;
 
-  // Visit each name of the optional argument.
-  virtual void ForEachName(NameKind name_kind,
-                           std::function<void(const std::string&)> callback) {}
+  // Tells whether this is an (or a list of) optional name(s).
+  bool IsOptional() const { return flags_ & kIsOptional; }
+  // // For an optional name, return 
+  // absl::string_view GetFirstOptionalName() const;
 
-  virtual absl::string_view GetName() = 0;
+  // Flag is a special optional that only has one short optional name, like
+  // '-c'.
+  bool IsFlag() const;
 
-  static std::unique_ptr<NamesInfo> CreatePositional(std::string in);
-  static std::unique_ptr<NamesInfo> CreateOptional(
-      const std::vector<std::string>& in);
+  // For a positional, this is the positional name.
+  // For an optional, this is the first long name (or first short name).
+  absl::string_view GetRepresentativeName() const;
+
+  // Invoke a callback for each name that satisfies the predicate.
+  // Example:
+  // names->ForEachNameThat(&NamesInfo::IsOptionalName, [](absl::string_view
+  // name) {});
+  template <typename Callback>
+  void ForEachNameThat(bool (*predicate)(absl::string_view),
+                       Callback&& cb) const {
+    for (std::size_t i = 0; i < GetNameCount(); ++i) {
+      auto name = GetName(i);
+      if (predicate(name)) cb(name);
+    }
+  }
+
+  // Various predicates about a name.
+  static bool IsOptionalName(absl::string_view name);
+  static bool IsPositionalName(absl::string_view name);
+  static bool IsLongOptionalName(absl::string_view name);
+  static bool IsShortOptionalName(absl::string_view name);
+
+  static std::unique_ptr<NamesInfo> CreatePositional(absl::string_view name);
 
   static std::unique_ptr<NamesInfo> CreateFromStr(absl::string_view name);
   static std::unique_ptr<NamesInfo> CreateFromStrings(
       std::initializer_list<absl::string_view> names);
+
+  std::string GetDefaultMetaVar() const {}
+
+ private:
+  struct PositionalTag {};
+  struct OptionalTag {};
+
+  NamesInfo(absl::string_view name, PositionalTag);
+
+  enum {
+    kIsPositional = 0,
+    kIsOptional = 1,
+    kIsFlag = 2,
+  };
+  int flags_ = 0;
+  absl::InlinedVector<std::string, 1> names_;
 };
 
 class NumArgsInfo {

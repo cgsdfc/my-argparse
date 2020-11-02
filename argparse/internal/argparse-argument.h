@@ -38,18 +38,18 @@ class Argument : public SupportUserData {
   virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
 
   // non-virtual helpers.
-  bool IsOption() { return GetNamesInfo()->IsOption(); }
+  bool IsOption() { return GetNamesInfo()->IsOptional(); }
   // Flag is an option that only has short names.
   bool IsFlag() {
-    auto* names = GetNamesInfo();
-    return names->IsOption() && 0 == names->GetLongNamesCount();
+    // auto* names = GetNamesInfo();
+    // return names->IsOption() && 0 == names->GetLongNamesCount();
   }
 
   // For positional, this will be PosName. For Option, this will be
   // the first long name or first short name (if no long name).
   absl::string_view GetName() {
-    ARGPARSE_DCHECK(GetNamesInfo());
-    return GetNamesInfo()->GetName();
+    // ARGPARSE_DCHECK(GetNamesInfo());
+    // return GetNamesInfo()->GetName();
   }
 
   // If a typehint exists, return true and set out.
