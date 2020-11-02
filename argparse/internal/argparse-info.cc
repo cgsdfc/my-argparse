@@ -268,17 +268,6 @@ std::unique_ptr<ActionInfo> ActionInfo::CreateBuiltinAction(
 // }
 
 
-std::unique_ptr<NamesInfo> NamesInfo::CreateFromStr(absl::string_view name) {
-  // if (names.size() == 1 && IsValidPositionalName())
-  return {};
-}
-
-std::unique_ptr<NamesInfo> NamesInfo::CreateFromStrings(
-    std::initializer_list<absl::string_view> names) {
-  // if (names.size() == 1 && IsValidPositionalName())
-  return {};
-}
-
 bool NamesInfo::IsValidPositionalName(absl::string_view name) {
   if (name.empty() || !absl::ascii_isalpha(name[0])) return false;
   return std::all_of(name.begin() + 1, name.end(), [](char c) {
@@ -297,15 +286,35 @@ bool NamesInfo::IsValidOptionalName(absl::string_view name) {
   });
 }
 
-NamesInfo::NamesInfo(absl::string_view name) {
-  ARGPARSE_CHECK_F(IsValidOptionalName(name) || IsValidPositionalName(name),
-                   "'%s' is invalid name", name.data());
-  AddName(name);
+std::unique_ptr<NamesInfo> NamesInfo::CreatePositionalName(absl::string_view name) {
+  return absl::WrapUnique(new NamesInfo(name));
 }
 
-NamesInfo::NamesInfo(std::initializer_list<absl::string_view> names) {
-  ARGPARSE_DCHECK(names.size());
-  for (auto name : names) AddName(name);
+std::unique_ptr<NamesInfo> NamesInfo::CreateOptionalNames(
+    std::initializer_list<absl::string_view> names) {
+  return absl::WrapUnique(new NamesInfo(names));
+}
+
+std::unique_ptr<NamesInfo> NamesInfo::CreateSingleName(absl::string_view name) {
+  return IsValidPositionalName(name) ? CreatePositionalName(name)
+                                     : CreateOptionalNames({name});
+}
+
+
+NamesInfo::NamesInfo(absl::string_view name) : is_optional_(false) {
+  ARGPARSE_CHECK_F(IsValidPositionalName(name),
+                   "Not a valid positional name: '%s'", name.data());
+  names_.push_back(std::string(name));
+}
+
+// The ctor for optional names.
+NamesInfo::NamesInfo(std::initializer_list<absl::string_view> names)
+    : is_optional_(true) {
+  for (auto name : names) {
+    ARGPARSE_CHECK_F(IsValidOptionalName(name),
+                     "Not a valid optional name: '%s'", name.data());
+    names_.push_back(std::string(name));
+  }
 }
 
 }  // namespace internal

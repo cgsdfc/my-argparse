@@ -66,11 +66,11 @@ class Dest : private SimpleBuilder<internal::DestInfo> {
 
 class Names : private SimpleBuilder<internal::NamesInfo> {
  public:
-  Names(const char* name) {
-    this->SetObject(internal::NamesInfo::CreateFromStr({name}));
+  Names(absl::string_view name) {
+    this->SetObject(internal::NamesInfo::CreateSingleName(name));
   }
   Names(std::initializer_list<absl::string_view> names) {
-    this->SetObject(internal::NamesInfo::CreateFromStrings(names));
+    this->SetObject(internal::NamesInfo::CreateOptionalNames(names));
   }
 
  private:
@@ -436,11 +436,11 @@ class ArgumentParser
   internal::ArgumentController controller_;
 };
 
-template <typename T>
-builder_internal::ArgumentBuilder<T> Argument(builder_internal::Names names,
+template <typename NamesT, typename T>
+builder_internal::ArgumentBuilder<T> Argument(NamesT names,
                                               T* dest,
                                               absl::string_view help = {}) {
-  return {std::move(names), dest, help};
+  return {builder_internal::Names(names), dest, help};
 }
 
 }  // namespace argparse

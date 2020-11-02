@@ -82,7 +82,12 @@ endif()
 add_library(argparse ${ARGPARSE_SOURCE})
 
 target_link_libraries(argparse
-    absl::container absl::strings absl::base absl::meta absl::memory)
+    absl::flat_hash_set
+    absl::inlined_vector 
+    absl::strings 
+    absl::base 
+    absl::meta 
+    absl::memory)
 
 if (ARGPARSE_USE_GFLAGS)
     target_link_libraries(argparse gflags::gflags)
