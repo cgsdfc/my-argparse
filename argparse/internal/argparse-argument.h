@@ -13,31 +13,46 @@ class ArgumentGroup;
 
 class Argument : public SupportUserData {
  public:
-  virtual bool IsRequired() = 0;
-  virtual absl::string_view GetHelpDoc() = 0;
-  virtual absl::string_view GetMetaVar() = 0;
-  virtual ArgumentGroup* GetGroup() = 0;
-  virtual NamesInfo* GetNamesInfo() = 0;
-  virtual DestInfo* GetDest() = 0;
-  virtual TypeInfo* GetType() = 0;
-  virtual ActionInfo* GetAction() = 0;
-  virtual NumArgsInfo* GetNumArgs() = 0;
-  virtual const Any* GetConstValue() = 0;
-  virtual const Any* GetDefaultValue() = 0;
+  DestInfo* GetDest() { return dest_info_.get(); }
+  TypeInfo* GetType() { return type_info_.get(); }
+  ActionInfo* GetAction() { return action_info_.get(); }
+  NumArgsInfo* GetNumArgs() { return num_args_.get(); }
+  const Any* GetConstValue() { return const_value_.get(); }
+  const Any* GetDefaultValue() { return default_value_.get(); }
+  absl::string_view GetMetaVar() { return meta_var_; }
+  ArgumentGroup* GetGroup() { return group_; }
+  NamesInfo* GetNamesInfo() { return names_info_.get(); }
+  bool IsRequired() { return is_required_; }
+  absl::string_view GetHelpDoc() { return help_doc_; }
+  void SetNames(std::unique_ptr<NamesInfo> info) {
+    names_info_ = std::move(info);
+  }
+  void SetRequired(bool required) { is_required_ = required; }
+  void SetHelpDoc(std::string help_doc) { help_doc_ = std::move(help_doc); }
+  void SetMetaVar(std::string meta_var) { meta_var_ = std::move(meta_var); }
+  void SetDest(std::unique_ptr<DestInfo> info) {
+    if (info) dest_info_ = std::move(info);
+  }
+  void SetType(std::unique_ptr<TypeInfo> info) {
+    if (info) type_info_ = std::move(info);
+  }
+  void SetAction(std::unique_ptr<ActionInfo> info) {
+    if (info) action_info_ = std::move(info);
+  }
+  void SetConstValue(std::unique_ptr<Any> value) {
+    if (value) const_value_ = std::move(value);
+  }
+  void SetDefaultValue(std::unique_ptr<Any> value) {
+    if (value) default_value_ = std::move(value);
+  }
+  void SetGroup(ArgumentGroup* group) {
+    ARGPARSE_DCHECK(group);
+    group_ = group;
+  }
+  void SetNumArgs(std::unique_ptr<NumArgsInfo> info) {
+    if (info) num_args_ = std::move(info);
+  }
 
-  virtual void SetNames(std::unique_ptr<NamesInfo> info) = 0;
-  virtual void SetRequired(bool required) = 0;
-  virtual void SetHelpDoc(std::string help_doc) = 0;
-  virtual void SetMetaVar(std::string meta_var) = 0;
-  virtual void SetDest(std::unique_ptr<DestInfo> dest) = 0;
-  virtual void SetType(std::unique_ptr<TypeInfo> info) = 0;
-  virtual void SetAction(std::unique_ptr<ActionInfo> info) = 0;
-  virtual void SetConstValue(std::unique_ptr<Any> value) = 0;
-  virtual void SetDefaultValue(std::unique_ptr<Any> value) = 0;
-  virtual void SetGroup(ArgumentGroup* group) = 0;
-  virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
-
-  // // non-virtual helpers.
   bool IsOptional() { return GetNamesInfo()->IsOptional(); }
   bool IsPositional() { return GetNamesInfo()->IsPositional(); }
 
@@ -59,8 +74,21 @@ class Argument : public SupportUserData {
   // Return true if `lhs` should appear before `rhs` in a usage message.
   static bool BeforeInUsage(Argument* lhs, Argument* rhs);
 
-  virtual ~Argument() {}
   static std::unique_ptr<Argument> Create();
+
+ private:
+  ArgumentGroup* group_ = nullptr;
+  std::string help_doc_;
+  std::string meta_var_;
+  bool is_required_ = false;
+
+  std::unique_ptr<NamesInfo> names_info_;
+  std::unique_ptr<DestInfo> dest_info_;
+  std::unique_ptr<ActionInfo> action_info_;
+  std::unique_ptr<TypeInfo> type_info_;
+  std::unique_ptr<NumArgsInfo> num_args_;
+  std::unique_ptr<Any> const_value_;
+  std::unique_ptr<Any> default_value_;
 };
 
 }  // namespace internal
