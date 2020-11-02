@@ -197,34 +197,6 @@ std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
   return absl::make_unique<NumberNumArgsInfo>(num);
 }
 
-// std::unique_ptr<NamesInfo> NamesInfo::CreatePositional(std::string in) {
-//   return absl::make_unique<PositionalName>(std::move(in));
-// }
-
-// std::unique_ptr<NamesInfo> NamesInfo::CreateOptional(
-//     const std::vector<std::string>& in) {
-//   return absl::make_unique<OptionalNames>(in);
-// }
-
-bool IsValidPositionalName(const std::string& name) {
-  if (name.size() == 0 || !absl::ascii_isalpha(name[0])) return false;
-
-  return std::all_of(name.begin() + 1, name.end(), [](char c) {
-    return absl::ascii_isalnum(c) || c == '-' || c == '_';
-  });
-}
-
-bool IsValidOptionName(const std::string& name) {
-  auto len = name.size();
-  if (len < 2 || name[0] != '-') return false;
-  if (len == 2)  // This rules out -?, -* -@ -= --
-    return absl::ascii_isalnum(name[1]);
-
-  return std::all_of(name.begin() + 2, name.end(), [](char c) {
-    return c == '-' || c == '_' || absl::ascii_isalnum(c);
-  });
-}
-
 std::unique_ptr<ActionInfo> ActionInfo::CreateBuiltinAction(
     ActionKind action_kind, DestInfo* dest, const Any* const_value) {
   switch (action_kind) {
@@ -249,30 +221,9 @@ std::unique_ptr<ActionInfo> ActionInfo::CreateBuiltinAction(
   }
 }
 
-// // TODO: Move these logic NamesInfo.
-// Names::Names(std::string name) {
-//   if (name[0] == '-') {
-//     // This is in fact an option.
-//     std::vector<std::string> names{std::move(name)};
-//     this->SetObject(internal::NamesInfo::CreateOptional(std::move(names)));
-//     return;
-//   }
-//   ARGPARSE_CHECK_F(internal::IsValidPositionalName(name),
-//                    "Not a valid positional name: %s", name.c_str());
-//   this->SetObject(internal::NamesInfo::CreatePositional(std::move(name)));
-// }
-
-// Names::Names(std::initializer_list<std::string> names) {
-//   ARGPARSE_CHECK_F(names.size(), "At least one name must be provided");
-//   this->SetObject(internal::NamesInfo::CreateOptional(names));
-// }
-
-
 bool NamesInfo::IsValidPositionalName(absl::string_view name) {
   if (name.empty() || !absl::ascii_isalpha(name[0])) return false;
-  return std::all_of(name.begin() + 1, name.end(), [](char c) {
-    return absl::ascii_isalnum(c) || c == '-' || c == '_';
-  });
+  return std::all_of(name.begin() + 1, name.end(), &IsValidBodyChar);
 }
 
 bool NamesInfo::IsValidOptionalName(absl::string_view name) {
@@ -280,10 +231,7 @@ bool NamesInfo::IsValidOptionalName(absl::string_view name) {
   if (len < 2 || name[0] != '-') return false;
   if (len == 2)  // This rules out -?, -* -@ -= --
     return absl::ascii_isalnum(name[1]);
-
-  return std::all_of(name.begin() + 2, name.end(), [](char c) {
-    return c == '-' || c == '_' || absl::ascii_isalnum(c);
-  });
+  return std::all_of(name.begin() + 2, name.end(), &IsValidBodyChar);
 }
 
 std::unique_ptr<NamesInfo> NamesInfo::CreatePositionalName(absl::string_view name) {
@@ -315,6 +263,11 @@ NamesInfo::NamesInfo(std::initializer_list<absl::string_view> names)
                      "Not a valid optional name: '%s'", name.data());
     names_.push_back(std::string(name));
   }
+}
+
+bool NamesInfo::IsValidBodyChar(char c) {
+  return c == kOptionalPrefixChar || c == kUnderscoreChar ||
+         absl::ascii_isalnum(c);
 }
 
 }  // namespace internal

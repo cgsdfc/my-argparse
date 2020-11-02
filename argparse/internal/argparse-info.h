@@ -133,8 +133,7 @@ class NamesInfo {
   static constexpr char kOptionalPrefixChar = '-';
   static constexpr char kUnderscoreChar = '_';
 
-  struct PositionalTag {};
-  struct OptionalTag {};
+  static bool IsValidBodyChar(char c);
 
   // Ctor for constructing optional names.
   explicit NamesInfo(std::initializer_list<absl::string_view> optional_names);
