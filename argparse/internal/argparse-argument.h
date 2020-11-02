@@ -37,22 +37,18 @@ class Argument : public SupportUserData {
   virtual void SetGroup(ArgumentGroup* group) = 0;
   virtual void SetNumArgs(std::unique_ptr<NumArgsInfo> info) = 0;
 
-  // non-virtual helpers.
-  bool IsOption() { return GetNamesInfo()->IsOptional(); }
-  // Flag is an option that only has short names.
-  bool IsFlag() {
-    // auto* names = GetNamesInfo();
-    // return names->IsOption() && 0 == names->GetLongNamesCount();
-    return false;
-  }
+  // // non-virtual helpers.
+  bool IsOptional() { return GetNamesInfo()->IsOptional(); }
+  bool IsPositional() { return GetNamesInfo()->IsPositional(); }
 
+  // TODO: fix this.
+  // Flag is an option that only has short names.
+  bool IsFlag() { return false; }
+
+  // TODO: fix this.
   // For positional, this will be PosName. For Option, this will be
   // the first long name or first short name (if no long name).
-  absl::string_view GetName() {
-    // ARGPARSE_DCHECK(GetNamesInfo());
-    // return GetNamesInfo()->GetName();
-    return {};
-  }
+  absl::string_view GetName() { return {}; }
 
   // If a typehint exists, return true and set out.
   bool AppendTypeHint(std::string* out);

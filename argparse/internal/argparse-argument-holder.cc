@@ -51,7 +51,7 @@ ArgumentGroup* ArgumentHolder::AddArgumentGroup(std::string title) {
 void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
   ARGPARSE_DCHECK(arg);
   // True == isOption() == OptionalGroupIndex == 1
-  auto index = static_cast<ArgumentGroup::GroupIndex>(arg->IsOption());
+  auto index = static_cast<ArgumentGroup::GroupIndex>(arg->IsOptional());
   GetDefaultGroup(index)->AddArgument(std::move(arg));
 }
 

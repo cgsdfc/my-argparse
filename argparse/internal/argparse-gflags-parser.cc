@@ -23,10 +23,7 @@ inline const char* GetGflagsSupportedTypeAsString() {
 }
 
 static bool IsValidNamesInfo(NamesInfo* info) {
-  // if (!info->IsOption()) return false;
-  // auto count_all = info->GetLongNamesCount() + info->GetShortNamesCount();
-  // return count_all == 1;
-  return false;
+  return info->IsOptional() && info->GetNameCount() == 1;
 }
 
 template <typename... Types>
@@ -89,6 +86,8 @@ bool GflagsParser::Initialize(ArgumentContainer* container) {
 
   for (std::size_t i = 0; i < group->GetArgumentCount(); ++i) {
     auto* arg = group->GetArgument(i);
+    if (arg->GetNamesInfo()->IsPositional()) continue;
+
     auto dest_type = arg->GetDest()->GetType();
     if (!IsGflagsSupportedType(dest_type)) return false;
     auto iter = register_map_.find(dest_type);

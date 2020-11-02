@@ -99,10 +99,10 @@ bool Argument::AppendDefaultValueAsString(std::string* out) {
 
 bool Argument::BeforeInUsage(Argument* a, Argument* b) {
   // options go before positionals.
-  if (a->IsOption() != b->IsOption()) return a->IsOption();
+  if (a->IsOptional() != b->IsOptional()) return a->IsOptional();
 
   // positional compares on their names.
-  if (!a->IsOption() && !b->IsOption()) {
+  if (!a->IsOptional() && !b->IsOptional()) {
     return a->GetName() < b->GetName();
   }
 
