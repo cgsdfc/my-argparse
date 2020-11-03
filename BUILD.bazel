@@ -14,11 +14,6 @@ config_setting(
     values = {"define": "with_gflags=1"},
 )
 
-# config_setting(
-#     name = "has_absl",
-#     values = {"define": "absl=1"},
-# )
-
 cc_library(
     name = "argparse",
     srcs = [
@@ -38,6 +33,7 @@ cc_library(
 
     hdrs = [
         "argparse/internal/argparse-any.h",
+        "argparse/internal/argparse-logging.h",
         "argparse/internal/argparse-arg-array.h",
         "argparse/internal/argparse-argp-parser.h",
         "argparse/internal/argparse-info.h",
@@ -68,7 +64,13 @@ cc_library(
         "argparse/",
     ],
 
+    defines = select({
+        ":with_gflags": ["ARGPARSE_WITH_GFLAGS=1"],
+        "//conditions:default": [],
+    }),
+
     deps = [
+        "@com_google_absl//absl/base:log_severity",
         "@com_google_absl//absl/meta:type_traits",
         "@com_google_absl//absl/utility",
         "@com_google_absl//absl/memory",
