@@ -31,8 +31,7 @@ class ArgumentParser {
 
   // Read the content of the ArgumentContainer and prepare for parsing.
   // The container is guaranteed to have longer lifetime than the parser.
-  // In case any failure, return false to indicate that.
-  virtual bool Initialize(ArgumentContainer* container) = 0;
+  virtual void Initialize(ArgumentContainer* container) = 0;
   // Parse args, if rest is null, exit on error. Otherwise put unknown ones into
   // rest and return status code.
   virtual bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) = 0;

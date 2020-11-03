@@ -27,8 +27,7 @@ void ArgumentController::EnsureInFrozenState() {
 
 void ArgumentController::TransmitToFrozenState() {
   EnsureInActiveState(__func__);
-  bool rv = parser_->Initialize(container_.get());
-  ARGPARSE_DCHECK_F(rv, "Cannot initialize the ArgumentParser");
+   parser_->Initialize(container_.get());
   state_ = kFrozenState;
 }
 

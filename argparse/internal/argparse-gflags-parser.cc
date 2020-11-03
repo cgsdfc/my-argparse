@@ -74,29 +74,33 @@ bool GflagsParser::ParseKnownArgs(ArgArray args,
   return true;
 }
 
-bool GflagsParser::Initialize(ArgumentContainer* container) {
+void GflagsParser::Initialize(ArgumentContainer* container) {
   auto* main_holder = container->GetMainHolder();
   // Only default optional group is valid.
-  if (main_holder->GetDefaultGroup(ArgumentGroup::kPositionalGroupIndex)
-          ->GetArgumentCount())
-    return false;  // Positional arg not supported.
+  // if (main_holder->GetDefaultGroup(ArgumentGroup::kPositionalGroupIndex)
+  //         ->GetArgumentCount())
+  //   return false;  // Positional arg not supported.
+
   auto* group =
       main_holder->GetDefaultGroup(ArgumentGroup::kOptionalGroupIndex);
-  if (!group->GetArgumentCount()) return true; // No Argument at all.
+  if (!group->GetArgumentCount()) return;  // No Argument at all.
 
   for (std::size_t i = 0; i < group->GetArgumentCount(); ++i) {
     auto* arg = group->GetArgument(i);
     if (arg->GetNamesInfo()->IsPositional()) continue;
 
     auto dest_type = arg->GetDest()->GetType();
-    if (!IsGflagsSupportedType(dest_type)) return false;
+    // TODO: may give a warning instead..
+    ARGPARSE_CHECK_F(IsGflagsSupportedType(dest_type),
+                     "type '%s' is not supported by gflags",
+                     arg->GetDest()->GetOperations()->GetTypeName().data());
+
     auto iter = register_map_.find(dest_type);
     ARGPARSE_DCHECK(iter != register_map_.end());
     // TODO: this should allow further checking.
     GflagsArgument gflags_arg{arg};
     (iter->second)(&gflags_arg);
   }
-  return true;
 }
 
 GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }

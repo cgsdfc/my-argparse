@@ -25,7 +25,7 @@ struct GroupData {
 // Maybe option listener should be AP itself.
 class ArgpArgumentParser : public ArgumentParser{
  public:
-  bool Initialize(ArgumentContainer* container) override;
+  void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) override;
 
   private:

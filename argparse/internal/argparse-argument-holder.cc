@@ -70,5 +70,11 @@ void ArgumentHolder::CheckNamesConflict(Argument* arg) {
   }
 }
 
+std::size_t ArgumentHolder::GetTotalArgumentCount() const {
+  size_t count = 0;
+  for (auto&& group : groups_) count += group->GetArgumentCount();
+  return count;
+}
+
 }  // namespace internal
 }  // namespace argparse

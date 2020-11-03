@@ -8,7 +8,6 @@
 #include "absl/container/flat_hash_set.h"
 #include "argparse/internal/argparse-argument.h"
 #include "argparse/internal/argparse-port.h"
-// build/Debug/abseil-src/absl/container/flat_hash_set.h
 
 namespace argparse {
 namespace internal {
@@ -83,6 +82,9 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
 
   // method to add arg to default group (inferred from arg).
   void AddArgument(std::unique_ptr<Argument> arg);
+
+  // Return the total number of arguments in all groups.
+  std::size_t GetTotalArgumentCount() const;
 
  private:
   // All the names of the arguments from all groups, including optional and

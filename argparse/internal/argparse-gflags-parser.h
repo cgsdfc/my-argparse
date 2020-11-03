@@ -54,7 +54,7 @@ class GflagsParser final : public ArgumentParser {
     gflags::SetUsageMessage(val);
   }
 
-  bool Initialize(ArgumentContainer* container) override;
+  void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args,
                       std::vector<std::string>* unparsed_args) override;
 
