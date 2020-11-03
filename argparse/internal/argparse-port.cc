@@ -28,21 +28,6 @@ static std::string Demangle(const char* mangled_name) {
   return result;
 }
 
-void CheckFailed(SourceLocation loc, const char* fmt, ...) {
-  std::fprintf(stderr, "Error at %s:%d:%s: ", loc.filename, loc.line,
-               loc.function);
-
-  va_list ap;
-  va_start(ap, fmt);
-  std::vfprintf(stderr, fmt, ap);
-  va_end(ap);
-
-  std::fprintf(
-      stderr,
-      "\n\nPlease check your code and read the documents of argparse.\n\n");
-  std::abort();
-}
-
 const char* TypeNameImpl(const std::type_info& type) {
   static std::map<std::type_index, std::string> g_typenames;
   auto iter = g_typenames.find(type);

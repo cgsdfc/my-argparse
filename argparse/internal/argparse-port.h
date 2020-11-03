@@ -7,8 +7,8 @@
 
 #include <iostream>
 #include <memory>
-#include <string>
 #include <set>
+#include <string>
 
 #include "absl/base/attributes.h"
 #include "absl/container/inlined_vector.h"
@@ -16,33 +16,7 @@
 #include "absl/meta/type_traits.h"
 #include "absl/strings/string_view.h"
 #include "absl/utility/utility.h"
-
-// TODO: we need a logging module to deal with these checks systematically.
-#define ARGPARSE_SOURCE_LOCATION_CURRENT() \
-  (internal::SourceLocation{__LINE__, __FILE__, __func__})
-
-#define ARGPARSE_CHECK_IMPL(condition, format, ...)                         \
-  do {                                                                      \
-    if (!static_cast<bool>(condition))                                      \
-      ::argparse::internal::CheckFailed(ARGPARSE_SOURCE_LOCATION_CURRENT(), \
-                                        (format), ##__VA_ARGS__);           \
-  } while (0)
-
-// Perform a runtime check for user's error.
-#define ARGPARSE_CHECK_F(expr, format, ...) \
-  ARGPARSE_CHECK_IMPL((expr), (format), ##__VA_ARGS__)
-
-// If no format, use the stringified expr.
-#define ARGPARSE_CHECK(expr) ARGPARSE_CHECK_IMPL((expr), "%s", #expr)
-
-#ifdef NDEBUG  // Not debug
-#define ARGPARSE_DCHECK(expr) ((void)(expr))
-#define ARGPARSE_DCHECK_F(expr, format, ...) ((void)(expr))
-#else
-#define ARGPARSE_DCHECK(expr) ARGPARSE_CHECK(expr)
-#define ARGPARSE_DCHECK_F(expr, format, ...) \
-  ARGPARSE_CHECK_F(expr, format, ##__VA_ARGS__)
-#endif
+#include "argparse/internal/argparse-logging.h"
 
 namespace argparse {
 
@@ -61,16 +35,6 @@ using bool_constant = std::integral_constant<bool, B>;
 }  // namespace portability
 
 namespace internal {
-
-// TODO: integrate with absl's debugging.
-struct SourceLocation {
-  int line;
-  const char* filename;
-  const char* function;
-};
-
-ABSL_ATTRIBUTE_NORETURN void CheckFailed(SourceLocation loc, const char* fmt,
-                                         ...) ABSL_PRINTF_ATTRIBUTE(2, 3);
 
 class Any;
 

@@ -9,6 +9,8 @@ int g_log_level;
 using argparse::Argument;
 
 int main(int argc, char const* argv[]) {
+  ARGPARSE_INTERNAL_LOG(INFO, "%d %s", 11, "abcd");
+
   auto parser = argparse::ArgumentParser();
 
   parser.SetDescription("a program").SetBugReportEmail("xx@xx.com");
