@@ -15,19 +15,23 @@ class ArgumentBuilder;
 
 class Argument : public SupportUserData {
  public:
+  ArgumentGroup* GetGroup() const { return group_; }
+
   DestInfo* GetDest() const { return dest_info_.get(); }
   TypeInfo* GetType() const { return type_info_.get(); }
   ActionInfo* GetAction() const { return action_info_.get(); }
   NumArgsInfo* GetNumArgs() const { return num_args_.get(); }
+  NamesInfo* GetNames() const { return names_info_.get(); }
+
   const Any* GetConstValue() const { return const_value_.get(); }
   const Any* GetDefaultValue() const { return default_value_.get(); }
+
   absl::string_view GetMetaVar() const { return meta_var_; }
-  ArgumentGroup* GetGroup() const { return group_; }
-  NamesInfo* GetNamesInfo() const { return names_info_.get(); }
-  bool IsRequired() const { return is_required_; }
   absl::string_view GetHelpDoc() const { return help_doc_; }
-  bool IsOptional() const { return GetNamesInfo()->IsOptional(); }
-  bool IsPositional() const { return GetNamesInfo()->IsPositional(); }
+
+  bool IsRequired() const { return is_required_; }
+  bool IsOptional() const { return GetNames()->IsOptional(); }
+  bool IsPositional() const { return GetNames()->IsPositional(); }
 
   // TODO: fix this.
   // Flag is an option that only has short names.

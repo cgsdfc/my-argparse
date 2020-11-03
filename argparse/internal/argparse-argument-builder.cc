@@ -42,7 +42,7 @@ ActionKind ArgumentBuilder::StringToActions(absl::string_view str) {
 std::unique_ptr<Argument> ArgumentBuilder::Build() {
   ARGPARSE_DCHECK(arg_);
   arg_->SetMetaVar(meta_var_ ? std::move(*meta_var_)
-                             : arg_->GetNamesInfo()->GetDefaultMetaVar());
+                             : arg_->GetNames()->GetDefaultMetaVar());
 
   // Put a bool if needed.
   if (ActionNeedsBool(action_kind_)) {

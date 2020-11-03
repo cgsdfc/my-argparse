@@ -43,13 +43,13 @@ GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
 }
 
 GflagsArgument::GflagsArgument(Argument* arg) {
-  ARGPARSE_CHECK_F(IsValidNamesInfo(arg->GetNamesInfo()),
+  ARGPARSE_CHECK_F(IsValidNamesInfo(arg->GetNames()),
                    "%s only accept optional argument without alias",
                    kGflagParserName);
   ARGPARSE_CHECK_F(IsGflagsSupportedType(arg->GetDest()->GetType()),
                    "Not a gflags-supported type. Supported types are:\n%s",
                    GetGflagsSupportedTypeAsString());
-  // name_ = arg->GetNamesInfo()->GetName().data();
+  // name_ = arg->GetNames()->GetName().data();
   help_ = arg->GetHelpDoc().data();
   // ARGPARSE_DCHECK(arg->GetConstValue());
   // filename_ = AnyCast<absl::string_view>(arg->GetConstValue())->data();
@@ -87,7 +87,7 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
 
   for (std::size_t i = 0; i < group->GetArgumentCount(); ++i) {
     auto* arg = group->GetArgument(i);
-    if (arg->GetNamesInfo()->IsPositional()) continue;
+    if (arg->GetNames()->IsPositional()) continue;
 
     auto dest_type = arg->GetDest()->GetType();
     // TODO: may give a warning instead..

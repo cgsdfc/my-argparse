@@ -61,7 +61,7 @@ void ArgumentHolder::OnAddArgument(Argument* arg, ArgumentGroup* group) {
 
 // All names should be checked, including positional names.
 void ArgumentHolder::CheckNamesConflict(Argument* arg) {
-  auto* info = arg->GetNamesInfo();
+  auto* info = arg->GetNames();
   for (size_t i = 0; i < info->GetNameCount(); ++i) {
     auto name = info->GetName(i);
     bool ok = name_set_.insert(name).second;
