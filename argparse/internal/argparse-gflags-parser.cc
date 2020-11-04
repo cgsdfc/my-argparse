@@ -9,7 +9,6 @@
 
 namespace argparse {
 namespace internal {
-
 namespace gflags_parser_internal {
 
 using GflagsTypeList = TypeList<bool, gflags::int32, gflags::int64,
@@ -23,8 +22,11 @@ inline const char* GetGflagsSupportedTypeAsString() {
 }
 
 static bool IsValidNamesInfo(NamesInfo* info) {
-  return info->IsOptional() && info->GetNameCount() == 1;
+  return info->GetNameCount() == 1;
 }
+
+// std::false_type Or(std::initializer_list<std::false_type>);
+// std::true_type Or(std::initializer_list<bool>);
 
 template <typename... Types>
 bool IsGflagsSupportedTypeImpl(std::type_index type, TypeList<Types...>) {
@@ -40,23 +42,6 @@ bool IsGflagsSupportedType(std::type_index type) {
 template <typename... Types>
 GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
   return GflagsRegisterMap{{typeid(Types), &RegisterGlagsArgument<Types>}...};
-}
-
-GflagsArgument::GflagsArgument(Argument* arg) {
-  ARGPARSE_CHECK_F(IsValidNamesInfo(arg->GetNames()),
-                   "%s only accept optional argument without alias",
-                   kGflagParserName);
-  ARGPARSE_CHECK_F(IsGflagsSupportedType(arg->GetDest()->GetType()),
-                   "Not a gflags-supported type. Supported types are:\n%s",
-                   GetGflagsSupportedTypeAsString());
-  // name_ = arg->GetNames()->GetName().data();
-  help_ = arg->GetHelpDoc().data();
-  // ARGPARSE_DCHECK(arg->GetConstValue());
-  // filename_ = AnyCast<absl::string_view>(arg->GetConstValue())->data();
-  filename_ = "";
-  dest_ptr_ = arg->GetDest()->GetDestPtr();
-  default_value_ = const_cast<Any*>(arg->GetDefaultValue());
-  ARGPARSE_DCHECK(default_value_);
 }
 
 GflagsParser::GflagsParser()
@@ -77,10 +62,11 @@ bool GflagsParser::ParseKnownArgs(ArgArray args,
 
 void GflagsParser::Initialize(ArgumentContainer* container) {
   auto* main_holder = container->GetMainHolder();
-  // Only default optional group is valid.
-  // if (main_holder->GetDefaultGroup(ArgumentGroup::kPositionalGroupIndex)
-  //         ->GetArgumentCount())
-  //   return false;  // Positional arg not supported.
+
+  if (main_holder->GetDefaultGroup(ArgumentGroup::kPositionalGroupIndex)
+          ->GetArgumentCount()) {
+    ARGPARSE_INTERNAL_LOG(WARNING, "Positional arguments are not supported");
+  }
 
   auto* group =
       main_holder->GetDefaultGroup(ArgumentGroup::kOptionalGroupIndex);
@@ -88,19 +74,26 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
 
   for (std::size_t i = 0; i < group->GetArgumentCount(); ++i) {
     auto* arg = group->GetArgument(i);
-    if (arg->GetNames()->IsPositional()) continue;
+    ARGPARSE_INTERNAL_DCHECK(arg->IsOptional(), "Should all be optional");
+
+    if (!IsValidNamesInfo(arg->GetNames())) {
+      ARGPARSE_INTERNAL_LOG(WARNING, "Aliases are not supported");
+      continue;
+    }
+
+    ARGPARSE_INTERNAL_DCHECK(arg->GetDefaultValue(),
+                             "Default value must be set");
 
     auto dest_type = arg->GetDest()->GetType();
-    // TODO: may give a warning instead..
-    ARGPARSE_CHECK_F(IsGflagsSupportedType(dest_type),
-                     "type '%s' is not supported by gflags",
-                     arg->GetDest()->GetOperations()->GetTypeName().data());
-
+    if (!IsGflagsSupportedType(dest_type)) {
+      ARGPARSE_INTERNAL_LOG(WARNING,
+                            "DestType of this argument is not supported");
+      continue;
+    }
     auto iter = register_map_.find(dest_type);
-    ARGPARSE_DCHECK(iter != register_map_.end());
-    // TODO: this should allow further checking.
-    GflagsArgument gflags_arg{arg};
-    (iter->second)(&gflags_arg);
+    ARGPARSE_INTERNAL_DCHECK(iter != register_map_.end(), "");
+
+    (iter->second)(arg);
   }
 }
 
@@ -108,6 +101,7 @@ GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }
 
 }  // namespace gflags_parser_internal
 
+// TODO: statie registration.
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
   return absl::make_unique<gflags_parser_internal::GflagsParser>();
 }

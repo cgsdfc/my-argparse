@@ -13,35 +13,23 @@ namespace argparse {
 namespace internal {
 namespace gflags_parser_internal {
 
-class GflagsArgument {
- public:
-  explicit GflagsArgument(Argument* arg);
-
-  template <typename FlagType>
-  void Register() {
-    gflags::FlagRegisterer(name_,                             // name
-                           help_,                             // help
-                           filename_,                         // filename
-                           dest_ptr_.Cast<FlagType>(),        // current_storage
-                           AnyCast<FlagType>(default_value_)  // defval_storage
-    );
-  }
-
- private:
-  const char* name_;
-  const char* help_;
-  const char* filename_;
-  OpaquePtr dest_ptr_;
-  Any* default_value_;
-};
-
-using GflagRegisterFunc = void (*)(GflagsArgument*);
-using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
-
 template <typename FlagType>
-void RegisterGlagsArgument(GflagsArgument* arg) {
-  return arg->Register<FlagType>();
+void RegisterGlagsArgument(Argument* arg) {
+  const char* name;
+  const char* help;
+  const char* filename;
+  FlagType* current;
+  FlagType* defval;
+
+  gflags::FlagRegisterer(name,      // name
+                         help,      // help
+                         filename,  // filename
+                         current,   // current_storage
+                         defval);
 }
+
+using GflagRegisterFunc = void (*)(Argument*);
+using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
 
 class GflagsParser final : public ArgumentParser {
  public:
