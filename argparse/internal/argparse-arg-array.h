@@ -7,31 +7,31 @@
 
 #include <vector>
 
+#include "absl/types/span.h"
 #include "argparse/internal/argparse-port.h"
 
 namespace argparse {
 namespace internal {
 
-class ArgArray {
- public:
-  ArgArray(int argc, const char** argv)
-      : argc_(argc), argv_(const_cast<char**>(argv)) {}
-  ArgArray(std::vector<const char*>& args)
-      : ArgArray(args.size(), args.data()) {}
+using ArgVector = std::vector<const char*>;
 
-  int argc() const { return argc_; }
-  std::size_t size() const { return argc(); }
+using ArgArray = absl::Span<const char*>;
 
-  char** argv() const { return argv_; }
-  char* operator[](std::size_t i) {
-    ARGPARSE_DCHECK(i < argc());
-    return argv()[i];
-  }
+inline ArgArray MakeArgArray(ArgVector& vector) {
+  return absl::MakeSpan(vector);
+}
 
- private:
-  int argc_;
-  char** argv_;
-};
+inline ArgArray MakeArgArray(int argc, const char** argv) {
+  return absl::MakeSpan(argv, argc);
+}
+
+inline char** ArgArrayGetArgv(const ArgArray& args) {
+  return const_cast<char**>(args.data());
+}
+
+inline int ArgArrayGetArgc(const ArgArray& args) {
+  return static_cast<int>(args.size());
+}
 
 }  // namespace internal
 }  // namespace argparse

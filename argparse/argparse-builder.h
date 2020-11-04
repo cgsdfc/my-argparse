@@ -395,18 +395,18 @@ class ArgumentParser
     return *this;
   }
   void ParseArgs(int argc, const char** argv) {
-    ParseArgsImpl({argc, argv}, nullptr);
+    ParseArgsImpl(internal::MakeArgArray(argc, argv), nullptr);
   }
-  void ParseArgs(std::vector<const char*> args) {
-    ParseArgsImpl(args, nullptr);
+  void ParseArgs(internal::ArgVector args) {
+    ParseArgsImpl(internal::MakeArgArray(args), nullptr);
   }
   bool ParseKnownArgs(int argc, const char** argv,
                       std::vector<std::string>* out) {
-    return ParseArgsImpl({argc, argv}, out);
+    return ParseArgsImpl(internal::MakeArgArray(argc, argv), out);
   }
-  bool ParseKnownArgs(std::vector<const char*> args,
+  bool ParseKnownArgs(internal::ArgVector args,
                       std::vector<std::string>* out) {
-    return ParseArgsImpl(args, out);
+    return ParseArgsImpl(internal::MakeArgArray(args), out);
   }
   template <typename SubCommandGroupT>
   SubCommandGroupProxy AddSubParsers(SubCommandGroupT&& group) {

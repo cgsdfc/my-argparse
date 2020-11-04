@@ -9,8 +9,9 @@ int g_log_level;
 using argparse::Argument;
 
 int main(int argc, char const* argv[]) {
-  for (int i = 0; i < 10; ++i)
-    ARGPARSE_INTERNAL_LOG(WARNING, "this is a warning %d", i);
+  std::string long_str(600, 'a');
+  ARGPARSE_INTERNAL_LOG(ERROR, "%s", long_str.data());
+
 
   auto parser = argparse::ArgumentParser();
 
