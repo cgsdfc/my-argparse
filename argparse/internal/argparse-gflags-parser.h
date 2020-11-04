@@ -14,8 +14,16 @@ namespace argparse {
 namespace internal {
 namespace gflags_parser_internal {
 
+struct RegisterParams {
+  const char* name;
+  const char* help;
+  const char* filename;
+  internal::OpaquePtr current_value;
+  internal::Any* default_value;
+};
+
 // TODO: move this to statically-init global data.
-using GflagRegisterFunc = void (*)(Argument*);
+using GflagRegisterFunc = void (*)(const RegisterParams&);
 using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
 
 class GflagsParser final : public ArgumentParser {

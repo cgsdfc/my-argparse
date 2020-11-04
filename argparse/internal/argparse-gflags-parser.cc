@@ -16,13 +16,6 @@ namespace {
 using GflagsTypeList = internal::TypeList<bool, gflags::int32, gflags::int64,
                                           gflags::uint64, double, std::string>;
 
-constexpr char kGflagParserName[] = "gflags-parser";
-
-const char* GetGflagsSupportedTypeAsString() {
-  // Hand-rolled one is better than computed one.
-  return "bool, int32, int64, uint64, double, std::string";
-}
-
 bool IsValidNamesInfo(NamesInfo* info) { return info->GetNameCount() == 1; }
 
 absl::string_view StripPrefixChars(absl::string_view str) {
@@ -31,16 +24,21 @@ absl::string_view StripPrefixChars(absl::string_view str) {
   return str.substr(i);
 }
 
-// This may be simplied..
+RegisterParams CreateRegisterParams(Argument* arg) {
+  RegisterParams params;
+  params.name = StripPrefixChars(arg->GetNames()->GetOptionalName()).data();
+  params.help = arg->GetHelpDoc().data();
+  params.filename = "";
+  params.current_value = arg->GetDest()->GetDestPtr();
+  params.default_value = const_cast<Any*>(arg->GetDefaultValue());
+  return params;
+}
+
 template <typename FlagType>
-void RegisterGlagsArgument(Argument* arg) {
-  const char* name = StripPrefixChars(arg->GetNames()->GetOptionalName()).data();
-  const char* help = arg->GetHelpDoc().data();
-  const char* filename = "";
-  FlagType* current = arg->GetDest()->GetDestPtr().Cast<FlagType>();
-  FlagType* defval = const_cast<FlagType*>(
-      internal::AnyCast<FlagType>(arg->GetDefaultValue()));
-  gflags::FlagRegisterer(name, help, filename, current, defval);
+void RegisterGlagsArgument(const RegisterParams& params) {
+  gflags::FlagRegisterer(params.name, params.help, params.filename,
+                         params.current_value.Cast<FlagType>(),
+                         internal::AnyCast<FlagType>(params.default_value));
 }
 
 template <typename... Types>
@@ -107,10 +105,11 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
                             "DestType of this argument is not supported");
       continue;
     }
+
     auto iter = register_map_.find(dest_type);
     ARGPARSE_INTERNAL_DCHECK(iter != register_map_.end(), "");
-
-    (iter->second)(arg);
+    auto params = CreateRegisterParams(arg);
+    (iter->second)(params);
   }
 }
 
