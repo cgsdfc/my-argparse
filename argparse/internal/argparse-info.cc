@@ -49,6 +49,7 @@ const char* FlagToString(char flag) {
       return "zero or more";
     default:
       ARGPARSE_DCHECK(false);
+      return nullptr;
   }
 }
 

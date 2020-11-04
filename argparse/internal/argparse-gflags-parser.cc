@@ -11,22 +11,37 @@ namespace argparse {
 namespace internal {
 namespace gflags_parser_internal {
 
-using GflagsTypeList = TypeList<bool, gflags::int32, gflags::int64,
-                                gflags::uint64, double, std::string>;
+namespace {
+
+using GflagsTypeList = internal::TypeList<bool, gflags::int32, gflags::int64,
+                                          gflags::uint64, double, std::string>;
 
 constexpr char kGflagParserName[] = "gflags-parser";
 
-inline const char* GetGflagsSupportedTypeAsString() {
+const char* GetGflagsSupportedTypeAsString() {
   // Hand-rolled one is better than computed one.
   return "bool, int32, int64, uint64, double, std::string";
 }
 
-static bool IsValidNamesInfo(NamesInfo* info) {
-  return info->GetNameCount() == 1;
+bool IsValidNamesInfo(NamesInfo* info) { return info->GetNameCount() == 1; }
+
+absl::string_view StripPrefixChars(absl::string_view str) {
+  auto i = str.find_first_not_of(NamesInfo::kOptionalPrefixChar);
+  ARGPARSE_INTERNAL_DCHECK(i != absl::string_view::npos, "");
+  return str.substr(i);
 }
 
-// std::false_type Or(std::initializer_list<std::false_type>);
-// std::true_type Or(std::initializer_list<bool>);
+// This may be simplied..
+template <typename FlagType>
+void RegisterGlagsArgument(Argument* arg) {
+  const char* name = StripPrefixChars(arg->GetNames()->GetOptionalName()).data();
+  const char* help = arg->GetHelpDoc().data();
+  const char* filename = "";
+  FlagType* current = arg->GetDest()->GetDestPtr().Cast<FlagType>();
+  FlagType* defval = const_cast<FlagType*>(
+      internal::AnyCast<FlagType>(arg->GetDefaultValue()));
+  gflags::FlagRegisterer(name, help, filename, current, defval);
+}
 
 template <typename... Types>
 bool IsGflagsSupportedTypeImpl(std::type_index type, TypeList<Types...>) {
@@ -43,6 +58,8 @@ template <typename... Types>
 GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
   return GflagsRegisterMap{{typeid(Types), &RegisterGlagsArgument<Types>}...};
 }
+
+}  // namespace
 
 GflagsParser::GflagsParser()
     : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
@@ -105,7 +122,6 @@ GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
   return absl::make_unique<gflags_parser_internal::GflagsParser>();
 }
-
 
 }  // namespace internal
 }  // namespace argparse

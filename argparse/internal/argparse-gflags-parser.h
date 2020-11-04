@@ -8,26 +8,13 @@
 #include <gflags/gflags.h>
 
 #include "argparse/internal/argparse-argument-parser.h"
+#include "argparse/internal/argparse-argument.h"
 
 namespace argparse {
 namespace internal {
 namespace gflags_parser_internal {
 
-template <typename FlagType>
-void RegisterGlagsArgument(Argument* arg) {
-  const char* name;
-  const char* help;
-  const char* filename;
-  FlagType* current;
-  FlagType* defval;
-
-  gflags::FlagRegisterer(name,      // name
-                         help,      // help
-                         filename,  // filename
-                         current,   // current_storage
-                         defval);
-}
-
+// TODO: move this to statically-init global data.
 using GflagRegisterFunc = void (*)(Argument*);
 using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
 

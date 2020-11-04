@@ -56,6 +56,10 @@ class NamesInfo {
 
   // Tells whether this is an (or a list of) optional name(s).
   bool IsOptional() const { return is_optional_; }
+  absl::string_view GetOptionalName() const {
+    ARGPARSE_INTERNAL_DCHECK(IsOptional(), "");
+    return GetName(0);
+  }
 
   // Flag is a special optional name that only has one short optional name, like
   // '-c'.
@@ -129,10 +133,10 @@ class NamesInfo {
   static std::unique_ptr<NamesInfo> CreateOptionalNames(
       std::initializer_list<absl::string_view> names);
 
- private:
   static constexpr char kOptionalPrefixChar = '-';
   static constexpr char kUnderscoreChar = '_';
 
+ private:
   static bool IsValidBodyChar(char c);
 
   // Ctor for constructing optional names.
