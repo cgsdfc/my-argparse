@@ -33,12 +33,7 @@ class OpaquePtr {
   }
 
   template <typename T>
-  const T* Cast() const {
-    ARGPARSE_DCHECK(type() == typeid(T));
-    return reinterpret_cast<const T*>(raw_value());
-  }
-  template <typename T>
-  T* Cast() {
+  T* Cast() const {
     ARGPARSE_DCHECK(type() == typeid(T));
     return reinterpret_cast<T*>(raw_value());
   }

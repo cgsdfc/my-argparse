@@ -36,9 +36,10 @@ RegisterParams CreateRegisterParams(Argument* arg) {
 
 template <typename FlagType>
 void RegisterGlagsArgument(const RegisterParams& params) {
-  gflags::FlagRegisterer(params.name, params.help, params.filename,
-                         params.current_value.Cast<FlagType>(),
-                         internal::AnyCast<FlagType>(params.default_value));
+  gflags::FlagRegisterer registerer(
+      params.name, params.help, params.filename,
+      params.current_value.Cast<FlagType>(),
+      internal::AnyCast<FlagType>(params.default_value));
 }
 
 template <typename... Types>
@@ -96,8 +97,10 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
       continue;
     }
 
-    ARGPARSE_INTERNAL_DCHECK(arg->GetDefaultValue(),
-                             "Default value must be set");
+    if (!arg->GetDefaultValue()) {
+      ARGPARSE_INTERNAL_LOG(WARNING, "Default value must be set");
+      continue;
+    }
 
     auto dest_type = arg->GetDest()->GetType();
     if (!IsGflagsSupportedType(dest_type)) {
@@ -109,7 +112,7 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
     auto iter = register_map_.find(dest_type);
     ARGPARSE_INTERNAL_DCHECK(iter != register_map_.end(), "");
     auto params = CreateRegisterParams(arg);
-    (iter->second)(params);
+    iter->second(params);
   }
 }
 
