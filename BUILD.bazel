@@ -19,6 +19,7 @@ cc_library(
     srcs = [
         "argparse/argparse-open-mode.cc",
         "argparse/internal/argparse-argp-parser.cc",
+        "argparse/internal/argparse-logging.cc",
         "argparse/internal/argparse-info.cc",
         "argparse/internal/argparse-port.cc",
         "argparse/internal/argparse-argument-builder.cc",

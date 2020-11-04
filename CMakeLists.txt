@@ -85,6 +85,7 @@ target_link_libraries(argparse
     absl::flat_hash_set
     absl::inlined_vector 
     absl::strings 
+    absl::str_format
     absl::base 
     absl::meta 
     absl::memory)
