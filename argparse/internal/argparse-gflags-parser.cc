@@ -49,8 +49,8 @@ GflagsParser::GflagsParser()
 
 bool GflagsParser::ParseKnownArgs(ArgArray args,
                                   std::vector<std::string>* unparsed_args) {
-  int argc = ArgArrayGetArgc(args);
-  char** argv = ArgArrayGetArgv(args);
+  int argc = args.GetArgc();
+  char** argv = args.GetArgv();
 
   auto rv = gflags::ParseCommandLineFlags(&argc, &argv, true);
   if (unparsed_args) {

@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -8,30 +8,31 @@
 #include <vector>
 
 #include "absl/types/span.h"
-#include "argparse/internal/argparse-port.h"
 
 namespace argparse {
 namespace internal {
 
 using ArgVector = std::vector<const char*>;
 
-using ArgArray = absl::Span<const char*>;
+class ArgArray : private absl::Span<const char*> {
+  using Base = absl::Span<const char*>;
 
-inline ArgArray MakeArgArray(ArgVector& vector) {
-  return absl::MakeSpan(vector);
-}
+ public:
+  // Constructed from a pair.
+  ArgArray(int argc, const char** argv) : Base(absl::MakeSpan(argv, argc)) {}
 
-inline ArgArray MakeArgArray(int argc, const char** argv) {
-  return absl::MakeSpan(argv, argc);
-}
+  ArgArray(ArgVector& vector) : Base(absl::MakeSpan(vector)) {}
 
-inline char** ArgArrayGetArgv(const ArgArray& args) {
-  return const_cast<char**>(args.data());
-}
+  ArgArray(const ArgArray&) = default;
+  ArgArray& operator=(const ArgArray&) = default;
 
-inline int ArgArrayGetArgc(const ArgArray& args) {
-  return static_cast<int>(args.size());
-}
+  int GetArgc() const { return static_cast<int>(Base::size()); }
+  char** GetArgv() const { return const_cast<char**>(Base::data()); }
+
+  using Base::begin;
+  using Base::end;
+  using Base::operator[];
+};
 
 }  // namespace internal
 }  // namespace argparse
