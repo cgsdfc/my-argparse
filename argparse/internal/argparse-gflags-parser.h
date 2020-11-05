@@ -5,10 +5,7 @@
 
 #pragma once
 
-#include <gflags/gflags.h>
-
 #include "argparse/internal/argparse-argument-parser.h"
-#include "argparse/internal/argparse-argument.h"
 
 namespace argparse {
 namespace internal {
@@ -22,7 +19,6 @@ struct RegisterParams {
   internal::Any* default_value;
 };
 
-// TODO: move this to statically-init global data.
 using GflagRegisterFunc = void (*)(const RegisterParams&);
 using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
 
@@ -30,12 +26,8 @@ class GflagsParser final : public ArgumentParser {
  public:
   GflagsParser();
 
-  void SetProgramVersion(std::string val) override {
-    gflags::SetVersionString(val);
-  }
-  void SetDescription(std::string val) override {
-    gflags::SetUsageMessage(val);
-  }
+  void SetProgramVersion(std::string val) override;
+  void SetDescription(std::string val) override;
 
   void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args,

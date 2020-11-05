@@ -6,6 +6,8 @@
 #include "argparse/internal/argparse-gflags-parser.h"
 
 #include "argparse/internal/argparse-argument-container.h"
+#include "argparse/internal/argparse-argument.h"
+#include "gflags/gflags.h"
 
 namespace argparse {
 namespace internal {
@@ -63,6 +65,14 @@ GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
 GflagsParser::GflagsParser()
     : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
 
+void GflagsParser::SetProgramVersion(std::string val) {
+  gflags::SetVersionString(val);
+}
+
+void GflagsParser::SetDescription(std::string val) {
+  gflags::SetUsageMessage(val);
+}
+
 bool GflagsParser::ParseKnownArgs(ArgArray args,
                                   std::vector<std::string>* unparsed_args) {
   int argc = args.GetArgc();
@@ -119,11 +129,5 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
 GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }
 
 }  // namespace gflags_parser_internal
-
-// TODO: statie registration.
-std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
-  return absl::make_unique<gflags_parser_internal::GflagsParser>();
-}
-
 }  // namespace internal
 }  // namespace argparse
