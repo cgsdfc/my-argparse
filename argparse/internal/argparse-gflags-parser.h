@@ -5,7 +5,11 @@
 
 #pragma once
 
+#include <map>
+
+#include "argparse/internal/argparse-any.h"
 #include "argparse/internal/argparse-argument-parser.h"
+#include "argparse/internal/argparse-opaque-ptr.h"
 
 namespace argparse {
 namespace internal {

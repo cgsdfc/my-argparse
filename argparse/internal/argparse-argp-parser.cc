@@ -15,10 +15,5 @@ bool ArgpArgumentParser::ParseKnownArgs(ArgArray args,
                                         std::vector<std::string>* out) {return false;}
 }
 
-std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
-  using argp_parser_internal::ArgpArgumentParser;
-  return absl::make_unique<ArgpArgumentParser>();
-}
-
 }  // namespace internal
 }  // namespace argparse

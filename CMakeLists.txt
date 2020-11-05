@@ -38,6 +38,7 @@ if (ARGPARSE_USE_GFLAGS)
                     GIT_TAG             master
                     UPDATE_DISCONNECTED 1)
     add_subdirectory(${gflags_SOURCE_DIR} ${gflags_BINARY_DIR})
+    add_definitions(-DARGPARSE_USE_GFLAGS=1)
 endif()
 
 
@@ -72,6 +73,7 @@ set(ARGPARSE_SOURCE
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-container.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-controller.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-parser.cc
 )
 
 if (ARGPARSE_USE_GFLAGS)

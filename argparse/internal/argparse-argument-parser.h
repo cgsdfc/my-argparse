@@ -5,8 +5,9 @@
 
 #pragma once
 
+#include <memory>
+
 #include "argparse/internal/argparse-arg-array.h"
-#include "argparse/internal/argparse-argument.h"
 
 namespace argparse {
 namespace internal {

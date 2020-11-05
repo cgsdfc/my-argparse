@@ -10,15 +10,19 @@ package(default_visibility = ["//visibility:public"])
 licenses(["notice"])
 
 config_setting(
-    name = "with_gflags",
-    values = {"define": "with_gflags=1"},
+    name = "use_gflags",
+    values = {"define": "use_gflags=1"},
+)
+
+config_setting(
+    name = "use_argp",
+    values = {"define": "use_argp=1"},
 )
 
 cc_library(
     name = "argparse",
     srcs = [
         "argparse/argparse-open-mode.cc",
-        "argparse/internal/argparse-argp-parser.cc",
         "argparse/internal/argparse-logging.cc",
         "argparse/internal/argparse-info.cc",
         "argparse/internal/argparse-port.cc",
@@ -26,9 +30,11 @@ cc_library(
         "argparse/internal/argparse-argument.cc",
         "argparse/internal/argparse-argument-controller.cc",
         "argparse/internal/argparse-argument-container.cc",
+        "argparse/internal/argparse-argument-parser.cc",
         "argparse/internal/argparse-argument-holder.cc",
     ] + select({
-        ":with_gflags": [ "argparse/internal/argparse-gflags-parser.cc", ],
+        ":use_gflags": [ "argparse/internal/argparse-gflags-parser.cc", ],
+        ":use_argp": [ "argparse/internal/argparse-argp-parser.cc", ],
         "//conditions:default": [],
     }),
 
@@ -36,7 +42,6 @@ cc_library(
         "argparse/internal/argparse-any.h",
         "argparse/internal/argparse-logging.h",
         "argparse/internal/argparse-arg-array.h",
-        "argparse/internal/argparse-argp-parser.h",
         "argparse/internal/argparse-info.h",
         "argparse/internal/argparse-internal.h",
         "argparse/internal/argparse-ops-result.h",
@@ -57,7 +62,8 @@ cc_library(
         "argparse/argparse-traits.h",
         "argparse/argparse.h",
     ] + select({
-        ":with_gflags": [ "argparse/internal/argparse-gflags-parser.h" ],
+        ":use_gflags": [ "argparse/internal/argparse-gflags-parser.h" ],
+        ":use_argp": [ "argparse/internal/argparse-argp-parser.h", ],
         "//conditions:default": [],
     }),
 
@@ -66,7 +72,8 @@ cc_library(
     ],
 
     defines = select({
-        ":with_gflags": ["ARGPARSE_WITH_GFLAGS=1"],
+        ":use_gflags": ["ARGPARSE_USE_GFLAGS=1"],
+        ":use_argp": ["ARGPARSE_USE_ARGP=1"],
         "//conditions:default": [],
     }),
 
@@ -80,7 +87,7 @@ cc_library(
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/container:flat_hash_set",
     ] + select({
-        ":with_gflags": ["@gflags//:gflags"],
+        ":use_gflags": ["@gflags//:gflags"],
         "//conditions:default": [],
     }),
 )
