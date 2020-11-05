@@ -17,6 +17,7 @@ include(CTest)
 include(DownloadProject.cmake)
 
 option(ARGPARSE_USE_GFLAGS "Whether to use gflags as an backend" ON)
+option(ARGPARSE_USE_ARGP "Whether to use argp as an backend" ON)
 
 download_project(PROJ                googletest
                  GIT_REPOSITORY      https://github.com/google/googletest.git
@@ -39,6 +40,15 @@ if (ARGPARSE_USE_GFLAGS)
                     UPDATE_DISCONNECTED 1)
     add_subdirectory(${gflags_SOURCE_DIR} ${gflags_BINARY_DIR})
     add_definitions(-DARGPARSE_USE_GFLAGS=1)
+elseif (ARGPARSE_USE_ARGP)
+    check_include_file(argp.h HAVE_ARGP_H)
+    check_include_file(cxxabi.h HAVE_CXXABI_H)
+    if (NOT HAVE_ARGP_H)
+        message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
+    endif()
+    add_definitions(-DARGPARSE_USE_ARGP=1)
+else()
+    message(FATAL "A parser must be selected")
 endif()
 
 
@@ -51,20 +61,12 @@ if (CMAKE_VERSION VERSION_LESS 2.8.11)
                         "${gmock_SOURCE_DIR}/include")
 endif()
 
-
-check_include_file(argp.h HAVE_ARGP_H)
-check_include_file(cxxabi.h HAVE_CXXABI_H)
-if (NOT HAVE_ARGP_H)
-    message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
-endif()
-
 include_directories(${CMAKE_SOURCE_DIR})
 
 set(ARGPARSE_SOURCE 
    ${CMAKE_SOURCE_DIR}/argparse/argparse-open-mode.cc
    ${CMAKE_SOURCE_DIR}/argparse/argparse-traits.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-logging.cc
-   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-info.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-builder.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-holder.cc
@@ -77,8 +79,9 @@ set(ARGPARSE_SOURCE
 )
 
 if (ARGPARSE_USE_GFLAGS)
-    list(APPEND ARGPARSE_SOURCE
-    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
+    list(APPEND ARGPARSE_SOURCE ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
+elseif (ARGPARSE_USE_ARGP)
+    list(APPEND ARGPARSE_SOURCE ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc)
 endif()
 
 add_library(argparse ${ARGPARSE_SOURCE})
