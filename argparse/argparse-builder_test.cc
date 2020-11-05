@@ -7,7 +7,7 @@
 
 #include <gtest/gtest.h>
 
-#include "argparse-test-helper.h"
+#include "argparse/internal/argparse-test-helper.h"
 
 namespace argparse {
 namespace {

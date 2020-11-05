@@ -5,7 +5,7 @@
 
 #include "argparse/internal/argparse-any.h"
 
-#include "argparse-test-helper.h"
+#include "argparse/internal/argparse-test-helper.h"
 
 #include <gtest/gtest.h>
 

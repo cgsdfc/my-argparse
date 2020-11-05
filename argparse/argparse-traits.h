@@ -131,6 +131,7 @@ struct StreamOpenTraits {
   }
 };
 
+// TODO: use StrCat instead of streams.
 template <typename T>
 struct DummyFormatTraits {
   static std::string Run(const T& in) {
@@ -376,6 +377,6 @@ template <typename T>
 std::string FormatValue(const T& value) {
   return FormatTraits<absl::decay_t<T>>::Run(value);
 }
-}  // namespace internal
 
+}  // namespace internal
 }  // namespace argparse

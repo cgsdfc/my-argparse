@@ -29,8 +29,16 @@ class ArgumentController final {
   }
 
   // Forward to ArgumentParser.
+
+  // Supported OptionKeys are:
+  // - kDescription
+  // - kProgramVersion
+  // - kProgramName
+  // - kProgramUsage
+  // - kBugReportEmail
   void SetOption(OptionKey key, std::string value);
 
+  // TODO: make API more clear.
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);
 
   // Clean all the memory of this object, after that no methods other than dtor
