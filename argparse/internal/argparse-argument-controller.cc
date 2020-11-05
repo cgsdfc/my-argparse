@@ -5,6 +5,18 @@
 
 #include "argparse/internal/argparse-argument-controller.h"
 
+#ifndef NDEBUG
+#define ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(expected_state)               \
+  do {                                                                         \
+    if (state_ != (expected_state)) {                                          \
+      ARGPARSE_INTERNAL_LOG(FATAL, "Method '%s' must be called in '%s' state", \
+                            __func__, #expected_state);                        \
+    }                                                                          \
+  } while (0)
+#else
+#define ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(expected_state)
+#endif
+
 namespace argparse {
 namespace internal {
 
@@ -12,32 +24,28 @@ ArgumentController::ArgumentController()
     : container_(new ArgumentContainer),
       parser_(ArgumentParser::CreateDefault()) {}
 
-void ArgumentController::EnsureInActiveState(const char* func) const {
-  ARGPARSE_DCHECK_F(state_ == kActiveState,
-                    "Method %s must be called in Active state", func);
-}
-
 void ArgumentController::EnsureInFrozenState() {
-  ARGPARSE_DCHECK_F(
-      state_ != kShutDownState,
-      "No method other than destructor should be called after shutdown");
+  if (state_ == kShutDownState) {
+    ARGPARSE_INTERNAL_LOG(
+        FATAL,
+        "No method other than destructor should be called after shutdown");
+    return;
+  }
   if (state_ == kFrozenState) return;
-  TransmitToFrozenState();
-}
 
-void ArgumentController::TransmitToFrozenState() {
-  EnsureInActiveState(__func__);
-   parser_->Initialize(container_.get());
+  ARGPARSE_INTERNAL_DCHECK(state_ == kActiveState, "");
   state_ = kFrozenState;
+  parser_->Initialize(container_.get());
 }
 
 void ArgumentController::AddArgument(std::unique_ptr<Argument> arg) {
-  EnsureInActiveState(__func__);
+  // EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   return container_->GetMainHolder()->AddArgument(std::move(arg));
 }
 
 ArgumentGroup* ArgumentController::AddArgumentGroup(std::string title) {
-  EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   return container_->GetMainHolder()->AddArgumentGroup(std::move(title));
 }
 
@@ -49,34 +57,34 @@ bool ArgumentController::ParseKnownArgs(ArgArray args,
 
 void ArgumentController::Shutdown() {
   if (state_ == kShutDownState) return;
+  state_ = kShutDownState;
   // Must delete container first.
   container_.reset();
   parser_.reset();
 }
 
-// Forward to ArgumentParser.
 void ArgumentController::SetDescription(std::string val) {
-  EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   parser_->SetDescription(std::move(val));
 }
 
 void ArgumentController::SetBugReportEmail(std::string val) {
-  EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   parser_->SetDescription(std::move(val));
 }
 
 void ArgumentController::SetProgramName(std::string val) {
-  EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   parser_->SetProgramName(std::move(val));
 }
 
 void ArgumentController::SetProgramUsage(std::string val) {
-  EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   parser_->SetProgramUsage(std::move(val));
 }
 
 void ArgumentController::SetProgramVersion(std::string val) {
-  EnsureInActiveState(__func__);
+  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   parser_->SetProgramVersion(std::move(val));
 }
 

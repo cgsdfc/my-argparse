@@ -24,7 +24,6 @@ class ArgumentController final {
   ArgumentGroup* AddArgumentGroup(std::string title);
 
   SubCommandGroup* AddSubCommandGroup(std::unique_ptr<SubCommandGroup> group) {
-    EnsureInActiveState(__func__);
     return nullptr;
   }
 
@@ -50,9 +49,7 @@ class ArgumentController final {
                      // dtor call.
   };
 
-  void EnsureInActiveState(const char* func) const;
   void EnsureInFrozenState();
-  void TransmitToFrozenState();
 
   State state_ = kActiveState;
   std::unique_ptr<ArgumentContainer> container_;
