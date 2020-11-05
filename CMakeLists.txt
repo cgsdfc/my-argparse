@@ -107,3 +107,6 @@ add_executable(argparse_test
 target_link_libraries(argparse_test argparse gtest gtest_main)
 
 add_test(NAME argparse_test COMMAND argparse_test)
+
+add_executable(example-gflags-parser example/example-gflags-parser.cc)
+target_link_libraries(example-gflags-parser argparse)

@@ -106,3 +106,4 @@ cc_binary(
     srcs = ["test_main.cc"],
     deps = [":argparse"],
 )
+

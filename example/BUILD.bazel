@@ -1,0 +1,10 @@
+
+cc_binary(
+    name = "example-gflags-parser",
+    srcs = [
+        "example-gflags-parser.cc",
+    ],
+    deps = [
+        "//:argparse",
+    ],
+)
