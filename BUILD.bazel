@@ -42,6 +42,7 @@ cc_library(
         "argparse/internal/argparse-any.h",
         "argparse/internal/argparse-logging.h",
         "argparse/internal/argparse-arg-array.h",
+        "argparse/internal/argparse-option-key.h",
         "argparse/internal/argparse-info.h",
         "argparse/internal/argparse-internal.h",
         "argparse/internal/argparse-ops-result.h",
