@@ -54,5 +54,31 @@ void ArgumentController::Shutdown() {
   parser_.reset();
 }
 
+// Forward to ArgumentParser.
+void ArgumentController::SetDescription(std::string val) {
+  EnsureInActiveState(__func__);
+  parser_->SetDescription(std::move(val));
+}
+
+void ArgumentController::SetBugReportEmail(std::string val) {
+  EnsureInActiveState(__func__);
+  parser_->SetDescription(std::move(val));
+}
+
+void ArgumentController::SetProgramName(std::string val) {
+  EnsureInActiveState(__func__);
+  parser_->SetProgramName(std::move(val));
+}
+
+void ArgumentController::SetProgramUsage(std::string val) {
+  EnsureInActiveState(__func__);
+  parser_->SetProgramUsage(std::move(val));
+}
+
+void ArgumentController::SetProgramVersion(std::string val) {
+  EnsureInActiveState(__func__);
+  parser_->SetProgramVersion(std::move(val));
+}
+
 }  // namespace internal
 }  // namespace argparse

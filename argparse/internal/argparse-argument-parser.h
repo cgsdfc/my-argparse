@@ -24,11 +24,11 @@ class ArgumentParser {
  public:
   virtual ~ArgumentParser() {}
   // Receive various options from user.
-  virtual void SetProgramVersion(std::string val) {}
   virtual void SetDescription(std::string val) {}
   virtual void SetBugReportEmail(std::string val) {}
   virtual void SetProgramName(std::string val) {}
   virtual void SetProgramUsage(std::string usage) {}
+  virtual void SetProgramVersion(std::string val) {}
 
   // Read the content of the ArgumentContainer and prepare for parsing.
   // The container is guaranteed to have longer lifetime than the parser.

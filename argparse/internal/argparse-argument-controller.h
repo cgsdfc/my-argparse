@@ -28,11 +28,12 @@ class ArgumentController final {
     return nullptr;
   }
 
-  // TODO: use OptionsListenr.
-  ArgumentParser* GetOptionsListener() {
-    EnsureInActiveState(__func__);
-    return parser_.get();
-  }
+  // Forward to ArgumentParser.
+  void SetDescription(std::string val);
+  void SetBugReportEmail(std::string val);
+  void SetProgramName(std::string val);
+  void SetProgramUsage(std::string val);
+  void SetProgramVersion(std::string val);
 
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);
 

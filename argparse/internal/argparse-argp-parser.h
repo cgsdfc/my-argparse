@@ -13,15 +13,6 @@ namespace argparse {
 namespace internal {
 namespace argp_parser_internal {
 
-struct ArgumentData {
-  int id;
-  std::string help;
-};
-
-struct GroupData {
-  int id;
-};
-
 // Maybe option listener should be AP itself.
 class ArgpParser : public ArgumentParser{
  public:

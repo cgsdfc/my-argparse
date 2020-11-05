@@ -379,19 +379,19 @@ class ArgumentParser
   ArgumentParser() = default;
 
   ArgumentParser& SetDescription(std::string val) {
-    GetOptions()->SetDescription(std::move(val));
+    controller_.SetDescription(std::move(val));
     return *this;
   }
   ArgumentParser& SetProgramVersion(std::string val) {
-    GetOptions()->SetProgramVersion(std::move(val));
+    controller_.SetProgramVersion(std::move(val));
     return *this;
   }
   ArgumentParser& SetBugReportEmail(std::string val) {
-    GetOptions()->SetBugReportEmail(std::move(val));
+    controller_.SetBugReportEmail(std::move(val));
     return *this;
   }
   ArgumentParser& SetProgramName(std::string& val) {
-    GetOptions()->SetProgramName(std::move(val));
+    controller_.SetProgramName(std::move(val));
     return *this;
   }
   void ParseArgs(int argc, const char** argv) {
@@ -425,9 +425,6 @@ class ArgumentParser
   internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) {
     return controller_.AddSubCommandGroup(std::move(group));
-  }
-  internal::ArgumentParser* GetOptions() {
-    return controller_.GetOptionsListener();
   }
 
   friend class SupportAddArgument<ArgumentParser>;
