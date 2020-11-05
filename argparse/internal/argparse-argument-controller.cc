@@ -63,26 +63,23 @@ void ArgumentController::Shutdown() {
   parser_.reset();
 }
 
-void ArgumentController::SetOption(OptionKey key, std::string value) {
+void ArgumentController::SetOption(ParserOptions key, std::string value) {
   ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   switch (key) {
-    case OptionKey::kDescription:
+    case ParserOptions::kDescription:
       parser_->SetDescription(std::move(value));
       break;
-    case OptionKey::kProgramName:
+    case ParserOptions::kProgramName:
       parser_->SetProgramName(std::move(value));
       break;
-    case OptionKey::kProgramVersion:
+    case ParserOptions::kProgramVersion:
       parser_->SetProgramVersion(std::move(value));
       break;
-    case OptionKey::kProgramUsage:
+    case ParserOptions::kProgramUsage:
       parser_->SetProgramUsage(std::move(value));
       break;
-    case OptionKey::kBugReportEmail:
+    case ParserOptions::kBugReportEmail:
       parser_->SetBugReportEmail(std::move(value));
-      break;
-    default:
-      ARGPARSE_INTERNAL_INVALID_OPTION_KEY(key);
       break;
   }
 }

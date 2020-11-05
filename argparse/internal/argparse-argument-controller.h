@@ -7,10 +7,17 @@
 
 #include "argparse/internal/argparse-argument-container.h"
 #include "argparse/internal/argparse-argument-parser.h"
-#include "argparse/internal/argparse-option-key.h"
 
 namespace argparse {
 namespace internal {
+
+enum class ParserOptions {
+  kDescription,
+  kProgramVersion,
+  kProgramName,
+  kProgramUsage,
+  kBugReportEmail,
+};
 
 // This combines the functionality of ArgumentContainer and ArgumentParser and
 // connects them. It exposes an interface that is directly usable by the wrapper
@@ -30,13 +37,7 @@ class ArgumentController final {
 
   // Forward to ArgumentParser.
 
-  // Supported OptionKeys are:
-  // - kDescription
-  // - kProgramVersion
-  // - kProgramName
-  // - kProgramUsage
-  // - kBugReportEmail
-  void SetOption(OptionKey key, std::string value);
+  void SetOption(ParserOptions key, std::string value);
 
   // TODO: make API more clear.
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);

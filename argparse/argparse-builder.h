@@ -379,23 +379,28 @@ class ArgumentParser
   ArgumentParser() = default;
 
   ArgumentParser& SetDescription(std::string val) {
-    controller_.SetOption(internal::OptionKey::kDescription, std::move(val));
+    controller_.SetOption(internal::ParserOptions::kDescription,
+                          std::move(val));
     return *this;
   }
   ArgumentParser& SetProgramVersion(std::string val) {
-    controller_.SetOption(internal::OptionKey::kProgramVersion, std::move(val));
+    controller_.SetOption(internal::ParserOptions::kProgramVersion,
+                          std::move(val));
     return *this;
   }
   ArgumentParser& SetBugReportEmail(std::string val) {
-    controller_.SetOption(internal::OptionKey::kBugReportEmail, std::move(val));
+    controller_.SetOption(internal::ParserOptions::kBugReportEmail,
+                          std::move(val));
     return *this;
   }
   ArgumentParser& SetProgramName(std::string& val) {
-    controller_.SetOption(internal::OptionKey::kProgramName, std::move(val));
+    controller_.SetOption(internal::ParserOptions::kProgramName,
+                          std::move(val));
     return *this;
   }
   ArgumentParser& SetProgramUsage(std::string& val) {
-    controller_.SetOption(internal::OptionKey::kProgramUsage, std::move(val));
+    controller_.SetOption(internal::ParserOptions::kProgramUsage,
+                          std::move(val));
     return *this;
   }
   void ParseArgs(int argc, const char** argv) {
