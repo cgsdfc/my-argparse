@@ -21,7 +21,7 @@ std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
 #if ARGPARSE_USE_GFLAGS
   using ParserType = gflags_parser_internal::GflagsParser;
 #elif ARGPARSE_USE_ARGP
-  using ParserType = argp_parser_internal::ArgpArgumentParser;
+  using ParserType = argp_parser_internal::ArgpParser;
 #endif
   return absl::make_unique<ParserType>();
 }

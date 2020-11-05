@@ -9,9 +9,9 @@ namespace argparse {
 namespace internal {
 namespace argp_parser_internal {
 
-void ArgpArgumentParser::Initialize(ArgumentContainer* container) {}
+void ArgpParser::Initialize(ArgumentContainer* container) {}
 
-bool ArgpArgumentParser::ParseKnownArgs(ArgArray args,
+bool ArgpParser::ParseKnownArgs(ArgArray args,
                                         std::vector<std::string>* out) {return false;}
 }
 
