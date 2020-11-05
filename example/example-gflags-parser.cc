@@ -10,7 +10,38 @@ int main(int argc, char const *argv[]) {
 
   auto parser = argparse::ArgumentParser();
 
-  parser.SetDescription("a program").SetBugReportEmail("xx@xx.com");
+  // This example uses the output of the command `clang-format --help`.
+  parser.SetDescription(
+      "OVERVIEW: A tool to format "
+      "C/C++/Java/JavaScript/Objective-C/Protobuf/C# code.");
+
+  bool Werror;
+  parser.AddArgument(Argument("--Werror", &Werror,
+                              "If set, changes formatting warnings to errors.")
+                         .SetDefaultValue(false));
+
+  bool Wno_error;
+  parser.AddArgument(
+      Argument("--Wno-error", &Wno_error,
+               "If set, unknown format options are only warned about. "
+               "This can be used to enable formatting, even if the "
+               "configuration contains unknown (newer) options.")
+          .SetDefaultValue(false));
+
+  std::string assume_filename;
+  parser.AddArgument(
+      Argument("--assume-filename", &assume_filename,
+               "Override filename used to determine the language. "
+               "When reading from stdin, clang-format assumes this filename to "
+               "determine the language.")
+          .SetDefaultValue(""));
+
+  int cursor;
+  parser.AddArgument(Argument("--cursor", &cursor,
+                              "The position of the cursor when invoking "
+                              "clang-format from an editor integration")
+                         .SetDefaultValue(0));
+
   parser.ParseArgs(argc, argv);
 
   return 0;

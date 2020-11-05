@@ -95,7 +95,9 @@ template <typename T>
 struct IsOpsSupported<OpsKind::kAppendConst, T> : IsAppendConstSupported<T> {};
 
 template <typename T>
-struct IsOpsSupported<OpsKind::kCount, T> : std::is_integral<T> {};
+struct IsOpsSupported<OpsKind::kCount, T>
+    : std::integral_constant<bool, std::is_integral<T>{} &&
+                                       !std::is_same<T, bool>{}> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kParse, T>
