@@ -3,6 +3,8 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
+#pragma once
+
 #include "absl/base/attributes.h"
 #include "absl/base/log_severity.h"
 #include "absl/base/optimization.h"

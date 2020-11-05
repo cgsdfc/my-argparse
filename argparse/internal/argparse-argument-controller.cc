@@ -63,29 +63,28 @@ void ArgumentController::Shutdown() {
   parser_.reset();
 }
 
-void ArgumentController::SetDescription(std::string val) {
+void ArgumentController::SetOption(OptionKey key, std::string value) {
   ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  parser_->SetDescription(std::move(val));
-}
-
-void ArgumentController::SetBugReportEmail(std::string val) {
-  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  parser_->SetDescription(std::move(val));
-}
-
-void ArgumentController::SetProgramName(std::string val) {
-  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  parser_->SetProgramName(std::move(val));
-}
-
-void ArgumentController::SetProgramUsage(std::string val) {
-  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  parser_->SetProgramUsage(std::move(val));
-}
-
-void ArgumentController::SetProgramVersion(std::string val) {
-  ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  parser_->SetProgramVersion(std::move(val));
+  switch (key) {
+    case OptionKey::kDescription:
+      parser_->SetDescription(std::move(value));
+      break;
+    case OptionKey::kProgramName:
+      parser_->SetProgramName(std::move(value));
+      break;
+    case OptionKey::kProgramVersion:
+      parser_->SetProgramVersion(std::move(value));
+      break;
+    case OptionKey::kProgramUsage:
+      parser_->SetProgramUsage(std::move(value));
+      break;
+    case OptionKey::kBugReportEmail:
+      parser_->SetBugReportEmail(std::move(value));
+      break;
+    default:
+      ARGPARSE_INTERNAL_INVALID_OPTION_KEY(key);
+      break;
+  }
 }
 
 }  // namespace internal

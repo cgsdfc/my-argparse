@@ -7,6 +7,7 @@
 
 #include "argparse/internal/argparse-argument-container.h"
 #include "argparse/internal/argparse-argument-parser.h"
+#include "argparse/internal/argparse-option-key.h"
 
 namespace argparse {
 namespace internal {
@@ -28,11 +29,7 @@ class ArgumentController final {
   }
 
   // Forward to ArgumentParser.
-  void SetDescription(std::string val);
-  void SetBugReportEmail(std::string val);
-  void SetProgramName(std::string val);
-  void SetProgramUsage(std::string val);
-  void SetProgramVersion(std::string val);
+  void SetOption(OptionKey key, std::string value);
 
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);
 

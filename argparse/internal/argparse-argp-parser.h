@@ -13,7 +13,6 @@ namespace argparse {
 namespace internal {
 namespace argp_parser_internal {
 
-// Maybe option listener should be AP itself.
 class ArgpParser : public ArgumentParser{
  public:
   void Initialize(ArgumentContainer* container) override;
