@@ -17,7 +17,7 @@ class ArgumentHolder;
 // ArgumentGroup
 // It owns a list of `Argument` object with pointer stability and a title that
 // decribes what this group is for.
-class ArgumentGroup : public SupportUserData {
+class ArgumentGroup final : public SupportUserData {
  public:
   // This is needed to send out notification.
   class Delegate {

@@ -81,7 +81,7 @@ FlagNumArgsInfo::FlagNumArgsInfo(char flag) : flag_(flag) {
 
 // The default of TypeInfo: parse a single string into a value
 // using ParseTraits.
-class DefaultTypeInfo : public TypeInfo {
+class DefaultTypeInfo final : public TypeInfo {
  public:
   using TypeInfo::TypeInfo;
 
@@ -92,7 +92,7 @@ class DefaultTypeInfo : public TypeInfo {
 };
 
 // TypeInfo that opens a file according to some mode.
-class FileTypeInfo : public TypeInfo {
+class FileTypeInfo final: public TypeInfo {
  public:
   FileTypeInfo(Operations* ops, OpenMode mode) : TypeInfo(ops), mode_(mode) {
     ARGPARSE_DCHECK(ops->IsSupported(OpsKind::kOpen));
@@ -123,7 +123,7 @@ class ActionWithDest : public ActionInfo {
   DestInfo* dest_;
 };
 
-class CountAction : public ActionWithDest {
+class CountAction final : public ActionWithDest {
  public:
   using ActionWithDest::ActionWithDest;
   void Run(std::unique_ptr<Any>) override { GetOps()->Count(GetPtr()); }
@@ -218,6 +218,7 @@ std::unique_ptr<ActionInfo> ActionInfo::CreateBuiltinAction(
     case ActionKind::kAppendConst:
       return absl::make_unique<AppendConstAction>(dest, const_value);
     default:
+      ARGPARSE_INTERNAL_LOG(FATAL, "Unknown ActionKind: %d", (int)action_kind);
       return nullptr;
   }
 }

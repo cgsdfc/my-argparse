@@ -7,13 +7,14 @@
 
 #include <typeindex>
 
+#include "absl/meta/type_traits.h"
 #include "argparse/internal/argparse-logging.h"
 
 namespace argparse {
 namespace internal {
 
 //  A type-erased type-safe void* wrapper.
-class OpaquePtr {
+class OpaquePtr final {
  public:
   template <typename T>
   explicit OpaquePtr(T* ptr) : type_(typeid(T)), ptr_(ptr) {

@@ -13,7 +13,7 @@ namespace internal {
 class ArgumentGroup;
 class ArgumentBuilder;
 
-class Argument : public SupportUserData {
+class Argument final : public SupportUserData {
  public:
   ArgumentGroup* GetGroup() const { return group_; }
 

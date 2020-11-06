@@ -5,13 +5,11 @@
 
 #pragma once
 
-#include <memory.h>
-
-#include <bitset>
 #include <initializer_list>
+#include <memory>
 
-#include "absl/strings/string_view.h"
 #include "absl/container/inlined_vector.h"
+#include "absl/strings/string_view.h"
 #include "argparse/internal/argparse-operations.h"
 
 namespace argparse {
@@ -26,19 +24,9 @@ enum class ActionKind {
   kAppend,
   kAppendConst,
   kCount,
-  kPrintHelp,
-  kPrintUsage,
-  kCustom,
 };
 
-enum class TypeKind {
-  kNothing,
-  kParse,
-  kOpen,
-  kCustom,
-};
-
-class NamesInfo {
+class NamesInfo final {
  public:
   // Return the total number of names.
   std::size_t GetNameCount() const { return names_.size(); }
@@ -159,7 +147,7 @@ class NumArgsInfo {
   static std::unique_ptr<NumArgsInfo> CreateFromNum(int num);
 };
 
-class DestInfo {
+class DestInfo final {
  public:
   OpaquePtr GetDestPtr() const { return dest_ptr_; }
   Operations* GetOperations() const { return operations_; }
@@ -181,21 +169,10 @@ class DestInfo {
   Operations* operations_;
 };
 
-class CallbackClient {
- public:
-  virtual ~CallbackClient() {}
-  virtual std::unique_ptr<Any> GetData() = 0;
-  virtual OpaquePtr GetDestPtr() = 0;
-  virtual const Any* GetConstValue() = 0;
-  virtual void PrintHelp() = 0;
-  virtual void PrintUsage() = 0;
-};
-
 class ActionInfo {
  public:
   virtual ~ActionInfo() {}
-  virtual void Run(std::unique_ptr<Any> data) {}
-  virtual void Run(CallbackClient*) {}
+  virtual void Run(std::unique_ptr<Any> data) = 0;
 
   static std::unique_ptr<ActionInfo> CreateBuiltinAction(
       ActionKind action_kind, DestInfo* dest, const Any* const_value);

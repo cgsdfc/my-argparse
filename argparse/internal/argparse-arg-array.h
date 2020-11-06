@@ -14,7 +14,7 @@ namespace internal {
 
 using ArgVector = std::vector<const char*>;
 
-class ArgArray : private absl::Span<const char*> {
+class ArgArray final : private absl::Span<const char*> {
   using Base = absl::Span<const char*>;
 
  public:

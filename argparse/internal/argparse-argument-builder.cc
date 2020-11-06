@@ -30,8 +30,6 @@ ActionKind ArgumentBuilder::StringToActions(absl::string_view str) {
       {"append", ActionKind::kAppend},
       {"append_const", ActionKind::kAppendConst},
       {"count", ActionKind::kCount},
-      {"print_help", ActionKind::kPrintHelp},
-      {"print_usage", ActionKind::kPrintUsage},
   };
   auto iter = kStringToActions.find(str);
   ARGPARSE_CHECK_F(iter != kStringToActions.end(),

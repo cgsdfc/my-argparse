@@ -17,7 +17,7 @@ class ArgumentGroup;
 
 namespace argp_parser_internal {
 
-class ArgpParser : public ArgumentParser {
+class ArgpParser final : public ArgumentParser {
  public:
   ArgpParser();
   void Initialize(ArgumentContainer* container) override;

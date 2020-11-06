@@ -19,7 +19,7 @@ namespace internal {
 // can choose to ignore some of user's options if the parser don't support it
 // and create their own impl of Argument to fit their parser. In a word, this
 // abstraction is right needed.
-class ArgumentBuilder {
+class ArgumentBuilder final {
  public:
   ArgumentBuilder() : arg_(Argument::Create()) {}
 

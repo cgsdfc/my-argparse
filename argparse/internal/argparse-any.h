@@ -22,7 +22,7 @@ class Any {
 };
 
 template <typename T>
-class AnyImpl : public Any {
+class AnyImpl final : public Any {
  public:
   explicit AnyImpl(T&& val) : value_(std::move(val)) {}
   explicit AnyImpl(const T& val) : value_(val) {}

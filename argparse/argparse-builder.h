@@ -64,7 +64,7 @@ class Dest : private SimpleBuilder<internal::DestInfo> {
   friend class BuilderAccessor;
 };
 
-class Names : private SimpleBuilder<internal::NamesInfo> {
+class Names final : private SimpleBuilder<internal::NamesInfo> {
  public:
   Names(absl::string_view name) {
     this->SetObject(internal::NamesInfo::CreateSingleName(name));
@@ -77,7 +77,7 @@ class Names : private SimpleBuilder<internal::NamesInfo> {
   friend class BuilderAccessor;
 };
 
-class NumArgs : private SimpleBuilder<internal::NumArgsInfo> {
+class NumArgs final : private SimpleBuilder<internal::NumArgsInfo> {
  public:
   NumArgs(int number) {
     this->SetObject(internal::NumArgsInfo::CreateFromNum(number));
@@ -105,7 +105,7 @@ class AnyValue : private builder_internal::SimpleBuilder<internal::Any> {
   friend class builder_internal::BuilderAccessor;
 };
 
-class FileType {
+class FileType final {
  public:
   explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
   explicit FileType(std::ios_base::openmode mode)
@@ -215,10 +215,10 @@ class FileTypeMethods<T, Derived, false> {};
 
 // This is a wrapper of internal::ArgumentBuilder for type-safety.
 template <typename T>
-class ArgumentBuilder : public BasicMethods<ArgumentBuilder<T>>,
-                        public DestTypeMethods<T, ArgumentBuilder<T>>,
-                        public ValueTypeMethods<T, ArgumentBuilder<T>>,
-                        public FileTypeMethods<T, ArgumentBuilder<T>> {
+class ArgumentBuilder final : public BasicMethods<ArgumentBuilder<T>>,
+                              public DestTypeMethods<T, ArgumentBuilder<T>>,
+                              public ValueTypeMethods<T, ArgumentBuilder<T>>,
+                              public FileTypeMethods<T, ArgumentBuilder<T>> {
  public:
   ArgumentBuilder(Names names, T* ptr, absl::string_view help)
       : builder_(internal::ArgumentBuilder::Create()) {
@@ -265,7 +265,7 @@ class SupportAddArgument {
 };
 
 // ArgumentGroup: a group of arguments that share the same title.
-class ArgumentGroup : public SupportAddArgument<ArgumentGroup> {
+class ArgumentGroup final : public SupportAddArgument<ArgumentGroup> {
  public:
   ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
 
@@ -293,7 +293,7 @@ class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
 
 }  // namespace builder_internal
 
-class SubCommandProxy
+class SubCommandProxy final
     : public builder_internal::SupportAddArgumentGroup<SubCommandProxy> {
  public:
   SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
@@ -311,7 +311,7 @@ class SubCommandProxy
   internal::SubCommand* sub_;
 };
 
-class SubCommand
+class SubCommand final
     : private builder_internal::SimpleBuilder<internal::SubCommand> {
  public:
   explicit SubCommand(std::string name, const char* help = {}) {
@@ -331,7 +331,7 @@ class SubCommand
   friend class builder_internal::BuilderAccessor;
 };
 
-class SubCommandGroupProxy {
+class SubCommandGroupProxy final {
  public:
   SubCommandGroupProxy(internal::SubCommandGroup* group) : group_(group) {}
   template <typename SubCommandT>
@@ -343,7 +343,7 @@ class SubCommandGroupProxy {
   internal::SubCommandGroup* group_;
 };
 
-class SubCommandGroup
+class SubCommandGroup final
     : private builder_internal::SimpleBuilder<internal::SubCommandGroup> {
  public:
   SubCommandGroup() { this->SetObject(internal::SubCommandGroup::Create()); }
@@ -373,7 +373,7 @@ class SubCommandGroup
   friend class builder_internal::BuilderAccessor;
 };
 
-class ArgumentParser
+class ArgumentParser final
     : public builder_internal::SupportAddArgumentGroup<ArgumentParser> {
  public:
   ArgumentParser() = default;

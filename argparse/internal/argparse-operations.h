@@ -186,7 +186,7 @@ bool OpsIsSupportedImpl(OpsKind ops, absl::index_sequence<OpsIndices...>) {
 }
 
 template <typename T>
-class OperationsImpl : public Operations {
+class OperationsImpl final : public Operations {
  public:
   void Store(OpaquePtr dest, std::unique_ptr<Any> data) override {
     return OpsMethod<OpsKind::kStore, T>::Run(dest, std::move(data));
