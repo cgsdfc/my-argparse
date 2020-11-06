@@ -2,10 +2,11 @@
 
 #include <cxxabi.h>
 
-#include <cstdarg>
 #include <cstdlib>
 #include <map>
 #include <typeindex>
+
+#include "argparse/internal/argparse-logging.h"
 
 namespace argparse {
 namespace internal {

@@ -4,7 +4,8 @@
 // https://opensource.org/licenses/MIT
 
 #include "argparse/argparse-open-mode.h"
-#include "argparse/internal/argparse-port.h"
+
+#include "argparse/internal/argparse-logging.h"
 
 namespace argparse {
 

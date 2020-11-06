@@ -19,8 +19,8 @@
 
 #include "argparse/argparse-conversion-result.h"
 #include "argparse/argparse-open-mode.h"
+#include "argparse/internal/argparse-logging.h"
 #include "argparse/internal/argparse-numeric-parser.h"
-#include "argparse/internal/argparse-port.h"
 
 // Defines various traits that users can specialize to meet their needs.
 namespace argparse {

@@ -14,7 +14,6 @@
 #include "argparse/internal/argparse-any.h"
 #include "argparse/internal/argparse-opaque-ptr.h"
 #include "argparse/internal/argparse-ops-result.h"
-#include "argparse/internal/argparse-port.h"
 
 // This file impls Operations class using the traits defined by users.
 namespace argparse {

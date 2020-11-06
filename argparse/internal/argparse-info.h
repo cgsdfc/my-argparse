@@ -11,6 +11,7 @@
 #include <initializer_list>
 
 #include "absl/strings/string_view.h"
+#include "absl/container/inlined_vector.h"
 #include "argparse/internal/argparse-operations.h"
 
 namespace argparse {
