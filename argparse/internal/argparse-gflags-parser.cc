@@ -20,15 +20,10 @@ using GflagsTypeList = internal::TypeList<bool, gflags::int32, gflags::int64,
 
 bool IsValidNamesInfo(NamesInfo* info) { return info->GetNameCount() == 1; }
 
-absl::string_view StripPrefixChars(absl::string_view str) {
-  auto i = str.find_first_not_of(NamesInfo::kOptionalPrefixChar);
-  ARGPARSE_INTERNAL_DCHECK(i != absl::string_view::npos, "");
-  return str.substr(i);
-}
-
 RegisterParams CreateRegisterParams(Argument* arg) {
   RegisterParams params;
-  params.name = StripPrefixChars(arg->GetNames()->GetOptionalName()).data();
+  params.name =
+      NamesInfo::StripPrefixChars(arg->GetNames()->GetOptionalName()).data();
   params.help = arg->GetHelpDoc().data();
   params.filename = "";
   params.current_value = arg->GetDest()->GetDestPtr();

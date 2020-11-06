@@ -271,5 +271,11 @@ bool NamesInfo::IsValidBodyChar(char c) {
          absl::ascii_isalnum(c);
 }
 
+absl::string_view NamesInfo::StripPrefixChars(absl::string_view str) {
+  auto i = str.find_first_not_of(NamesInfo::kOptionalPrefixChar);
+  i = std::min(i, str.length());
+  return str.substr(i);
+}
+
 }  // namespace internal
 }  // namespace argparse
