@@ -30,7 +30,6 @@ cc_library(
         "argparse/internal/argparse-argument.cc",
         "argparse/internal/argparse-argument-controller.cc",
         "argparse/internal/argparse-argument-container.cc",
-        "argparse/internal/argparse-argument-parser.cc",
         "argparse/internal/argparse-argument-holder.cc",
     ] + select({
         ":use_gflags": [ "argparse/internal/argparse-gflags-parser.cc", ],
@@ -71,12 +70,6 @@ cc_library(
         "argparse/",
     ],
 
-    defines = select({
-        ":use_gflags": ["ARGPARSE_USE_GFLAGS=1"],
-        ":use_argp": ["ARGPARSE_USE_ARGP=1"],
-        "//conditions:default": [],
-    }),
-
     deps = [
         "@com_google_absl//absl/base:log_severity",
         "@com_google_absl//absl/meta:type_traits",
@@ -86,6 +79,7 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:flat_hash_map",
     ] + select({
         ":use_gflags": ["@gflags//:gflags"],
         "//conditions:default": [],

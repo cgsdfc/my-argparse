@@ -20,7 +20,7 @@ static const char kTruncated[] = " ... (message truncated)\n";
 void Log(absl::LogSeverity severity, const char* file, int line,
          const char* format, ...) {
   char buf[kLogMsgBufSize];
-  const auto size = sizeof(buf);
+  const int size = sizeof(buf);
 
   va_list ap;
   va_start(ap, format);
