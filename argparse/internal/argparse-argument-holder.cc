@@ -57,6 +57,7 @@ void ArgumentHolder::AddArgument(std::unique_ptr<Argument> arg) {
 
 void ArgumentHolder::OnAddArgument(Argument* arg, ArgumentGroup* group) {
   CheckNamesConflict(arg);
+  ++total_argument_count_;
 }
 
 // All names should be checked, including positional names.
@@ -68,12 +69,6 @@ void ArgumentHolder::CheckNamesConflict(Argument* arg) {
     ARGPARSE_CHECK_F(ok, "Argument name %s conflict with existing names!",
                      name.data());
   }
-}
-
-std::size_t ArgumentHolder::GetTotalArgumentCount() const {
-  size_t count = 0;
-  for (auto&& group : groups_) count += group->GetArgumentCount();
-  return count;
 }
 
 }  // namespace internal

@@ -6,6 +6,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
 #include "argparse/internal/argparse-argument.h"
 
 namespace argparse {
@@ -35,6 +36,7 @@ class ArgumentGroup final : public SupportUserData {
   };
 
   absl::string_view GetTitle() const { return title_; }
+
   void SetTitle(absl::string_view title);
 
   // Add an arg to this group.
@@ -44,6 +46,7 @@ class ArgumentGroup final : public SupportUserData {
   // for (auto i = 0; i < g->GetArgumentCount(); ++i)
   //    g->GetArgument(i);
   std::size_t GetArgumentCount() const { return arguments_.size(); }
+
   Argument* GetArgument(std::size_t i);
 
   // ArgumentGroup is allocated on the heap for pointer stability.
@@ -61,7 +64,7 @@ class ArgumentGroup final : public SupportUserData {
 class ArgumentHolder final : private ArgumentGroup::Delegate {
  public:
   // Allocated directly.
-  // Two default groups will be created and delegate will be notified.
+  // Two default groups will be created.
   ArgumentHolder();
 
   // Allow fast iteration over all ArgumentGroups.
@@ -69,7 +72,6 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
 
   // 0 is for default option group. 1 is for default positional group.
   ArgumentGroup* GetArgumentGroup(std::size_t i) const {
-    ARGPARSE_DCHECK(i < GetArgumentGroupCount());
     return groups_[i].get();
   }
 
@@ -77,13 +79,14 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
   ArgumentGroup* GetDefaultGroup(ArgumentGroup::GroupIndex index) const {
     return GetArgumentGroup(index);
   }
+
   ArgumentGroup* AddArgumentGroup(std::string title);
 
   // method to add arg to default group (inferred from arg).
   void AddArgument(std::unique_ptr<Argument> arg);
 
   // Return the total number of arguments in all groups.
-  std::size_t GetTotalArgumentCount() const;
+  std::size_t GetTotalArgumentCount() const { return total_argument_count_; }
 
  private:
   // All the names of the arguments from all groups, including optional and
@@ -91,9 +94,12 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
   // ArgumentGroup, but per ArgumentHolder. Namely, arguments in different
   // groups but within the same holder will share a single namespace.
   void CheckNamesConflict(Argument* arg);
+
   // ArgumentGroup::Delegate:
   void OnAddArgument(Argument* arg, ArgumentGroup* group) override;
 
+  // Argument count sumed accross all groups.
+  unsigned total_argument_count_ = 0;
   // In many cases, there are just default groups, so make the capacity 2.
   absl::InlinedVector<std::unique_ptr<ArgumentGroup>, 2> groups_;
   // The strings are kept alive by NamesInfo.

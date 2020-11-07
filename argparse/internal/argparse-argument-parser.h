@@ -23,6 +23,7 @@ class ArgumentContainer;
 class ArgumentParser {
  public:
   virtual ~ArgumentParser() {}
+  // TODO: use setoption().
   // Receive various options from user.
   virtual void SetDescription(std::string val) {}
   virtual void SetBugReportEmail(std::string val) {}
