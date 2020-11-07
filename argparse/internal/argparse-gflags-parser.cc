@@ -126,5 +126,11 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
 GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }
 
 }  // namespace gflags_parser_internal
+
+
+std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
+  return absl::make_unique<gflags_parser_internal::GflagsParser>();
+}
+
 }  // namespace internal
 }  // namespace argparse

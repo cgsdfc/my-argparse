@@ -114,5 +114,10 @@ error_t ArgpParser::Parse(int key, char* arg, struct argp_state* state) {
 }
 
 }  // namespace argp_parser_internal
+
+std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
+  return absl::make_unique<argp_parser_internal::ArgpParser>();
+}
+
 }  // namespace internal
 }  // namespace argparse

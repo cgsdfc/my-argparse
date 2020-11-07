@@ -39,14 +39,12 @@ if (ARGPARSE_USE_GFLAGS)
                     GIT_TAG             master
                     UPDATE_DISCONNECTED 1)
     add_subdirectory(${gflags_SOURCE_DIR} ${gflags_BINARY_DIR})
-    add_definitions(-DARGPARSE_USE_GFLAGS=1)
 elseif (ARGPARSE_USE_ARGP)
     check_include_file(argp.h HAVE_ARGP_H)
     check_include_file(cxxabi.h HAVE_CXXABI_H)
     if (NOT HAVE_ARGP_H)
         message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
     endif()
-    add_definitions(-DARGPARSE_USE_ARGP=1)
 else()
     message(FATAL "A parser must be selected")
 endif()
@@ -75,7 +73,6 @@ set(ARGPARSE_SOURCE
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-container.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-controller.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument.cc
-   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-parser.cc
 )
 
 if (ARGPARSE_USE_GFLAGS)
