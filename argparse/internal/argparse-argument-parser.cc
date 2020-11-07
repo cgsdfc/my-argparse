@@ -17,6 +17,7 @@
 namespace argparse {
 namespace internal {
 
+// TODO: this way shouldn't be uesd, define this function one version per parser.
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
 #if ARGPARSE_USE_GFLAGS
   using ParserType = gflags_parser_internal::GflagsParser;

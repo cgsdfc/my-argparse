@@ -9,6 +9,8 @@
 #include "argparse/internal/argparse-argument.h"
 #include "gflags/gflags.h"
 
+#include <array>
+
 namespace argparse {
 namespace internal {
 namespace gflags_parser_internal {
@@ -41,9 +43,9 @@ void RegisterGlagsArgument(const RegisterParams& params) {
 
 template <typename... Types>
 bool IsGflagsSupportedTypeImpl(std::type_index type, TypeList<Types...>) {
-  static const std::type_index kValidTypes[] = {typeid(Types)...};
-  return std::find(std::begin(kValidTypes), std::end(kValidTypes), type) !=
-         std::end(kValidTypes);
+  const std::array<bool, sizeof...(Types)> matches{
+      {(type == typeid(Types))...}};
+  return std::find(matches.begin(), matches.end(), true);
 }
 
 bool IsGflagsSupportedType(std::type_index type) {
