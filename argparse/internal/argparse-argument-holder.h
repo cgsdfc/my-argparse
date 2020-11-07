@@ -47,7 +47,7 @@ class ArgumentGroup final : public SupportUserData {
   //    g->GetArgument(i);
   std::size_t GetArgumentCount() const { return arguments_.size(); }
 
-  Argument* GetArgument(std::size_t i);
+  Argument* GetArgument(std::size_t i) const { return arguments_[i].get(); }
 
   // ArgumentGroup is allocated on the heap for pointer stability.
   static std::unique_ptr<ArgumentGroup> Create(Delegate* delegate) {

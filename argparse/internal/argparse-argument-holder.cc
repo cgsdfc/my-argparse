@@ -10,11 +10,6 @@
 namespace argparse {
 namespace internal {
 
-Argument* ArgumentGroup::GetArgument(std::size_t i) {
-  ARGPARSE_DCHECK(i < GetArgumentCount());
-  return arguments_[i].get();
-}
-
 void ArgumentGroup::AddArgument(std::unique_ptr<Argument> arg) {
   ARGPARSE_DCHECK(arg);
   auto* arg_ptr = arg.get();
@@ -66,8 +61,10 @@ void ArgumentHolder::CheckNamesConflict(Argument* arg) {
   for (size_t i = 0; i < info->GetNameCount(); ++i) {
     auto name = info->GetName(i);
     bool ok = name_set_.insert(name).second;
-    ARGPARSE_CHECK_F(ok, "Argument name %s conflict with existing names!",
-                     name.data());
+    if (!ok)
+      ARGPARSE_INTERNAL_LOG(FATAL,
+                            "Argument name '%s' conflicts with existing names.",
+                            name.data());
   }
 }
 
