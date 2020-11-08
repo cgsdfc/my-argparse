@@ -24,7 +24,7 @@ struct ParseFloat : std::integral_constant<decltype(func), func> {
 // For std::stoi,stol,stoll,etc.
 template <typename T, T (*func)(const std::string&, std::size_t*, int)>
 struct ParseInt : std::integral_constant<decltype(func), func> {
-  static T Invoke(const std::string& str) { return func(str, 0, nullptr); }
+  static T Invoke(const std::string& str) { return func(str, nullptr, 0); }
 };
 
 template <typename T>
