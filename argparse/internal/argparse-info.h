@@ -184,7 +184,7 @@ class ActionInfo {
 class TypeInfo {
  public:
   virtual ~TypeInfo() {}
-  virtual void Run(const std::string& in, OpsResult* out) = 0;
+  virtual void Run(absl::string_view in, OpsResult* out) = 0;
 
   // Default version: parse a single string into value.
   static std::unique_ptr<TypeInfo> CreateDefault(Operations* ops);
@@ -212,7 +212,7 @@ class CallbackTypeInfo : public TypeInfo {
   explicit CallbackTypeInfo(CallbackType&& cb)
       : TypeInfo(Operations::GetInstance<T>()), callback_(std::move(cb)) {}
 
-  void Run(const std::string& in, OpsResult* out) override {
+  void Run(absl::string_view in, OpsResult* out) override {
     T return_value;
     bool rv = callback_(in, &return_value);
     *out = OpsResult(rv ? ConversionSuccess(std::move_if_noexcept(return_value))

@@ -54,15 +54,15 @@ using HasSTLNumericParseFunc =
     portability::bool_constant<bool(STLNumericParseFunc<T>{})>;
 
 template <typename T, typename STLNumericParseFunc<T>::value_type func>
-T STLParseNumericImpl(const std::string& in, std::false_type) {
+T STLParseNumericImpl(absl::string_view in, std::false_type) {
   return func(in, nullptr, 0);
 }
 template <typename T, typename STLNumericParseFunc<T>::value_type func>
-T STLParseNumericImpl(const std::string& in, std::true_type) {
+T STLParseNumericImpl(absl::string_view in, std::true_type) {
   return func(in, nullptr);
 }
 template <typename T>
-T STLParseNumeric(const std::string& in) {
+T STLParseNumeric(absl::string_view in) {
   static_assert(HasSTLNumericParseFunc<T>{}, "Must be a numeric type");
   return STLParseNumericImpl<T, STLNumericParseFunc<T>{}>(
       in, std::is_floating_point<T>{});

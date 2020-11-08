@@ -12,7 +12,7 @@
 namespace argparse {
 namespace internal {
 
-ConversionResult DefaultParseTraits<char>::Run(const std::string& in) {
+ConversionResult DefaultParseTraits<char>::Run(absl::string_view in) {
   if (in.size() != 1)
     return ConversionFailure("char must be exactly one character");
   if (!absl::ascii_isprint(in[0]))
@@ -20,15 +20,15 @@ ConversionResult DefaultParseTraits<char>::Run(const std::string& in) {
   return ConversionSuccess(in.front());
 }
 
-ConversionResult DefaultParseTraits<bool>::Run(const std::string& in) {
+ConversionResult DefaultParseTraits<bool>::Run(absl::string_view in) {
   bool val;
   if (absl::SimpleAtob(in, &val)) return ConversionSuccess(val);
   return ConversionFailure("not a valid bool value");
 }
 
-ConversionResult CFileOpenTraits::Run(const std::string& in, OpenMode mode) {
+ConversionResult CFileOpenTraits::Run(absl::string_view in, OpenMode mode) {
   auto mode_str = ModeToChars(mode);
-  auto* file = std::fopen(in.c_str(), mode_str.c_str());
+  auto* file = std::fopen(in.data(), mode_str.c_str());
   if (file) return ConversionSuccess(file);
   // TODO: make error msg simple.
   // auto error = absl::base_internal::StrError(errno);

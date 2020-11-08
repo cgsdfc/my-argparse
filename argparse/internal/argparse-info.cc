@@ -85,7 +85,7 @@ class DefaultTypeInfo final : public TypeInfo {
  public:
   using TypeInfo::TypeInfo;
 
-  void Run(const std::string& in, OpsResult* out) override {
+  void Run(absl::string_view in, OpsResult* out) override {
     ARGPARSE_DCHECK(GetOps()->IsSupported(OpsKind::kParse));
     return GetOps()->Parse(in, out);
   }
@@ -99,7 +99,7 @@ class FileTypeInfo final: public TypeInfo {
     ARGPARSE_DCHECK(mode != kModeNoMode);
   }
 
-  void Run(const std::string& in, OpsResult* out) override {
+  void Run(absl::string_view in, OpsResult* out) override {
     return GetOps()->Open(in, mode_, out);
   }
 

@@ -42,8 +42,8 @@ class Operations {
   virtual void AppendConst(OpaquePtr dest, const Any& data) = 0;
   virtual void Count(OpaquePtr dest) = 0;
   // For types:
-  virtual void Parse(const std::string& in, OpsResult* out) = 0;
-  virtual void Open(const std::string& in, OpenMode, OpsResult* out) = 0;
+  virtual void Parse(absl::string_view in, OpsResult* out) = 0;
+  virtual void Open(absl::string_view in, OpenMode, OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
   virtual absl::string_view GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
@@ -164,7 +164,7 @@ struct OpsMethod<OpsKind::kCount, T, true> {
 
 template <typename T>
 struct OpsMethod<OpsKind::kParse, T, true> {
-  static void Run(const std::string& in, OpsResult* out) {
+  static void Run(absl::string_view in, OpsResult* out) {
     auto conversion_result = ParseTraits<T>::Run(in);
     *out = OpsResult(std::move(conversion_result));
   }
@@ -172,7 +172,7 @@ struct OpsMethod<OpsKind::kParse, T, true> {
 
 template <typename T>
 struct OpsMethod<OpsKind::kOpen, T, true> {
-  static void Run(const std::string& in, OpenMode mode, OpsResult* out) {
+  static void Run(absl::string_view in, OpenMode mode, OpsResult* out) {
     auto conversion_result = OpenTraits<T>::Run(in, mode);
     *out = OpsResult(std::move(conversion_result));
   }
@@ -203,10 +203,10 @@ class OperationsImpl final : public Operations {
   void Count(OpaquePtr dest) override {
     return OpsMethod<OpsKind::kCount, T>::Run(dest);
   }
-  void Parse(const std::string& in, OpsResult* out) override {
+  void Parse(absl::string_view in, OpsResult* out) override {
     return OpsMethod<OpsKind::kParse, T>::Run(in, out);
   }
-  void Open(const std::string& in, OpenMode mode, OpsResult* out) override {
+  void Open(absl::string_view in, OpenMode mode, OpsResult* out) override {
     return OpsMethod<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {

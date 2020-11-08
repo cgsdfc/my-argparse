@@ -60,7 +60,7 @@ template <typename T>
 struct AppendTraits;
 
 template <typename T>
-using TypeCallbackPrototype = auto(const std::string&, T*) -> bool;
+using TypeCallbackPrototype = auto(absl::string_view, T*) -> bool;
 template <typename T>
 using ActionCallbackPrototype = auto(T) -> bool;
 
@@ -118,12 +118,12 @@ constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
 
 // TODO: these should goes into traits_internal.
 struct CFileOpenTraits {
-  static ConversionResult Run(const std::string& in, OpenMode mode);
+  static ConversionResult Run(absl::string_view in, OpenMode mode);
 };
 
 template <typename T>
 struct StreamOpenTraits {
-  static ConversionResult Run(const std::string& in, OpenMode mode) {
+  static ConversionResult Run(absl::string_view in, OpenMode mode) {
     auto ios_mode = ModeToStreamMode(mode);
     T stream(in, ios_mode);
     if (stream.is_open()) return ConversionSuccess<T>(std::move(stream));
@@ -200,7 +200,7 @@ struct DefaultParseTraits {
 
 template <>
 struct DefaultParseTraits<std::string> {
-  static ConversionResult Run(const std::string& in) {
+  static ConversionResult Run(absl::string_view in) {
     return ConversionSuccess(in);
   }
 };
@@ -209,18 +209,18 @@ struct DefaultParseTraits<std::string> {
 template <>
 struct DefaultParseTraits<char> {
   // static bool Run(absl::string_view in, char* out);
-  static ConversionResult Run(const std::string& in) ;
+  static ConversionResult Run(absl::string_view in) ;
 };
 
 template <>
 struct DefaultParseTraits<bool> {
-  static ConversionResult Run(const std::string& in);
+  static ConversionResult Run(absl::string_view in);
 };
 
 // TODO: use absl strings numbers, which is much faster.
 template <typename T>
 struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
-  static ConversionResult Run(const std::string& in) {
+  static ConversionResult Run(absl::string_view in) {
     try {
       return ConversionSuccess(internal::STLParseNumeric<T>(in));
     } catch (std::invalid_argument&) {
