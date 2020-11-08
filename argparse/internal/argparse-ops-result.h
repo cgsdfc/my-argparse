@@ -2,14 +2,15 @@
 
 #include <string>
 
+#include "absl/status/statusor.h"
 #include "argparse/argparse-conversion-result.h"
 #include "argparse/internal/argparse-any.h"
-
-#include "absl/status/statusor.h"
 
 // Define the OpsResult class.
 namespace argparse {
 namespace internal {
+
+using StatusOrAny = absl::StatusOr<std::unique_ptr<Any>>;
 
 struct OpsResult {
   bool has_error = false;
