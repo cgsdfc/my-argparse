@@ -5,6 +5,8 @@
 #include "argparse/argparse-conversion-result.h"
 #include "argparse/internal/argparse-any.h"
 
+#include "absl/status/statusor.h"
+
 // Define the OpsResult class.
 namespace argparse {
 namespace internal {

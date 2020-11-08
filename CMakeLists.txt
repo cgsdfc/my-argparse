@@ -90,6 +90,7 @@ target_link_libraries(argparse
     absl::str_format
     absl::base 
     absl::meta 
+    absl::status
     absl::memory)
 
 if (ARGPARSE_USE_GFLAGS)
