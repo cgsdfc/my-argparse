@@ -20,7 +20,8 @@
 #include "argparse/argparse-conversion-result.h"
 #include "argparse/argparse-open-mode.h"
 #include "argparse/internal/argparse-logging.h"
-#include "argparse/internal/argparse-numeric-parser.h"
+#include "argparse/internal/argparse-port.h"
+#include "argparse/internal/argparse-std-parse.h"
 
 // Defines various traits that users can specialize to meet their needs.
 namespace argparse {
@@ -222,7 +223,7 @@ template <typename T>
 struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
   static ConversionResult Run(absl::string_view in) {
     try {
-      return ConversionSuccess(internal::STLParseNumeric<T>(in));
+      return ConversionSuccess(internal::StdParse<T>(in));
     } catch (std::invalid_argument&) {
       return ConversionFailure("invalid numeric format");
     } catch (std::out_of_range&) {

@@ -10,6 +10,7 @@
 #include "absl/meta/type_traits.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
+#include "argparse/internal/argparse-std-parse.h"
 
 // This file implements the default parser for various basic types.
 namespace argparse {
@@ -64,6 +65,15 @@ class ParseSelect {
     }
   };
 
+  // std::stox.
+  struct StdParseProbe {
+    template <typename T>
+    static auto Invoke(absl::string_view str, T* out)
+        -> absl::enable_if_t<IsStdParseDefined<T>::value, bool> {
+      return StdParse(str, out);
+    }
+  };
+
   // is >> value.
   struct ExtractorOpProbe {
     template <typename T>
@@ -94,8 +104,9 @@ class ParseSelect {
 
  public:
   template <typename T>
-  using Apply = absl::disjunction<Probe<ArgparseParseProbe, T>,
-                                  Probe<ExtractorOpProbe, T>, std::false_type>;
+  using Apply =
+      absl::disjunction<Probe<ArgparseParseProbe, T>, Probe<StdParseProbe, T>,
+                        Probe<ExtractorOpProbe, T>, std::false_type>;
 };
 
 template <typename T>

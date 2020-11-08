@@ -44,7 +44,7 @@ cc_library(
         "argparse/internal/argparse-info.h",
         "argparse/internal/argparse-internal.h",
         "argparse/internal/argparse-ops-result.h",
-        "argparse/internal/argparse-numeric-parser.h",
+        "argparse/internal/argparse-std-parse.h",
         "argparse/internal/argparse-opaque-ptr.h",
         "argparse/internal/argparse-operations.h",
         "argparse/internal/argparse-port.h",

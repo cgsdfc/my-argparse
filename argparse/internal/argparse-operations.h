@@ -59,7 +59,7 @@ class Operations {
 // Extracted the bool value from AppendTraits.
 template <typename T>
 struct IsAppendSupported
-    : portability::bool_constant<bool(AppendTraits<T>::Run)> {};
+    : std::integral_constant<bool, bool(AppendTraits<T>::Run)> {};
 
 template <typename T, bool = IsAppendSupported<T>{}>
 struct IsAppendConstSupportedImpl;
@@ -73,7 +73,7 @@ template <typename T>
 struct IsAppendConstSupported : IsAppendConstSupportedImpl<T> {};
 
 template <typename T>
-struct IsOpenSupported : portability::bool_constant<bool(OpenTraits<T>::Run)> {
+struct IsOpenSupported : std::integral_constant<bool, bool(OpenTraits<T>::Run)> {
 };
 
 template <OpsKind Ops, typename T>
@@ -81,7 +81,7 @@ struct IsOpsSupported : std::false_type {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kStore, T>
-    : portability::bool_constant<std::is_copy_assignable<T>{} ||
+    : std::integral_constant<bool, std::is_copy_assignable<T>{} ||
                                  std::is_move_assignable<T>{}> {};
 
 template <typename T>
@@ -100,7 +100,7 @@ struct IsOpsSupported<OpsKind::kCount, T>
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kParse, T>
-    : portability::bool_constant<bool(ParseTraits<T>::Run)> {};
+    : std::integral_constant<bool, bool(ParseTraits<T>::Run)> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T> : IsOpenSupported<T> {};
