@@ -8,6 +8,8 @@
 #include <ios>
 #include <string>
 
+#include "absl/strings/string_view.h"
+
 namespace argparse {
 
 // File open mode. This is not enum class since we do & | on it.
@@ -20,7 +22,7 @@ enum OpenMode {
   kModeBinary = 16,
 };
 
-OpenMode CharsToMode(const char* str);
+OpenMode CharsToMode(absl::string_view str);
 std::string ModeToChars(OpenMode mode);
 
 OpenMode StreamModeToMode(std::ios_base::openmode stream_mode);

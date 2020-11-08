@@ -19,7 +19,7 @@ std::string ModeToChars(OpenMode mode) {
 }
 
 std::ios_base::openmode ModeToStreamMode(OpenMode m) {
-  std::ios_base::openmode out;
+  std::ios_base::openmode out{};
   if (m & kModeRead) out |= std::ios_base::in;
   if (m & kModeWrite) out |= std::ios_base::out;
   if (m & kModeAppend) out |= std::ios_base::app;
@@ -38,11 +38,10 @@ OpenMode StreamModeToMode(std::ios_base::openmode stream_mode) {
   return static_cast<OpenMode>(m);
 }
 
-OpenMode CharsToMode(const char* str) {
-  ARGPARSE_DCHECK(str);
-  int m;
-  for (; *str; ++str) {
-    switch (*str) {
+OpenMode CharsToMode(absl::string_view str) {
+  int m = kModeNoMode;
+  for (char ch : str) {
+    switch (ch) {
       case 'r':
         m |= kModeRead;
         break;
@@ -64,8 +63,8 @@ OpenMode CharsToMode(const char* str) {
         else if (m & kModeRead)
           m |= kModeWrite;
         else
-          ARGPARSE_DCHECK_F(false,
-                            "Valid usage of '+' are 'a+', 'w+' and 'r+'");
+          ARGPARSE_INTERNAL_LOG(FATAL,
+                                "Valid usage of '+' are 'a+', 'w+' and 'r+'");
         break;
     }
   }
