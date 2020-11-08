@@ -180,7 +180,7 @@ struct OpsMethod<OpsKind::kOpen, T, true> {
 
 template <typename T, std::size_t... OpsIndices>
 bool OpsIsSupportedImpl(OpsKind ops, absl::index_sequence<OpsIndices...>) {
-  static constexpr bool kFlagArray[] = {
+  constexpr bool kFlagArray[] = {
       (IsOpsSupported<static_cast<OpsKind>(OpsIndices), T>{})...};
   return kFlagArray[std::size_t(ops)];
 }
@@ -210,8 +210,8 @@ class OperationsImpl final : public Operations {
     return OpsMethod<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {
-    constexpr auto kMaxOpsKind = static_cast<std::size_t>(OpsKind::kMaxOpsKind);
-    return OpsIsSupportedImpl<T>(ops, absl::make_index_sequence<kMaxOpsKind>{});
+    return OpsIsSupportedImpl<T>(
+        ops, absl::make_index_sequence<size_t(OpsKind::kMaxOpsKind)>{});
   }
   absl::string_view GetTypeName() override { return TypeName<T>(); }
   std::string GetTypeHint() override { return TypeHintTraits<T>::Run(); }
