@@ -3,9 +3,8 @@
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
-#include "argparse/argparse-open-mode.h"
+#include "argparse/internal/argparse-open-traits.h"
 
-#include "argparse/internal/argparse-logging.h"
 
 namespace argparse {
 

@@ -62,8 +62,8 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR})
 
 set(ARGPARSE_SOURCE 
-   ${CMAKE_SOURCE_DIR}/argparse/argparse-open-mode.cc
    ${CMAKE_SOURCE_DIR}/argparse/argparse-traits.cc
+   ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-open-traits.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-logging.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-info.cc
    ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argument-builder.cc

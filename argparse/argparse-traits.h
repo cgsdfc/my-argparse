@@ -18,7 +18,7 @@
 #endif
 
 #include "argparse/argparse-conversion-result.h"
-#include "argparse/argparse-open-mode.h"
+#include "argparse/internal/argparse-open-traits.h"
 #include "argparse/internal/argparse-logging.h"
 #include "argparse/internal/argparse-port.h"
 #include "argparse/internal/argparse-std-parse.h"

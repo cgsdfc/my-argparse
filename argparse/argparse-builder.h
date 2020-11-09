@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include "argparse/argparse-open-mode.h"
 #include "argparse/internal/argparse-internal.h"
 
 namespace argparse {
