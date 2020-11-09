@@ -104,6 +104,7 @@ add_executable(argparse_test
     argparse/internal/argparse-any_test.cc
     argparse/internal/argparse-opaque-ptr_test.cc
     argparse/internal/argparse-std-parse_test.cc
+    argparse/internal/argparse-parse-traits_test.cc
     argparse/argparse-builder_test.cc
     argparse/argparse-conversion-result_test.cc
 )

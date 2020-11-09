@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "absl/meta/type_traits.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/string_view.h"
 #include "argparse/internal/argparse-std-parse.h"
@@ -20,16 +21,16 @@ namespace parse_traits_internal {
 
 // Default implementation of ArgparseParse().
 
-bool ArgparseParse(absl::string_view str, bool* out) {
+inline bool ArgparseParse(absl::string_view str, bool* out) {
   return absl::SimpleAtob(str, out);
 }
 
-bool ArgparseParse(absl::string_view str, std::string* out) {
+inline bool ArgparseParse(absl::string_view str, std::string* out) {
   *out = std::string(str);
   return true;
 }
 
-bool ArgparseParse(absl::string_view str, char* out) {
+inline bool ArgparseParse(absl::string_view str, char* out) {
   if (str.size() == 1 && absl::ascii_isprint(str.front())) {
     *out = str.front();
     return true;
@@ -37,20 +38,20 @@ bool ArgparseParse(absl::string_view str, char* out) {
   return false;
 }
 
-bool ArgparseParse(absl::string_view str, float* out) {
+inline bool ArgparseParse(absl::string_view str, float* out) {
   return absl::SimpleAtof(str, out);
 }
 
-bool ArgparseParse(absl::string_view str, double* out) {
+inline bool ArgparseParse(absl::string_view str, double* out) {
   return absl::SimpleAtod(str, out);
 }
 
 template <typename int_type>
 absl::enable_if_t<std::is_integral<int_type>::value &&
                       (sizeof(int_type) == 4 || sizeof(int_type) == 8),
-                  bool> // Ensure `int_type` is a 4 or 8 bytes integer type.
+                  bool>  // Ensure `int_type` is a 4 or 8 bytes integer type.
 ArgparseParse(absl::string_view str, int_type* out) {
-  return absl::SimpelAtoi(str, out);
+  return absl::SimpleAtoi(str, out);
 }
 
 // Select a proper Parse() function for type `T`.
@@ -81,7 +82,7 @@ class ParseSelect {
         std::is_same<std::istream&, decltype(std::declval<std::istream&>() >>
                                              std::declval<T&>())>::value,
         bool> {
-      std::istringstream iss(std::string(str));
+      std::istringstream iss{std::string(str)};
       iss >> *out;
       return iss.good();
     }
@@ -91,12 +92,12 @@ class ParseSelect {
   struct Probe : Parse {
    private:
     template <typename>
-    std::false_type Test(char);
+    static std::false_type Test(char);
 
     template <typename P,
               typename = decltype(P::Invoke(std::declval<absl::string_view>(),
                                             std::declval<T*>()))>
-    std::true_type Test(int);
+    static std::true_type Test(int);
 
    public:
     static constexpr bool value = decltype(Test<Parse>(0))::value;
@@ -110,18 +111,18 @@ class ParseSelect {
 };
 
 template <typename T>
-struct IsParseSupported
+struct IsParseDefined
     : std::integral_constant<bool, ParseSelect::template Apply<T>::value> {};
 
 template <typename T>
-absl::enable_if_t<IsParseSupported<T>::value, bool> Parse(absl::string_view str,
-                                                          T* out) {
+absl::enable_if_t<IsParseDefined<T>::value, bool> Parse(absl::string_view str,
+                                                        T* out) {
   return ParseSelect::template Apply<T>::Invoke(str, out);
 }
 
 }  // namespace parse_traits_internal
 
-using parse_traits_internal::IsParseSupported;
+using parse_traits_internal::IsParseDefined;
 using parse_traits_internal::Parse;
 
 }  // namespace internal
