@@ -22,7 +22,7 @@ config_setting(
 cc_library(
     name = "argparse",
     srcs = [
-        "argparse/argparse-open-mode.cc",
+        "argparse/internal/argparse-open-traits.cc",
         "argparse/internal/argparse-logging.cc",
         "argparse/internal/argparse-info.cc",
         "argparse/internal/argparse-port.cc",
@@ -55,7 +55,8 @@ cc_library(
         "argparse/internal/argparse-argument-container.h",
         "argparse/internal/argparse-argument-controller.h",
         "argparse/internal/argparse-argument-parser.h",
-        "argparse/argparse-open-mode.h",
+        "argparse/internal/argparse-open-traits.h",
+        "argparse/internal/argparse-parse-traits.h",
         "argparse/argparse-builder.h",
         "argparse/argparse-conversion-result.h",
         "argparse/argparse-traits.h",
@@ -92,7 +93,7 @@ cc_test(
     size = "small",
     srcs = [
         "argparse/argparse-builder_test.cc",
-        "argparse/argparse-test-helper.h",
+        "argparse/internal/argparse-test-helper.h",
         "argparse/argparse-conversion-result_test.cc",
         "argparse/internal/argparse-opaque-ptr_test.cc",
     ],

@@ -11,14 +11,14 @@ int main(int argc, char const *argv[]) {
   auto parser = argparse::ArgumentParser();
 
   // This example uses the output of the command `clang-format --help`.
-  parser.SetDescription(
+  parser.Description(
       "OVERVIEW: A tool to format "
       "C/C++/Java/JavaScript/Objective-C/Protobuf/C# code.");
 
   bool Werror;
   parser.AddArgument(Argument("--Werror", &Werror,
                               "If set, changes formatting warnings to errors.")
-                         .SetDefaultValue(false));
+                         .DefaultValue(false));
 
   bool Wno_error;
   parser.AddArgument(
@@ -26,7 +26,7 @@ int main(int argc, char const *argv[]) {
                "If set, unknown format options are only warned about. "
                "This can be used to enable formatting, even if the "
                "configuration contains unknown (newer) options.")
-          .SetDefaultValue(false));
+          .DefaultValue(false));
 
   std::string assume_filename;
   parser.AddArgument(
@@ -34,13 +34,13 @@ int main(int argc, char const *argv[]) {
                "Override filename used to determine the language. "
                "When reading from stdin, clang-format assumes this filename to "
                "determine the language.")
-          .SetDefaultValue(""));
+          .DefaultValue(""));
 
   int cursor;
   parser.AddArgument(Argument("--cursor", &cursor,
                               "The position of the cursor when invoking "
                               "clang-format from an editor integration")
-                         .SetDefaultValue(0));
+                         .DefaultValue(0));
 
   parser.ParseArgs(argc, argv);
 

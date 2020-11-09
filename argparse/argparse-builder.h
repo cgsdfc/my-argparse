@@ -28,7 +28,6 @@ class SimpleBuilder {
 
   // Default impl of Build(). Derived can override this.
   std::unique_ptr<ObjectType> Build() { return std::move(object_); }
-  bool HasObject() const { return object_ != nullptr; }
 
  private:
   friend class BuilderAccessor;
@@ -45,7 +44,7 @@ struct BuilderAccessor {
 
 // Call this function on a builder object to obtain the built object.
 template <typename Builder>
-auto GetBuiltObject(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
+auto Build(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
   return BuilderAccessor::Build(b);
 }
 
@@ -117,24 +116,25 @@ class FileType final {
 };
 
 namespace builder_internal {
+
 // Component of a type-saft Argument's methods.
 template <typename Derived>
 class BasicMethods {
  public:
-  Derived& SetHelp(std::string val) {
+  Derived& Help(std::string val) {
     builder()->SetHelp(std::move(val));
     return derived_this();
   }
-  Derived& SetRequired(bool val) {
+  Derived& Required(bool val) {
     builder()->SetRequired(val);
     return derived_this();
   }
-  Derived& SetMetaVar(std::string val) {
+  Derived& MetaVar(std::string val) {
     builder()->SetMetaVar(std::move(val));
     return derived_this();
   }
-  Derived& SetNumArgs(NumArgs num_args) {
-    builder()->SetNumArgs(GetBuiltObject(&num_args));
+  Derived& NumArgs(NumArgs num_args) {
+    builder()->SetNumArgs(Build(&num_args));
     return derived_this();
   }
 
@@ -146,24 +146,24 @@ class BasicMethods {
 template <typename T, typename Derived>
 class DestTypeMethods {
  public:
-  Derived& SetConstValue(T&& value) {
+  Derived& ConstValue(T&& value) {
     builder()->SetConstValue(internal::MakeAny<T>(std::move(value)));
     return derived_this();
   }
-  Derived& SetDefaultValue(T&& value) {
+  Derived& DefaultValue(T&& value) {
     builder()->SetDefaultValue(internal::MakeAny<T>(std::move(value)));
     return derived_this();
   }
-  Derived& SetAction(ActionCallback<T>&& func) {
+  Derived& Action(ActionCallback<T>&& func) {
     builder()->SetActionInfo(
         internal::ActionInfo::CreateCallbackAction(std::move(func)));
     return derived_this();
   }
-  Derived& SetAction(const char* str) {
+  Derived& Action(const char* str) {
     builder()->SetActionString(str);
     return derived_this();
   }
-  Derived& SetType(TypeCallback<T>&& func) {
+  Derived& Type(TypeCallback<T>&& func) {
     builder()->SetTypeInfo(
         internal::TypeInfo::CreateCallbackType(std::move(func)));
     return derived_this();
@@ -178,11 +178,11 @@ template <typename T, typename Derived,
           typename ValueType = internal::ValueTypeOf<T>>
 class ValueTypeMethods {
  public:
-  Derived& SetValueTypeConst(ValueType&& value) {
+  Derived& ValueTypeConst(ValueType&& value) {
     builder()->SetConstValue(internal::MakeAny<ValueType>(std::move(value)));
     return derived_this();
   }
-  Derived& SetValueType(TypeCallback<ValueType>&& func) {
+  Derived& ValueTypeCallback(TypeCallback<ValueType>&& func) {
     builder()->SetTypeInfo(
         internal::TypeInfo::CreateCallbackType(std::move(func)));
     return derived_this();
@@ -199,8 +199,8 @@ class ValueTypeMethods<T, Derived, void> {};
 template <typename T, typename Derived, bool = internal::IsOpenSupported<T>{}>
 class FileTypeMethods {
  public:
-  Derived& SetFileType(FileType file_type) {
-    builder()->SetTypeFileType(GetBuiltObject(&file_type));
+  Derived& FileType(FileType file_type) {
+    builder()->SetTypeFileType(Build(&file_type));
     return derived_this();
   }
 
@@ -222,7 +222,7 @@ class ArgumentBuilder final : public BasicMethods<ArgumentBuilder<T>>,
   ArgumentBuilder(Names names, T* ptr, absl::string_view help)
       : builder_(internal::ArgumentBuilder::Create()) {
     GetBuilder()->SetDest(internal::DestInfo::CreateFromPtr(ptr));
-    GetBuilder()->SetNames(GetBuiltObject(&names));
+    GetBuilder()->SetNames(builder_internal::Build(&names));
     GetBuilder()->SetHelp(std::string(help));
   }
 
@@ -234,9 +234,7 @@ class ArgumentBuilder final : public BasicMethods<ArgumentBuilder<T>>,
   friend class BuilderAccessor;
 
   // For being a Builder.
-  std::unique_ptr<internal::Argument> Build() {
-    return GetBuilder()->Build();
-  }
+  std::unique_ptr<internal::Argument> Build() { return GetBuilder()->Build(); }
   // For CRTP base classes.
   internal::ArgumentBuilder* GetBuilder() { return builder_.get(); }
   std::unique_ptr<internal::ArgumentBuilder> builder_;
@@ -258,7 +256,7 @@ class SupportAddArgument {
   template <typename T>
   Derived& AddArgument(T&& arg) {
     auto* self = static_cast<Derived*>(this);
-    self->AddArgumentImpl(GetBuiltObject(&arg));
+    self->AddArgumentImpl(Build(&arg));
     return *self;
   }
 };
@@ -317,11 +315,11 @@ class SubCommand final
     this->SetObject(internal::SubCommand::Create(std::move(name)));
     if (help) this->GetObject()->SetHelp(help);
   }
-  SubCommand& SetAliases(std::vector<std::string> als) {
+  SubCommand& Aliases(std::vector<std::string> als) {
     this->GetObject()->SetAliases(std::move(als));
     return *this;
   }
-  SubCommand& SetHelp(std::string val) {
+  SubCommand& Help(std::string val) {
     this->GetObject()->SetHelp(std::move(val));
     return *this;
   }
@@ -335,7 +333,7 @@ class SubCommandGroupProxy final {
   SubCommandGroupProxy(internal::SubCommandGroup* group) : group_(group) {}
   template <typename SubCommandT>
   SubCommandProxy AddParser(SubCommandT&& cmd) {
-    return group_->AddSubCommand(builder_internal::GetBuiltObject(&cmd));
+    return group_->AddSubCommand(builder_internal::Build(&cmd));
   }
 
  private:
@@ -346,25 +344,25 @@ class SubCommandGroup final
     : private builder_internal::SimpleBuilder<internal::SubCommandGroup> {
  public:
   SubCommandGroup() { this->SetObject(internal::SubCommandGroup::Create()); }
-  SubCommandGroup& SetTitle(std::string val) {
+  SubCommandGroup& Title(std::string val) {
     this->GetObject()->SetTitle(std::move(val));
     return *this;
   }
-  SubCommandGroup& SetDescription(std::string val) {
+  SubCommandGroup& Description(std::string val) {
     this->GetObject()->SetDescription(std::move(val));
     return *this;
   }
-  SubCommandGroup& SetMetaVar(std::string val) {
+  SubCommandGroup& MetaVar(std::string val) {
     this->GetObject()->SetMetaVar(std::move(val));
     return *this;
   }
-  SubCommandGroup& SetHelp(std::string val) {
+  SubCommandGroup& Help(std::string val) {
     this->GetObject()->SetHelpDoc(std::move(val));
     return *this;
   }
   // TODO: this should be stronge-typed.
-  SubCommandGroup& SetDest(builder_internal::Dest val) {
-    this->GetObject()->SetDest(builder_internal::GetBuiltObject(&val));
+  SubCommandGroup& Dest(builder_internal::Dest val) {
+    this->GetObject()->SetDest(builder_internal::Build(&val));
     return *this;
   }
 
@@ -377,27 +375,27 @@ class ArgumentParser final
  public:
   ArgumentParser() = default;
 
-  ArgumentParser& SetDescription(std::string val) {
+  ArgumentParser& Description(std::string val) {
     controller_.SetOption(internal::ParserOptions::kDescription,
                           std::move(val));
     return *this;
   }
-  ArgumentParser& SetProgramVersion(std::string val) {
+  ArgumentParser& ProgramVersion(std::string val) {
     controller_.SetOption(internal::ParserOptions::kProgramVersion,
                           std::move(val));
     return *this;
   }
-  ArgumentParser& SetBugReportEmail(std::string val) {
+  ArgumentParser& BugReportEmail(std::string val) {
     controller_.SetOption(internal::ParserOptions::kBugReportEmail,
                           std::move(val));
     return *this;
   }
-  ArgumentParser& SetProgramName(std::string& val) {
+  ArgumentParser& ProgramName(std::string& val) {
     controller_.SetOption(internal::ParserOptions::kProgramName,
                           std::move(val));
     return *this;
   }
-  ArgumentParser& SetProgramUsage(std::string& val) {
+  ArgumentParser& ProgramUsage(std::string& val) {
     controller_.SetOption(internal::ParserOptions::kProgramUsage,
                           std::move(val));
     return *this;
@@ -417,7 +415,7 @@ class ArgumentParser final
   }
   template <typename SubCommandGroupT>
   SubCommandGroupProxy AddSubParsers(SubCommandGroupT&& group) {
-    return AddSubCommandGroupImpl(builder_internal::GetBuiltObject(&group));
+    return AddSubCommandGroupImpl(builder_internal::Build(&group));
   }
 
  private:
