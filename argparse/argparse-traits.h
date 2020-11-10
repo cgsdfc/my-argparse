@@ -174,46 +174,6 @@ struct DefaultFormatTraits<T, absl::enable_if_t<has_insert_operator<T>{}>>
 #endif
 // Handling for file obj..
 
-// The default impl for the types we know (bulitin-types like int).
-// This traits shouldn't be overriden by users.
-template <typename T, typename SFINAE = void>
-struct DefaultParseTraits {
-  static constexpr bool Run = false;
-};
-
-template <>
-struct DefaultParseTraits<std::string> {
-  static ConversionResult Run(absl::string_view in) {
-    return ConversionSuccess(in);
-  }
-};
-
-// char is an unquoted single character.
-template <>
-struct DefaultParseTraits<char> {
-  // static bool Run(absl::string_view in, char* out);
-  static ConversionResult Run(absl::string_view in);
-};
-
-template <>
-struct DefaultParseTraits<bool> {
-  static ConversionResult Run(absl::string_view in);
-};
-
-// TODO: use absl strings numbers, which is much faster.
-template <typename T>
-struct DefaultParseTraits<T, absl::enable_if_t<internal::IsNumericType<T>{}>> {
-  static ConversionResult Run(absl::string_view in) {
-    try {
-      return ConversionSuccess(internal::StdParse<T>(in));
-    } catch (std::invalid_argument&) {
-      return ConversionFailure("invalid numeric format");
-    } catch (std::out_of_range&) {
-      return ConversionFailure("numeric value out of range");
-    }
-  }
-};
-
 // Default is the rules impl'ed by us:
 // 1. fall back to TypeName() -- demanged name of T.
 // 2. MetaTypeHint, for file, string and list[T], general types..
@@ -299,12 +259,6 @@ struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
 // 3. Fall back to a format: <Type object>.
 template <typename T>
 struct FormatTraits : internal::DefaultFormatTraits<T> {};
-
-// By default, use the traits defined by the library for builtin types.
-// The user can specialize this to provide traits for their custom types
-// or override global (existing) types.
-template <typename T>
-struct ParseTraits : internal::DefaultParseTraits<T> {};
 
 // String.
 template <>

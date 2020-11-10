@@ -13,6 +13,7 @@
 #include "argparse/argparse-traits.h"
 #include "argparse/internal/argparse-any.h"
 #include "argparse/internal/argparse-opaque-ptr.h"
+#include "argparse/internal/argparse-parse-traits.h"
 #include "argparse/internal/argparse-ops-result.h"
 
 // This file impls Operations class using the traits defined by users.
@@ -96,8 +97,7 @@ struct IsOpsSupported<OpsKind::kCount, T>
                                        !std::is_same<T, bool>{}> {};
 
 template <typename T>
-struct IsOpsSupported<OpsKind::kParse, T>
-    : std::integral_constant<bool, bool(ParseTraits<T>::Run)> {};
+struct IsOpsSupported<OpsKind::kParse, T> : internal::IsParseDefined<T> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kOpen, T> : IsOpenDefined<T> {};
@@ -162,8 +162,7 @@ struct OpsMethod<OpsKind::kCount, T, true> {
 template <typename T>
 struct OpsMethod<OpsKind::kParse, T, true> {
   static void Run(absl::string_view in, OpsResult* out) {
-    auto conversion_result = ParseTraits<T>::Run(in);
-    *out = OpsResult(std::move(conversion_result));
+    //TODO:
   }
 };
 
@@ -171,8 +170,7 @@ template <typename T>
 struct OpsMethod<OpsKind::kOpen, T, true> {
   static void Run(absl::string_view in, absl::string_view mode,
                   OpsResult* out) {
-    // auto conversion_result = OpenTraits<T>::Run(in, mode);
-    // *out = OpsResult(std::move(conversion_result));
+    // TODO:
   }
 };
 

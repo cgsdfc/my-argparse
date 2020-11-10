@@ -22,7 +22,6 @@ config_setting(
 cc_library(
     name = "argparse",
     srcs = [
-        "argparse/internal/argparse-open-traits.cc",
         "argparse/internal/argparse-logging.cc",
         "argparse/internal/argparse-info.cc",
         "argparse/internal/argparse-port.cc",
