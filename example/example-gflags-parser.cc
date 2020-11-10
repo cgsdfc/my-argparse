@@ -15,6 +15,9 @@ int main(int argc, char const *argv[]) {
       "OVERVIEW: A tool to format "
       "C/C++/Java/JavaScript/Objective-C/Protobuf/C# code.");
 
+  FILE* file;
+  parser.AddArgument(Argument("--file", &file).FileType("w"));
+
   bool Werror;
   parser.AddArgument(Argument("--Werror", &Werror,
                               "If set, changes formatting warnings to errors.")

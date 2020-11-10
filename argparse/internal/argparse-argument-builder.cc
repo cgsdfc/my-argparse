@@ -68,7 +68,7 @@ std::unique_ptr<Argument> ArgumentBuilder::Build() {
     if (dest)
       ops = ActionNeedsValueType(action_kind_) ? dest->GetValueTypeOps()
                                                : dest->GetOperations();
-    auto info = open_mode_ == kModeNoMode
+    auto info = open_mode_.empty() 
                     ? TypeInfo::CreateDefault(ops)
                     : TypeInfo::CreateFileType(ops, open_mode_);
     arg_->SetType(std::move(info));

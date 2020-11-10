@@ -92,11 +92,11 @@ class DefaultTypeInfo final : public TypeInfo {
 };
 
 // TypeInfo that opens a file according to some mode.
-class FileTypeInfo final: public TypeInfo {
+class FileTypeInfo final : public TypeInfo {
  public:
-  FileTypeInfo(Operations* ops, OpenMode mode) : TypeInfo(ops), mode_(mode) {
+  FileTypeInfo(Operations* ops, absl::string_view mode)
+      : TypeInfo(ops), mode_(mode) {
     ARGPARSE_DCHECK(ops->IsSupported(OpsKind::kOpen));
-    ARGPARSE_DCHECK(mode != kModeNoMode);
   }
 
   void Run(absl::string_view in, OpsResult* out) override {
@@ -104,7 +104,7 @@ class FileTypeInfo final: public TypeInfo {
   }
 
  private:
-  OpenMode mode_;
+  absl::string_view mode_;
 };
 
 // The base class for all actions that manipulate around a dest.
@@ -185,7 +185,7 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateDefault(Operations* ops) {
 }
 
 std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(Operations* ops,
-                                                   OpenMode mode) {
+                                                   absl::string_view mode) {
   return absl::make_unique<FileTypeInfo>(ops, mode);
 }
 
@@ -236,7 +236,8 @@ bool NamesInfo::IsValidOptionalName(absl::string_view name) {
   return std::all_of(name.begin() + 2, name.end(), &IsValidBodyChar);
 }
 
-std::unique_ptr<NamesInfo> NamesInfo::CreatePositionalName(absl::string_view name) {
+std::unique_ptr<NamesInfo> NamesInfo::CreatePositionalName(
+    absl::string_view name) {
   return absl::WrapUnique(new NamesInfo(name));
 }
 
@@ -249,7 +250,6 @@ std::unique_ptr<NamesInfo> NamesInfo::CreateSingleName(absl::string_view name) {
   return IsValidPositionalName(name) ? CreatePositionalName(name)
                                      : CreateOptionalNames({name});
 }
-
 
 NamesInfo::NamesInfo(absl::string_view name) : is_optional_(false) {
   ARGPARSE_CHECK_F(IsValidPositionalName(name),

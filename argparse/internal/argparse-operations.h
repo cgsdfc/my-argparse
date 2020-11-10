@@ -43,7 +43,8 @@ class Operations {
   virtual void Count(OpaquePtr dest) = 0;
   // For types:
   virtual void Parse(absl::string_view in, OpsResult* out) = 0;
-  virtual void Open(absl::string_view in, OpenMode, OpsResult* out) = 0;
+  virtual void Open(absl::string_view in, absl::string_view mode,
+                    OpsResult* out) = 0;
   virtual bool IsSupported(OpsKind ops) = 0;
   virtual absl::string_view GetTypeName() = 0;
   virtual std::string GetTypeHint() = 0;
@@ -72,17 +73,13 @@ struct IsAppendConstSupportedImpl<T, true>
 template <typename T>
 struct IsAppendConstSupported : IsAppendConstSupportedImpl<T> {};
 
-template <typename T>
-struct IsOpenSupported : std::integral_constant<bool, bool(OpenTraits<T>::Run)> {
-};
-
 template <OpsKind Ops, typename T>
 struct IsOpsSupported : std::false_type {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kStore, T>
     : std::integral_constant<bool, std::is_copy_assignable<T>{} ||
-                                 std::is_move_assignable<T>{}> {};
+                                       std::is_move_assignable<T>{}> {};
 
 template <typename T>
 struct IsOpsSupported<OpsKind::kStoreConst, T> : std::is_copy_assignable<T> {};
@@ -103,7 +100,7 @@ struct IsOpsSupported<OpsKind::kParse, T>
     : std::integral_constant<bool, bool(ParseTraits<T>::Run)> {};
 
 template <typename T>
-struct IsOpsSupported<OpsKind::kOpen, T> : IsOpenSupported<T> {};
+struct IsOpsSupported<OpsKind::kOpen, T> : IsOpenDefined<T> {};
 
 // Put the code used only in this module here.
 namespace operations_internal {
@@ -172,16 +169,17 @@ struct OpsMethod<OpsKind::kParse, T, true> {
 
 template <typename T>
 struct OpsMethod<OpsKind::kOpen, T, true> {
-  static void Run(absl::string_view in, OpenMode mode, OpsResult* out) {
-    auto conversion_result = OpenTraits<T>::Run(in, mode);
-    *out = OpsResult(std::move(conversion_result));
+  static void Run(absl::string_view in, absl::string_view mode,
+                  OpsResult* out) {
+    // auto conversion_result = OpenTraits<T>::Run(in, mode);
+    // *out = OpsResult(std::move(conversion_result));
   }
 };
 
 template <typename T, std::size_t... OpsIndices>
 bool OpsIsSupportedImpl(OpsKind ops, absl::index_sequence<OpsIndices...>) {
   constexpr bool kFlagArray[] = {
-      (IsOpsSupported<static_cast<OpsKind>(OpsIndices), T>{})...};
+      (IsOpsSupported<static_cast<OpsKind>(OpsIndices), T>::value)...};
   return kFlagArray[std::size_t(ops)];
 }
 
@@ -206,7 +204,8 @@ class OperationsImpl final : public Operations {
   void Parse(absl::string_view in, OpsResult* out) override {
     return OpsMethod<OpsKind::kParse, T>::Run(in, out);
   }
-  void Open(absl::string_view in, OpenMode mode, OpsResult* out) override {
+  void Open(absl::string_view in, absl::string_view mode,
+            OpsResult* out) override {
     return OpsMethod<OpsKind::kOpen, T>::Run(in, mode, out);
   }
   bool IsSupported(OpsKind ops) override {
@@ -236,7 +235,7 @@ struct GetValueTypeOperations<T, false> {
 
 template <typename T>
 struct GetValueTypeOperations<T, true> {
-  static Operations* Run() { 
+  static Operations* Run() {
     using ValueType = ValueTypeOf<T>;
     return GetOperationsInstance<ValueType>();
   }

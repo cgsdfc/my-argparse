@@ -190,7 +190,7 @@ class TypeInfo {
   static std::unique_ptr<TypeInfo> CreateDefault(Operations* ops);
   // Open a file.
   static std::unique_ptr<TypeInfo> CreateFileType(Operations* ops,
-                                                  OpenMode mode);
+                                                  absl::string_view mode);
 
   template <typename T>
   static std::unique_ptr<TypeInfo> CreateCallbackType(TypeCallback<T> cb);

@@ -103,18 +103,6 @@ class AnyValue : private builder_internal::SimpleBuilder<internal::Any> {
   friend class builder_internal::BuilderAccessor;
 };
 
-class FileType final {
- public:
-  explicit FileType(const char* mode) : mode_(CharsToMode(mode)) {}
-  explicit FileType(std::ios_base::openmode mode)
-      : mode_(StreamModeToMode(mode)) {}
-
- private:
-  friend class builder_internal::BuilderAccessor;
-  OpenMode Build() const { return mode_; }
-  OpenMode mode_;
-};
-
 namespace builder_internal {
 
 // Component of a type-saft Argument's methods.
@@ -196,11 +184,11 @@ class ValueTypeMethods {
 template <typename T, typename Derived>
 class ValueTypeMethods<T, Derived, void> {};
 
-template <typename T, typename Derived, bool = internal::IsOpenSupported<T>{}>
+template <typename T, typename Derived, bool = internal::IsOpenDefined<T>{}>
 class FileTypeMethods {
  public:
-  Derived& FileType(FileType file_type) {
-    builder()->SetTypeFileType(Build(&file_type));
+  Derived& FileType(absl::string_view mode) {
+    builder()->SetTypeFileType(mode);
     return derived_this();
   }
 

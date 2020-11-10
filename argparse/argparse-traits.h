@@ -18,8 +18,8 @@
 #endif
 
 #include "argparse/argparse-conversion-result.h"
-#include "argparse/internal/argparse-open-traits.h"
 #include "argparse/internal/argparse-logging.h"
+#include "argparse/internal/argparse-open-traits.h"
 #include "argparse/internal/argparse-port.h"
 #include "argparse/internal/argparse-std-parse.h"
 
@@ -114,24 +114,6 @@ std::string TypeHint();
 template <typename T>
 using ValueTypeOf = typename AppendTraits<T>::ValueType;
 
-// OpenTraits
-constexpr const char kDefaultOpenFailureMsg[] = "Failed to open file";
-
-// TODO: these should goes into traits_internal.
-struct CFileOpenTraits {
-  static ConversionResult Run(absl::string_view in, OpenMode mode);
-};
-
-template <typename T>
-struct StreamOpenTraits {
-  static ConversionResult Run(absl::string_view in, OpenMode mode) {
-    auto ios_mode = ModeToStreamMode(mode);
-    T stream(in, ios_mode);
-    if (stream.is_open()) return ConversionSuccess<T>(std::move(stream));
-    return ConversionFailure(kDefaultOpenFailureMsg);
-  }
-};
-
 // TODO: use StrCat instead of streams.
 template <typename T>
 struct DummyFormatTraits {
@@ -210,7 +192,7 @@ struct DefaultParseTraits<std::string> {
 template <>
 struct DefaultParseTraits<char> {
   // static bool Run(absl::string_view in, char* out);
-  static ConversionResult Run(absl::string_view in) ;
+  static ConversionResult Run(absl::string_view in);
 };
 
 template <>
@@ -309,21 +291,6 @@ template <typename T>
 struct AppendTraits<std::list<T>> : DefaultAppendTraits<std::list<T>> {};
 template <typename T>
 struct AppendTraits<std::deque<T>> : DefaultAppendTraits<std::deque<T>> {};
-
-// OpenTraits tells how to open a file of type T.
-template <typename T>
-struct OpenTraits {
-  static constexpr bool Run = false;
-};
-
-template <>
-struct OpenTraits<FILE*> : internal::CFileOpenTraits {};
-template <>
-struct OpenTraits<std::fstream> : internal::StreamOpenTraits<std::fstream> {};
-template <>
-struct OpenTraits<std::ifstream> : internal::StreamOpenTraits<std::ifstream> {};
-template <>
-struct OpenTraits<std::ofstream> : internal::StreamOpenTraits<std::ofstream> {};
 
 // The rules for FormatTraits are:
 // 1. If fmtlib is found, use its functionality.

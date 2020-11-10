@@ -43,7 +43,7 @@ class ArgumentBuilder final {
     if (info) arg_->SetAction(std::move(info));
   }
 
-  void SetTypeFileType(OpenMode mode) { open_mode_ = mode; }
+  void SetTypeFileType(absl::string_view mode) { open_mode_ = mode; }
 
   void SetNumArgs(std::unique_ptr<NumArgsInfo> info) {
     if (info) arg_->SetNumArgs(std::move(info));
@@ -77,7 +77,7 @@ class ArgumentBuilder final {
   // If not given, use default from NamesInfo.
   std::unique_ptr<std::string> meta_var_;
   ActionKind action_kind_ = ActionKind::kNoAction;
-  OpenMode open_mode_ = kModeNoMode;
+  absl::string_view open_mode_;
 };
 
 }  // namespace internal

@@ -26,14 +26,5 @@ ConversionResult DefaultParseTraits<bool>::Run(absl::string_view in) {
   return ConversionFailure("not a valid bool value");
 }
 
-ConversionResult CFileOpenTraits::Run(absl::string_view in, OpenMode mode) {
-  auto mode_str = ModeToChars(mode);
-  auto* file = std::fopen(in.data(), mode_str.c_str());
-  if (file) return ConversionSuccess(file);
-  // TODO: make error msg simple.
-  // auto error = absl::base_internal::StrError(errno);
-  return ConversionFailure();
-}
-
 }  // namespace internal
 }  // namespace argparse
