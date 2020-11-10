@@ -27,7 +27,9 @@ using ScopedFile = std::unique_ptr<FILE, CloseFile>;
 namespace internal {
 namespace open_traits_internal {
 
-std::ios_base::openmode CharsToStreamMode(absl::string_view chars);
+using StdIosBaseOpenMode = std::ios_base::openmode;
+
+StdIosBaseOpenMode CharsToStreamMode(absl::string_view chars);
 
 inline bool ArgparseOpen(absl::string_view name, absl::string_view mode,
                          ScopedFile* file) {
