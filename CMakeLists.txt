@@ -45,8 +45,6 @@ elseif (ARGPARSE_USE_ARGP)
     if (NOT HAVE_ARGP_H)
         message(FATAL "argparse needs argp.h (GNU argument parser library) to work.")
     endif()
-else()
-    message(FATAL "A parser must be selected")
 endif()
 
 
@@ -79,6 +77,8 @@ if (ARGPARSE_USE_GFLAGS)
     list(APPEND ARGPARSE_SOURCE ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-gflags-parser.cc)
 elseif (ARGPARSE_USE_ARGP)
     list(APPEND ARGPARSE_SOURCE ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-argp-parser.cc)
+else() 
+    list(APPEND ARGPARSE_SOURCE ${CMAKE_SOURCE_DIR}/argparse/internal/argparse-default-parser.cc)
 endif()
 
 add_library(argparse ${ARGPARSE_SOURCE})

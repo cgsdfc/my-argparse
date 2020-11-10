@@ -34,7 +34,7 @@ cc_library(
     ] + select({
         ":use_gflags": [ "argparse/internal/argparse-gflags-parser.cc", ],
         ":use_argp": [ "argparse/internal/argparse-argp-parser.cc", ],
-        "//conditions:default": [],
+        "//conditions:default": [ "argparse/internal/argparse-default-parser.cc", ],
     }),
 
     hdrs = [
@@ -64,7 +64,7 @@ cc_library(
     ] + select({
         ":use_gflags": [ "argparse/internal/argparse-gflags-parser.h" ],
         ":use_argp": [ "argparse/internal/argparse-argp-parser.h", ],
-        "//conditions:default": [],
+        "//conditions:default": [ "argparse/internal/argparse-default-parser.h", ],
     }),
 
     includes = [
@@ -96,6 +96,7 @@ cc_test(
         "argparse/internal/argparse-test-helper.h",
         "argparse/argparse-conversion-result_test.cc",
         "argparse/internal/argparse-opaque-ptr_test.cc",
+        "argparse/internal/argparse-parse-basic-types_test.cc",
     ],
     linkstatic = 0,
     deps = [
