@@ -143,8 +143,8 @@ class NumArgsInfo {
   // Run() checks if num is valid by returning bool.
   // If invalid, error msg will be set.
   virtual bool Run(unsigned num, std::string* errmsg) = 0;
-  static std::unique_ptr<NumArgsInfo> CreateFromFlag(char flag);
-  static std::unique_ptr<NumArgsInfo> CreateFromNum(int num);
+  static std::unique_ptr<NumArgsInfo> CreateFlag(char flag);
+  static std::unique_ptr<NumArgsInfo> CreateNumber(int num);
 };
 
 class DestInfo final {

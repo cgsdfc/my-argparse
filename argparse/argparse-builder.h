@@ -8,9 +8,9 @@
 #include "argparse/internal/argparse-internal.h"
 
 namespace argparse {
-
-// Implementation details of builder.
+namespace internal {
 namespace builder_internal {
+
 // To be a Builder, befriend this class.
 class BuilderAccessor;
 
@@ -56,18 +56,17 @@ class Dest : private SimpleBuilder<internal::DestInfo> {
   Dest(T* ptr) {
     this->SetObject(internal::DestInfo::CreateFromPtr(ptr));
   }
-  // Dest() = default;
 
  private:
   friend class BuilderAccessor;
 };
 
-class Names final : private SimpleBuilder<internal::NamesInfo> {
+class NameOrNames final : private SimpleBuilder<internal::NamesInfo> {
  public:
-  Names(absl::string_view name) {
+  NameOrNames(const char* name) {
     this->SetObject(internal::NamesInfo::CreateSingleName(name));
   }
-  Names(std::initializer_list<absl::string_view> names) {
+  NameOrNames(std::initializer_list<absl::string_view> names) {
     this->SetObject(internal::NamesInfo::CreateOptionalNames(names));
   }
 
@@ -75,22 +74,20 @@ class Names final : private SimpleBuilder<internal::NamesInfo> {
   friend class BuilderAccessor;
 };
 
-class NumArgs final : private SimpleBuilder<internal::NumArgsInfo> {
+class FlagOrNumber final : private SimpleBuilder<internal::NumArgsInfo> {
  public:
-  NumArgs(int number) {
-    this->SetObject(internal::NumArgsInfo::CreateFromNum(number));
+  FlagOrNumber(int number) {
+    this->SetObject(internal::NumArgsInfo::CreateNumber(number));
   }
-  NumArgs(char flag) {
-    this->SetObject(internal::NumArgsInfo::CreateFromFlag(flag));
+  FlagOrNumber(char flag) {
+    this->SetObject(internal::NumArgsInfo::CreateFlag(flag));
   }
 
  private:
   friend class BuilderAccessor;
 };
 
-}  // namespace builder_internal
-
-class AnyValue : private builder_internal::SimpleBuilder<internal::Any> {
+class AnyValue : private SimpleBuilder<internal::Any> {
  public:
   template <typename T,
             absl::enable_if_t<!std::is_convertible<T, AnyValue>{}>* = nullptr>
@@ -100,10 +97,8 @@ class AnyValue : private builder_internal::SimpleBuilder<internal::Any> {
   }
 
  private:
-  friend class builder_internal::BuilderAccessor;
+  friend class BuilderAccessor;
 };
-
-namespace builder_internal {
 
 // Component of a type-saft Argument's methods.
 template <typename Derived>
@@ -121,7 +116,7 @@ class BasicMethods {
     builder()->SetMetaVar(std::move(val));
     return derived_this();
   }
-  Derived& NumArgs(NumArgs num_args) {
+  Derived& FlagOrNumber(FlagOrNumber num_args) {
     builder()->SetNumArgs(Build(&num_args));
     return derived_this();
   }
@@ -202,23 +197,23 @@ class FileTypeMethods<T, Derived, false> {};
 
 // This is a wrapper of internal::ArgumentBuilder for type-safety.
 template <typename T>
-class ArgumentBuilder final : public BasicMethods<ArgumentBuilder<T>>,
-                              public DestTypeMethods<T, ArgumentBuilder<T>>,
-                              public ValueTypeMethods<T, ArgumentBuilder<T>>,
-                              public FileTypeMethods<T, ArgumentBuilder<T>> {
+class ArgumentBuilderProxy final
+    : public BasicMethods<ArgumentBuilderProxy<T>>,
+      public DestTypeMethods<T, ArgumentBuilderProxy<T>>,
+      public ValueTypeMethods<T, ArgumentBuilderProxy<T>>,
+      public FileTypeMethods<T, ArgumentBuilderProxy<T>> {
  public:
-  ArgumentBuilder(Names names, T* ptr, absl::string_view help)
+  ArgumentBuilderProxy(NameOrNames names, T* ptr)
       : builder_(internal::ArgumentBuilder::Create()) {
     GetBuilder()->SetDest(internal::DestInfo::CreateFromPtr(ptr));
     GetBuilder()->SetNames(builder_internal::Build(&names));
-    GetBuilder()->SetHelp(std::string(help));
   }
 
  private:
-  friend class BasicMethods<ArgumentBuilder<T>>;
-  friend class DestTypeMethods<T, ArgumentBuilder<T>>;
-  friend class ValueTypeMethods<T, ArgumentBuilder<T>>;
-  friend class FileTypeMethods<T, ArgumentBuilder<T>>;
+  friend class BasicMethods<ArgumentBuilderProxy<T>>;
+  friend class DestTypeMethods<T, ArgumentBuilderProxy<T>>;
+  friend class ValueTypeMethods<T, ArgumentBuilderProxy<T>>;
+  friend class FileTypeMethods<T, ArgumentBuilderProxy<T>>;
   friend class BuilderAccessor;
 
   // For being a Builder.
@@ -236,8 +231,9 @@ class SupportAddArgument {
  public:
   // A short positional form of AddArgument().
   template <typename T>
-  Derived& AddArgument(Names names, T* dest, absl::string_view help = {}) {
-    ArgumentBuilder<T> builder(std::move(names), dest, help);
+  Derived& AddArgument(NameOrNames names, T* dest,
+                       absl::string_view help = {}) {
+    ArgumentBuilderProxy<T> builder(std::move(names), dest, help);
     return AddArgument(builder);
   }
   // Use it with Argument().
@@ -275,8 +271,6 @@ class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
     return self->AddArgumentGroupImpl(std::move(title));
   }
 };
-
-}  // namespace builder_internal
 
 class SubCommandProxy final
     : public builder_internal::SupportAddArgumentGroup<SubCommandProxy> {
@@ -426,10 +420,15 @@ class ArgumentParser final
   internal::ArgumentController controller_;
 };
 
-template <typename NamesT, typename T>
-builder_internal::ArgumentBuilder<T> Argument(NamesT names, T* dest,
-                                              absl::string_view help = {}) {
-  return {builder_internal::Names(names), dest, help};
+template < typename T>
+ArgumentBuilderProxy<T> Argument(NameOrNames names, T* dest) {
+  return {std::move(names), dest};
 }
+
+}  // namespace builder_internal
+}  // namespace internal
+
+using internal::builder_internal::Argument;
+using internal::builder_internal::ArgumentParser;
 
 }  // namespace argparse

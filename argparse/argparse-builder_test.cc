@@ -5,19 +5,16 @@
 
 #include "argparse/argparse-builder.h"
 
-#include <gtest/gtest.h>
-
 #include "argparse/internal/argparse-test-helper.h"
+#include "gtest/gtest.h"
 
 namespace argparse {
-namespace {
+namespace internal {
+namespace builder_internal {
+namespace testing_internal {
 
-TEST(AnyValue, Build) {
-  AnyValue any_value(PlainType{});
-  auto val = builder_internal::Build(&any_value);
-  EXPECT_TRUE(val);
-  EXPECT_TRUE(val->GetType() == typeid(PlainType));
+
 }
-
-}  // namespace
+}  // namespace builder_internal
+}  // namespace internal
 }  // namespace argparse

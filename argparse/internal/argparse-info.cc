@@ -189,11 +189,11 @@ std::unique_ptr<TypeInfo> TypeInfo::CreateFileType(Operations* ops,
   return absl::make_unique<FileTypeInfo>(ops, mode);
 }
 
-std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromFlag(char flag) {
+std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFlag(char flag) {
   return absl::make_unique<FlagNumArgsInfo>(flag);
 }
 
-std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateFromNum(int num) {
+std::unique_ptr<NumArgsInfo> NumArgsInfo::CreateNumber(int num) {
   ARGPARSE_CHECK_F(num >= 0, "nargs number must be >= 0");
   return absl::make_unique<NumberNumArgsInfo>(num);
 }
