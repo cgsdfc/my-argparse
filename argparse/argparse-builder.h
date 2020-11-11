@@ -100,58 +100,31 @@ class AnyValue : private SimpleBuilder<internal::Any> {
   friend class BuilderAccessor;
 };
 
+// Component of a type-saft Argument's methods.
 template <typename Derived>
-class MethodsBase {
- protected:
-  template <typename T>
-  using BuilderMethod = void (internal::ArgumentBuilder::*) (T);
-
-  template <typename T>
-  Derived& Invoke(BuilderMethod<T> method, T value) {
-    builder()->*method(std::move(value));
+class BasicMethods {
+ public:
+  Derived& Help(std::string val) {
+    builder()->SetHelp(std::move(val));
+    return derived_this();
+  }
+  Derived& Required(bool val) {
+    builder()->SetRequired(val);
+    return derived_this();
+  }
+  Derived& MetaVar(std::string val) {
+    builder()->SetMetaVar(std::move(val));
+    return derived_this();
+  }
+  Derived& FlagOrNumber(FlagOrNumber num_args) {
+    builder()->SetNumArgs(Build(&num_args));
     return derived_this();
   }
 
  private:
-  Derived& derived_this() { return static_cast<Derived&>(*this); }
   internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
+  Derived& derived_this() { return static_cast<Derived&>(*this); }
 };
-
-template <typename Derived>
-class NonTypeMethodsBase : public MethodsBase<Derived> {
- public:
-  Derived& Help(std::string val) {
-    return Invoke(&ArgumentBuilder::SetHelp, std::move(val));
-  }
-  Derived& Required(bool val) {
-    return Invoke(&ArgumentBuilder::SetRequired, val);
-  }
-  Derived& MetaVar(std::string val) {
-    return Invoke(&ArgumentBuilder::SetMetaVar, std::move(val));
-  }
-  Derived& FlagOrNumber(FlagOrNumber num_args) {
-    return Invoke(&ArgumentBuilder::SetNumArgs,
-                  builder_internal::Build(&num_args));
-  }
-
- private:
-  using MethodsBase<Derived>::Invoke;
-};
-
-// template <typename T, typename Derived>
-// class ActionMethodsBase : public MethodsBase<Derived> {
-// public:
-//   Derived& Action(ActionCallback<T>&& func) {
-//     builder()->SetActionInfo(
-//         internal::ActionInfo::CreateCallbackAction(std::move(func)));
-//     return derived_this();
-//   }
-//   Derived& Action(const char* str) {
-//     builder()->SetActionString(str);
-//     return derived_this();
-//   }
-//   private:
-// };
 
 template <typename T, typename Derived>
 class DestTypeMethods {
@@ -225,7 +198,7 @@ class FileTypeMethods<T, Derived, false> {};
 // This is a wrapper of internal::ArgumentBuilder for type-safety.
 template <typename T>
 class ArgumentBuilderProxy final
-    : public NonTypeMethodsBase<ArgumentBuilderProxy<T>>,
+    : public BasicMethods<ArgumentBuilderProxy<T>>,
       public DestTypeMethods<T, ArgumentBuilderProxy<T>>,
       public ValueTypeMethods<T, ArgumentBuilderProxy<T>>,
       public FileTypeMethods<T, ArgumentBuilderProxy<T>> {
@@ -237,7 +210,7 @@ class ArgumentBuilderProxy final
   }
 
  private:
-  friend class NonTypeMethodsBase<ArgumentBuilderProxy<T>>;
+  friend class BasicMethods<ArgumentBuilderProxy<T>>;
   friend class DestTypeMethods<T, ArgumentBuilderProxy<T>>;
   friend class ValueTypeMethods<T, ArgumentBuilderProxy<T>>;
   friend class FileTypeMethods<T, ArgumentBuilderProxy<T>>;
