@@ -57,7 +57,6 @@ cc_library(
         "argparse/internal/argparse-open-traits.h",
         "argparse/internal/argparse-parse-traits.h",
         "argparse/argparse-builder.h",
-        "argparse/argparse-conversion-result.h",
         "argparse/argparse-traits.h",
         "argparse/argparse.h",
     ] + select({
@@ -93,7 +92,6 @@ cc_test(
     srcs = [
         "argparse/argparse-builder_test.cc",
         "argparse/internal/argparse-test-helper.h",
-        "argparse/argparse-conversion-result_test.cc",
         "argparse/internal/argparse-opaque-ptr_test.cc",
         "argparse/internal/argparse-parse-basic-types_test.cc",
     ],

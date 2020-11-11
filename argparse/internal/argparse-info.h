@@ -215,8 +215,8 @@ class CallbackTypeInfo : public TypeInfo {
   void Run(absl::string_view in, OpsResult* out) override {
     T return_value;
     bool rv = callback_(in, &return_value);
-    *out = OpsResult(rv ? ConversionSuccess(std::move_if_noexcept(return_value))
-                        : ConversionFailure());
+    // *out = OpsResult(rv ? ConversionSuccess(std::move_if_noexcept(return_value))
+    //                     : ConversionFailure());
   }
 
  private:

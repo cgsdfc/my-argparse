@@ -105,7 +105,6 @@ add_executable(argparse_test
     argparse/internal/argparse-parse-basic-types_test.cc
     argparse/internal/argparse-parse-traits_test.cc
     argparse/argparse-builder_test.cc
-    argparse/argparse-conversion-result_test.cc
 )
 
 target_link_libraries(argparse_test argparse gtest gtest_main)

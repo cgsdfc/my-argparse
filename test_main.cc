@@ -1,4 +1,8 @@
-#include "argparse/argparse-conversion-result.h"
+// Copyright (c) 2020 Feng Cong
+// 
+// This software is released under the MIT License.
+// https://opensource.org/licenses/MIT
+
 #include "argparse/argparse.h"
 
 int g_verbose_level;
@@ -11,7 +15,7 @@ int main(int argc, char const* argv[]) {
 
   parser.Description("a program").BugReportEmail("xx@xx.com");
   parser.AddArgument(
-      Argument("--verbose", &g_verbose_level, "Verbose").MetaVar("V"));
+      Argument("--verbose", &g_verbose_level).Help("Verbose").MetaVar("V"));
 
   parser.ParseArgs(argc, argv);
   printf("verbose: %d\n", g_verbose_level);

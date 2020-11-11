@@ -13,8 +13,9 @@
 namespace argparse {
 namespace internal {
 
-// TODO: use strtox directly.
-namespace stl_parse_internal {
+// Don't use strtoxxx since they are difficult to handle.
+// Use these C++'s wrappers instead.
+namespace std_parse_internal {
 
 // For std::stof,stod,stold.
 template <typename T, T (*func)(const std::string&, std::size_t*)>
@@ -73,10 +74,10 @@ absl::enable_if_t<IsStdParseDefined<T>::value, bool> StdParse(
   }
 }
 
-}  // namespace stl_parse_internal
+}  // namespace std_parse_internal
 
-using stl_parse_internal::IsStdParseDefined;
-using stl_parse_internal::StdParse;
+using std_parse_internal::IsStdParseDefined;
+using std_parse_internal::StdParse;
 
 }  // namespace internal
 }  // namespace argparse
