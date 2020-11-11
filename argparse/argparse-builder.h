@@ -106,32 +106,31 @@ class AnyValue : private SimpleBuilder<internal::Any> {
   friend class BuilderAccessor;
 };
 
-#define ARGPARSE_BUILDER_INTERNAL_COMMON()                         \
-  internal::ArgumentBuilder* builder() {                           \
-    return BuilderAccessor::GetBuilder(&derived_this());           \
-  }                                                                \
-  Derived& derived_this() { return static_cast<Derived&>(*this); } \
-  static constexpr bool kMakeSemiColonNecessary = false
+#define ARGPARSE_BUILDER_INTERNAL_COMMON()                        \
+  template <typename Method, typename Arg>                        \
+  Derived& Invoke(Method method, Arg&& arg) {                     \
+    auto* self = static_cast<Derived*>(this);                     \
+    (BuilderAccessor::GetBuilder(self)->*method)(std::move(arg)); \
+    return *self;                                                 \
+  }                                                               \
+  static constexpr bool kForceSemiColon = false
 
 // Component of a type-saft Argument's methods.
 template <typename Derived>
 class NonTypeMethodsBase {
  public:
   Derived& Help(std::string val) {
-    builder()->SetHelp(std::move(val));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetHelp, std::move(val));
   }
   Derived& Required(bool val) {
-    builder()->SetRequired(val);
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetRequired, val);
   }
   Derived& MetaVar(std::string val) {
-    builder()->SetMetaVar(std::move(val));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetMetaVar, std::move(val));
   }
   Derived& NumArgs(FlagOrNumber num_args) {
-    builder()->SetNumArgs(Build(&num_args));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetNumArgs,
+                  BuilderAccessor::Build(&num_args));
   }
 
  private:
@@ -150,7 +149,7 @@ class SelectValueTypeMethods<Derived, T,
                              absl::enable_if_t<std::is_enum<T>::value>> {
  public:
   // TODO:
-  Derived& EnumType() { return derived_this(); }
+  Derived& EnumType() {}
 
  private:
   ARGPARSE_BUILDER_INTERNAL_COMMON();
@@ -161,8 +160,7 @@ class SelectValueTypeMethods<
     Derived, T, absl::enable_if_t<internal::IsOpenDefined<T>::value>> {
  public:
   Derived& FileType(absl::string_view mode) {
-    builder()->SetTypeFileType(mode);
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetTypeFileType, mode);
   }
 
  private:
@@ -173,24 +171,21 @@ class SelectValueTypeMethods<
 template <typename Derived, typename T>
 class ValueTypeMethodsBase : public SelectValueTypeMethods<Derived, T> {
  public:
-  Derived& Action(const char* str) {
-    builder()->SetActionString(str);
-    return derived_this();
+  Derived& Action(absl::string_view str) {
+    return Invoke(&ArgumentBuilder::SetActionString, str);
   }
   Derived& Action(ActionCallback<T>&& func) {
-    builder()->SetActionInfo(
-        internal::ActionInfo::CreateCallbackAction(std::move(func)));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetActionInfo,
+                  internal::ActionInfo::CreateCallbackAction(std::move(func)));
   }
   // To implement append_const and store_const.
   Derived& ConstValue(T&& value) {
-    builder()->SetConstValue(internal::MakeAny<T>(std::move(value)));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetConstValue,
+                  MakeAny<T>(std::move(value)));
   }
   Derived& Type(TypeCallback<T>&& func) {
-    builder()->SetTypeInfo(
-        internal::TypeInfo::CreateCallbackType(std::move(func)));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetTypeInfo,
+                  TypeInfo::CreateCallbackType(std::move(func)));
   }
 
  private:
@@ -215,8 +210,8 @@ template <typename Derived, typename T>
 class DestMethodsBase : public ValueTypeMethodsBase<Derived, T> {
  public:
   Derived& DefaultValue(T&& value) {
-    builder()->SetDefaultValue(internal::MakeAny<T>(std::move(value)));
-    return derived_this();
+    return Invoke(&ArgumentBuilder::SetDefaultValue,
+                  MakeAny<T>(std::move(value)));
   }
 
  private:
@@ -248,14 +243,14 @@ class ArgumentBuilderProxy
       public TypedMethodsBase<ArgumentBuilderProxy<T>, T> {
  public:
   ArgumentBuilderProxy(NameOrNames names, T* ptr) {
-    GetBuilder()->SetDest(internal::DestInfo::CreateFromPtr(ptr));
-    GetBuilder()->SetNames(builder_internal::Build(&names));
+    GetBuilder()->SetDest(DestInfo::CreateFromPtr(ptr));
+    GetBuilder()->SetNames(BuilderAccessor::Build(&names));
   }
 
  private:
-  // For builder_internal::Build()
+  // For BuilderAccessor::Build()
   std::unique_ptr<internal::Argument> Build() { return GetBuilder()->Build(); }
-  // For Base classes.
+  // For BuilderAccessor::GetBuilder()
   internal::ArgumentBuilder* GetBuilder() { return builder_.get(); }
 
   friend class BuilderAccessor;
