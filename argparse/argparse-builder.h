@@ -106,13 +106,13 @@ class AnyValue : private SimpleBuilder<internal::Any> {
   friend class BuilderAccessor;
 };
 
-#define ARGPARSE_BUILDER_INTERNAL_COMMON()                        \
-  template <typename Method, typename Arg>                        \
-  Derived& Invoke(Method method, Arg&& arg) {                     \
-    auto* self = static_cast<Derived*>(this);                     \
-    (BuilderAccessor::GetBuilder(self)->*method)(std::move(arg)); \
-    return *self;                                                 \
-  }                                                               \
+#define ARGPARSE_BUILDER_INTERNAL_COMMON()                         \
+  template <typename Method, typename Arg>                         \
+  ABSL_MUST_USE_RESULT Derived& Invoke(Method method, Arg&& arg) { \
+    auto* self = static_cast<Derived*>(this);                      \
+    (BuilderAccessor::GetBuilder(self)->*method)(std::move(arg));  \
+    return *self;                                                  \
+  }                                                                \
   static constexpr bool kForceSemiColon = false
 
 // Component of a type-saft Argument's methods.
@@ -149,7 +149,10 @@ class SelectValueTypeMethods<Derived, T,
                              absl::enable_if_t<std::is_enum<T>::value>> {
  public:
   // TODO:
-  Derived& EnumType() {}
+  Derived& EnumType(internal::EnumValues<T> values) {
+    return Invoke(&ArgumentBuilder::SetTypeInfo,
+                  TypeInfo::CreateEnumType(values));
+  }
 
  private:
   ARGPARSE_BUILDER_INTERNAL_COMMON();

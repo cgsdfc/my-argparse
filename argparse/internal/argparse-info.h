@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <memory>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/strings/string_view.h"
 #include "argparse/internal/argparse-operations.h"
@@ -181,6 +182,9 @@ class ActionInfo {
       ActionCallback<T> func);
 };
 
+template <typename T>
+using EnumValues = std::initializer_list<std::pair<absl::string_view, T>>;
+
 class TypeInfo {
  public:
   virtual ~TypeInfo() {}
@@ -191,6 +195,9 @@ class TypeInfo {
   // Open a file.
   static std::unique_ptr<TypeInfo> CreateFileType(Operations* ops,
                                                   absl::string_view mode);
+
+  template <typename T>
+  static std::unique_ptr<TypeInfo> CreateEnumType(EnumValues<T> values);
 
   template <typename T>
   static std::unique_ptr<TypeInfo> CreateCallbackType(TypeCallback<T> cb);
@@ -221,6 +228,24 @@ class CallbackTypeInfo : public TypeInfo {
 
  private:
   CallbackType callback_;
+};
+
+template <typename T>
+class EnumTypeInfo final : public TypeInfo {
+ public:
+  explicit EnumTypeInfo(EnumValues<T> values)
+      : TypeInfo(Operations::GetInstance<T>()) {
+    for (const auto& val : values) {
+      value_map_.emplace(val.first, val.second);
+    }
+  }
+
+  void Run(absl::string_view in, OpsResult* out) override {
+    auto iter = value_map_.find(in);
+  }
+
+ private:
+  absl::flat_hash_map<std::string, T> value_map_;
 };
 
 // An action that runs a user-supplied callback.
@@ -258,6 +283,11 @@ template <typename T>
 std::unique_ptr<TypeInfo> TypeInfo::CreateCallbackType(TypeCallback<T> cb) {
   using info_internal::CallbackTypeInfo;
   return absl::make_unique<CallbackTypeInfo<T>>(std::move(cb));
+}
+
+template <typename T>
+std::unique_ptr<TypeInfo> TypeInfo::CreateEnumType(EnumValues<T> values) {
+  return absl::make_unique<info_internal::EnumTypeInfo<T>>(values);
 }
 
 }  // namespace internal

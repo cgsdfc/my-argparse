@@ -19,10 +19,13 @@ int main(int argc, char const* argv[]) {
   parser.AddArgument(
       Argument("--verbose", &g_verbose_level).Help("Verbose").MetaVar("V"));
 
-  Argument("", &fs).FileType("r");
+  enum class A {
+    a, b,
+  };
 
-  // std::vector<int> v;
-  // Argument("", &v).Action()
+  A a_var;
+
+  Argument("a", &a_var).EnumType({{"a", A::a}, {"b", A::b}});
 
   parser.ParseArgs(argc, argv);
   printf("verbose: %d\n", g_verbose_level);
