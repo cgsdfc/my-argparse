@@ -40,6 +40,10 @@ struct BuilderAccessor {
   static auto Build(Builder* builder) -> decltype(builder->Build()) {
     return builder->Build();
   }
+  template <typename Builder>
+  static auto GetBuilder(Builder* builder) -> decltype(builder->GetBuilder()) {
+    return builder->GetBuilder();
+  }
 };
 
 // Call this function on a builder object to obtain the built object.
@@ -48,6 +52,8 @@ auto Build(Builder* b) -> decltype(BuilderAccessor::Build(b)) {
   return BuilderAccessor::Build(b);
 }
 
+// template <typename Builder>
+// auto GetBuilder
 // Creator of DestInfo. For those that need a DestInfo, just take Dest
 // as an arg.
 class Dest : private SimpleBuilder<internal::DestInfo> {
@@ -100,9 +106,16 @@ class AnyValue : private SimpleBuilder<internal::Any> {
   friend class BuilderAccessor;
 };
 
+#define ARGPARSE_BUILDER_INTERNAL_COMMON()                         \
+  internal::ArgumentBuilder* builder() {                           \
+    return BuilderAccessor::GetBuilder(&derived_this());           \
+  }                                                                \
+  Derived& derived_this() { return static_cast<Derived&>(*this); } \
+  static constexpr bool kMakeSemiColonNecessary = false
+
 // Component of a type-saft Argument's methods.
 template <typename Derived>
-class BasicMethods {
+class NonTypeMethodsBase {
  public:
   Derived& Help(std::string val) {
     builder()->SetHelp(std::move(val));
@@ -116,25 +129,52 @@ class BasicMethods {
     builder()->SetMetaVar(std::move(val));
     return derived_this();
   }
-  Derived& FlagOrNumber(FlagOrNumber num_args) {
+  Derived& NumArgs(FlagOrNumber num_args) {
     builder()->SetNumArgs(Build(&num_args));
     return derived_this();
   }
 
  private:
-  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
-  Derived& derived_this() { return static_cast<Derived&>(*this); }
+  ARGPARSE_BUILDER_INTERNAL_COMMON();
 };
 
-template <typename T, typename Derived>
-class DestTypeMethods {
+// Some value_type methods are added according to T.
+// For example, `FileType()` is added for a file type, and EnumType() is added
+// for an enum type.
+// Methods common to all value-type is put into `ValueTypeMethodsBase`.
+template <typename Derived, typename T, typename = void>
+class SelectValueTypeMethods {};
+
+template <typename Derived, typename T>
+class SelectValueTypeMethods<Derived, T,
+                             absl::enable_if_t<std::is_enum<T>::value>> {
  public:
-  Derived& ConstValue(T&& value) {
-    builder()->SetConstValue(internal::MakeAny<T>(std::move(value)));
+  // TODO:
+  Derived& EnumType() { return derived_this(); }
+
+ private:
+  ARGPARSE_BUILDER_INTERNAL_COMMON();
+};
+
+template <typename Derived, typename T>
+class SelectValueTypeMethods<
+    Derived, T, absl::enable_if_t<internal::IsOpenDefined<T>::value>> {
+ public:
+  Derived& FileType(absl::string_view mode) {
+    builder()->SetTypeFileType(mode);
     return derived_this();
   }
-  Derived& DefaultValue(T&& value) {
-    builder()->SetDefaultValue(internal::MakeAny<T>(std::move(value)));
+
+ private:
+  ARGPARSE_BUILDER_INTERNAL_COMMON();
+};
+
+// Methods added here are common to all value-types.
+template <typename Derived, typename T>
+class ValueTypeMethodsBase : public SelectValueTypeMethods<Derived, T> {
+ public:
+  Derived& Action(const char* str) {
+    builder()->SetActionString(str);
     return derived_this();
   }
   Derived& Action(ActionCallback<T>&& func) {
@@ -142,8 +182,9 @@ class DestTypeMethods {
         internal::ActionInfo::CreateCallbackAction(std::move(func)));
     return derived_this();
   }
-  Derived& Action(const char* str) {
-    builder()->SetActionString(str);
+  // To implement append_const and store_const.
+  Derived& ConstValue(T&& value) {
+    builder()->SetConstValue(internal::MakeAny<T>(std::move(value)));
     return derived_this();
   }
   Derived& Type(TypeCallback<T>&& func) {
@@ -153,74 +194,73 @@ class DestTypeMethods {
   }
 
  private:
-  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
-  Derived& derived_this() { return static_cast<Derived&>(*this); }
+  ARGPARSE_BUILDER_INTERNAL_COMMON();
 };
 
-template <typename T, typename Derived,
-          typename ValueType = internal::ValueTypeOf<T>>
-class ValueTypeMethods {
+// For T that does not have a ValueType.
+struct FakeValueTypeMethodsBase {
+  void Action() = delete;
+  void Type() = delete;
+  void ConstValue() = delete;
+};
+
+template <typename Derived, typename T, typename U = internal::ValueTypeOf<T>>
+class TypeMethodsBase : public ValueTypeMethodsBase<Derived, U> {};
+
+template <typename Derived, typename T>
+class TypeMethodsBase<Derived, T, void> : public FakeValueTypeMethodsBase {};
+
+// DestMethodsBase add the methods bound to the type of dest.
+template <typename Derived, typename T>
+class DestMethodsBase : public ValueTypeMethodsBase<Derived, T> {
  public:
-  Derived& ValueTypeConst(ValueType&& value) {
-    builder()->SetConstValue(internal::MakeAny<ValueType>(std::move(value)));
-    return derived_this();
-  }
-  Derived& ValueTypeCallback(TypeCallback<ValueType>&& func) {
-    builder()->SetTypeInfo(
-        internal::TypeInfo::CreateCallbackType(std::move(func)));
+  Derived& DefaultValue(T&& value) {
+    builder()->SetDefaultValue(internal::MakeAny<T>(std::move(value)));
     return derived_this();
   }
 
  private:
-  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
-  Derived& derived_this() { return static_cast<Derived&>(*this); }
+  ARGPARSE_BUILDER_INTERNAL_COMMON();
 };
 
-template <typename T, typename Derived>
-class ValueTypeMethods<T, Derived, void> {};
-
-template <typename T, typename Derived, bool = internal::IsOpenDefined<T>{}>
-class FileTypeMethods {
- public:
-  Derived& FileType(absl::string_view mode) {
-    builder()->SetTypeFileType(mode);
-    return derived_this();
-  }
-
+// Incorperate all the typed methods (methods that depend on T) into one class.
+template <typename Derived, typename T>
+class TypedMethodsBase : public DestMethodsBase<Derived, T>,
+                         public TypeMethodsBase<Derived, T> {
  private:
-  internal::ArgumentBuilder* builder() { return derived_this().GetBuilder(); }
-  Derived& derived_this() { return static_cast<Derived&>(*this); }
+  using DestMethodsBase = DestMethodsBase<Derived, T>;
+  using TypeMethodsBase = TypeMethodsBase<Derived, T>;
+
+ public:
+  using DestMethodsBase::Action;
+  using TypeMethodsBase::Action;
+
+  using DestMethodsBase::Type;
+  using TypeMethodsBase::Type;
+
+  using DestMethodsBase::ConstValue;
+  using TypeMethodsBase::ConstValue;
 };
 
-template <typename T, typename Derived>
-class FileTypeMethods<T, Derived, false> {};
-
-// This is a wrapper of internal::ArgumentBuilder for type-safety.
 template <typename T>
-class ArgumentBuilderProxy final
-    : public BasicMethods<ArgumentBuilderProxy<T>>,
-      public DestTypeMethods<T, ArgumentBuilderProxy<T>>,
-      public ValueTypeMethods<T, ArgumentBuilderProxy<T>>,
-      public FileTypeMethods<T, ArgumentBuilderProxy<T>> {
+class ArgumentBuilderProxy
+    : public NonTypeMethodsBase<ArgumentBuilderProxy<T>>,
+      public TypedMethodsBase<ArgumentBuilderProxy<T>, T> {
  public:
-  ArgumentBuilderProxy(NameOrNames names, T* ptr)
-      : builder_(internal::ArgumentBuilder::Create()) {
+  ArgumentBuilderProxy(NameOrNames names, T* ptr) {
     GetBuilder()->SetDest(internal::DestInfo::CreateFromPtr(ptr));
     GetBuilder()->SetNames(builder_internal::Build(&names));
   }
 
  private:
-  friend class BasicMethods<ArgumentBuilderProxy<T>>;
-  friend class DestTypeMethods<T, ArgumentBuilderProxy<T>>;
-  friend class ValueTypeMethods<T, ArgumentBuilderProxy<T>>;
-  friend class FileTypeMethods<T, ArgumentBuilderProxy<T>>;
-  friend class BuilderAccessor;
-
-  // For being a Builder.
+  // For builder_internal::Build()
   std::unique_ptr<internal::Argument> Build() { return GetBuilder()->Build(); }
-  // For CRTP base classes.
+  // For Base classes.
   internal::ArgumentBuilder* GetBuilder() { return builder_.get(); }
-  std::unique_ptr<internal::ArgumentBuilder> builder_;
+
+  friend class BuilderAccessor;
+  std::unique_ptr<internal::ArgumentBuilder> builder_ =
+      internal::ArgumentBuilder::Create();
 };
 
 // This is a helper that provides add_argument().
@@ -420,7 +460,7 @@ class ArgumentParser final
   internal::ArgumentController controller_;
 };
 
-template < typename T>
+template <typename T>
 ArgumentBuilderProxy<T> Argument(NameOrNames names, T* dest) {
   return {std::move(names), dest};
 }
@@ -430,5 +470,7 @@ ArgumentBuilderProxy<T> Argument(NameOrNames names, T* dest) {
 
 using internal::builder_internal::Argument;
 using internal::builder_internal::ArgumentParser;
+
+#undef ARGPARSE_BUILDER_INTERNAL_COMMON
 
 }  // namespace argparse
