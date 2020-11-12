@@ -179,7 +179,7 @@ class ValueTypeMethodsBase : public SelectValueTypeMethods<Derived, T> {
   }
   Derived& Action(ActionCallback<T>&& func) {
     return Invoke(&ArgumentBuilder::SetActionInfo,
-                  internal::ActionInfo::CreateCallbackAction(std::move(func)));
+                  ActionInfo::CreateCallbackAction(std::move(func)));
   }
   // To implement append_const and store_const.
   Derived& ConstValue(T&& value) {

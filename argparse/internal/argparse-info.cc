@@ -211,7 +211,7 @@ std::unique_ptr<ActionInfo> ActionInfo::CreateBuiltinAction(
     case ActionKind::kStoreTrue:
       // For these two actions, client should pass a true/false as const_value.
       // And they will be handled as StoreConst.
-      ARGPARSE_DCHECK(const_value->GetType() == typeid(bool));
+      ARGPARSE_DCHECK(const_value->TypeIs<bool>());
       ABSL_FALLTHROUGH_INTENDED;
     case ActionKind::kStoreConst:
       return absl::make_unique<StoreConstAction>(dest, const_value);
