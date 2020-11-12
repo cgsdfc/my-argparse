@@ -146,8 +146,9 @@ using any_internal::AnyCast;
 using any_internal::MakeAny;
 
 template <typename T>
-ABSL_MUST_USE_RESULT T TakeValueAndDiscard(std::unique_ptr<Any> any) {
-  return std::move_if_noexcept(*AnyCast<T>(any.get()));
+ABSL_MUST_USE_RESULT T TakeValueAndDiscard(std::unique_ptr<Any>* any) {
+  auto tmp = std::move(*any);
+  return std::move_if_noexcept(*AnyCast<T>(tmp.get()));
 }
 
 }  // namespace internal

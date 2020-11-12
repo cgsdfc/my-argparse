@@ -19,7 +19,7 @@ class AnyTest : public ::testing::Test {
  protected:
 };
 
-using AnyTestTypes = ::testing::Types<int, double, bool, char, std::string>;
+using AnyTestTypes = ::testing::Types<int, double, bool, std::string>;
 TYPED_TEST_SUITE(AnyTest, AnyTestTypes);
 
 TYPED_TEST(AnyTest, TypeIs) {
@@ -62,6 +62,14 @@ TEST(NonTypedAnyTest, CanHoldMoveOnlyType) {
   constexpr auto kDataToStream = "Data";
   AnyCast<MoveOnly>(*any) << kDataToStream;
   EXPECT_EQ(AnyCast<MoveOnly>(*any).str(), kDataToStream);
+}
+
+TYPED_TEST(AnyTest, TakeValueAndDiscard) {
+  auto any = MakeAny<TypeParam>();
+  auto copy = AnyCast<TypeParam>(*any);
+  auto value = TakeValueAndDiscard<TypeParam>(&any);
+  EXPECT_TRUE(!any);
+  EXPECT_EQ(copy, value);
 }
 
 }  // namespace testing_internal
