@@ -5,6 +5,8 @@
 
 #include "argparse/internal/argparse-any.h"
 
+#include <sstream>  // for a move-only type.
+
 #include "gtest/gtest.h"
 
 namespace argparse {
@@ -39,7 +41,6 @@ TYPED_TEST(AnyTest, AnyCast) {
   EXPECT_EQ(*AnyCast<TypeParam>(any.get()), default_value);
 }
 
-
 TEST(NonTypedAnyTest, DestructorDidRun) {
   struct FlipWhenDtorRun {
     bool *value_outside_;
@@ -53,6 +54,14 @@ TEST(NonTypedAnyTest, DestructorDidRun) {
   auto any = MakeAny<FlipWhenDtorRun>(&value);
   any.reset();
   EXPECT_TRUE(value);
+}
+
+TEST(NonTypedAnyTest, CanHoldMoveOnlyType) {
+  using MoveOnly = std::ostringstream;
+  auto any = MakeAny<MoveOnly>();
+  constexpr auto kDataToStream = "Data";
+  AnyCast<MoveOnly>(*any) << kDataToStream;
+  EXPECT_EQ(AnyCast<MoveOnly>(*any).str(), kDataToStream);
 }
 
 }  // namespace testing_internal
