@@ -226,18 +226,18 @@ template <typename Derived, typename T>
 class TypedMethodsBase : public DestMethodsBase<Derived, T>,
                          public TypeMethodsBase<Derived, T> {
  private:
-  using DestMethodsBase = DestMethodsBase<Derived, T>;
-  using TypeMethodsBase = TypeMethodsBase<Derived, T>;
+  using DestBase = DestMethodsBase<Derived, T>;
+  using TypeBase = TypeMethodsBase<Derived, T>;
 
  public:
-  using DestMethodsBase::Action;
-  using TypeMethodsBase::Action;
+  using DestBase::Action;
+  using TypeBase::Action;
 
-  using DestMethodsBase::Type;
-  using TypeMethodsBase::Type;
+  using DestBase::Type;
+  using TypeBase::Type;
 
-  using DestMethodsBase::ConstValue;
-  using TypeMethodsBase::ConstValue;
+  using DestBase::ConstValue;
+  using TypeBase::ConstValue;
 };
 
 template <typename T>
