@@ -76,7 +76,7 @@ class AnyImpl final : public Any {
   }
 
   static AnyImpl& FromRef(Any& self) {
-    return *FromPtr(self);  //
+    return *FromPtr(&self);  //
   }
 
   static const AnyImpl& FromConstRef(const Any& self) {
