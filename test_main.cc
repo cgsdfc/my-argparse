@@ -8,4 +8,5 @@
 using argparse::Argument;
 
 int main(int argc, char const* argv[]) {
+    argparse::ArgumentParser parser;
 }

@@ -118,8 +118,8 @@ template <typename T>
 struct OpsMethod<OpsKind::kStore, T, true> {
   static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
     if (data) {
-      auto value = AnyCast<T>(std::move(data));
-      dest.PutValue(std::move_if_noexcept(value));
+      // auto value = AnyCast<T>(std::move(data));
+      // dest.PutValue(std::move_if_noexcept(value));
     }
   }
 };

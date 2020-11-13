@@ -69,7 +69,7 @@ class Dest : private SimpleBuilder<internal::DestInfo> {
 
 class NameOrNames final : private SimpleBuilder<internal::NamesInfo> {
  public:
-  NameOrNames(const char* name) {
+  NameOrNames(absl::string_view name) {
     this->SetObject(internal::NamesInfo::CreateSingleName(name));
   }
   NameOrNames(std::initializer_list<absl::string_view> names) {
@@ -451,16 +451,22 @@ class ArgumentParser final
   internal::ArgumentController controller_;
 };
 
-template <typename T>
-ArgumentBuilderProxy<T> Argument(NameOrNames names, T* dest) {
-  return {std::move(names), dest};
-}
-
 }  // namespace builder_internal
 }  // namespace internal
 
-using internal::builder_internal::Argument;
-using internal::builder_internal::ArgumentParser;
+using ArgumentParser = internal::builder_internal::ArgumentParser;
+
+template <typename T>
+internal::builder_internal::ArgumentBuilderProxy<T> Argument(
+    absl::string_view name, T* dest) {
+  return {name, dest};
+}
+
+template <typename T>
+internal::builder_internal::ArgumentBuilderProxy<T> Argument(
+    std::initializer_list<absl::string_view> names, T* dest) {
+  return {names, dest};
+}
 
 #undef ARGPARSE_BUILDER_INTERNAL_COMMON
 
