@@ -35,7 +35,7 @@ ArgumentHolder::ArgumentHolder() {
   }
 }
 
-ArgumentGroup* ArgumentHolder::AddArgumentGroup(std::string title) {
+ArgumentGroup* ArgumentHolder::AddArgumentGroup(absl::string_view title) {
   auto group = ArgumentGroup::Create(this);
   group->SetTitle(title);
   auto* group_ptr = group.get();

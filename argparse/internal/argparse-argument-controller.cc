@@ -44,9 +44,9 @@ void ArgumentController::AddArgument(std::unique_ptr<Argument> arg) {
   return container_->GetMainHolder()->AddArgument(std::move(arg));
 }
 
-ArgumentGroup* ArgumentController::AddArgumentGroup(std::string title) {
+ArgumentGroup* ArgumentController::AddArgumentGroup(absl::string_view title) {
   ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  return container_->GetMainHolder()->AddArgumentGroup(std::move(title));
+  return container_->GetMainHolder()->AddArgumentGroup(title);
 }
 
 bool ArgumentController::ParseKnownArgs(ArgArray args,

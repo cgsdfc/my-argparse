@@ -267,13 +267,6 @@ class ArgumentBuilderProxy
 template <typename Derived>
 class SupportAddArgument {
  public:
-  // A short positional form of AddArgument().
-  template <typename T>
-  Derived& AddArgument(NameOrNames names, T* dest,
-                       absl::string_view help = {}) {
-    ArgumentBuilderProxy<T> builder(std::move(names), dest, help);
-    return AddArgument(builder);
-  }
   // Use it with Argument().
   template <typename T>
   Derived& AddArgument(T&& arg) {
@@ -284,9 +277,9 @@ class SupportAddArgument {
 };
 
 // ArgumentGroup: a group of arguments that share the same title.
-class ArgumentGroup final : public SupportAddArgument<ArgumentGroup> {
+class ArgumentGroupProxy final : public SupportAddArgument<ArgumentGroupProxy> {
  public:
-  ArgumentGroup(internal::ArgumentGroup* group) : group_(group) {}
+  ArgumentGroupProxy(internal::ArgumentGroup* group) : group_(group) {}
 
  private:
   // SupportAddArgument implementation.
@@ -294,7 +287,7 @@ class ArgumentGroup final : public SupportAddArgument<ArgumentGroup> {
     group_->AddArgument(std::move(arg));
   }
 
-  friend class SupportAddArgument<ArgumentGroup>;
+  friend class SupportAddArgument<ArgumentGroupProxy>;
   internal::ArgumentGroup* group_;
 };
 
@@ -304,9 +297,9 @@ template <typename Derived>
 class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
  public:
   // Add an argument group to this object.
-  ArgumentGroup AddArgumentGroup(std::string title) {
+  ArgumentGroupProxy AddArgumentGroup(absl::string_view title) {
     auto* self = static_cast<Derived*>(this);
-    return self->AddArgumentGroupImpl(std::move(title));
+    return self->AddArgumentGroupImpl(title);
   }
 };
 
@@ -321,8 +314,8 @@ class SubCommandProxy final
     return sub_->GetHolder()->AddArgument(std::move(arg));
   }
   // SupportAddArgumentGroup:
-  internal::ArgumentGroup* AddArgumentGroupImpl(std::string title) {
-    return sub_->GetHolder()->AddArgumentGroup(std::move(title));
+  internal::ArgumentGroup* AddArgumentGroupImpl(absl::string_view title) {
+    return sub_->GetHolder()->AddArgumentGroup(title);
   }
   friend class SupportAddArgumentGroup<SubCommandProxy>;
   internal::SubCommand* sub_;
@@ -445,8 +438,8 @@ class ArgumentParser final
   void AddArgumentImpl(std::unique_ptr<internal::Argument> arg) {
     return controller_.AddArgument(std::move(arg));
   }
-  internal::ArgumentGroup* AddArgumentGroupImpl(std::string title) {
-    return controller_.AddArgumentGroup(std::move(title));
+  internal::ArgumentGroup* AddArgumentGroupImpl(absl::string_view title) {
+    return controller_.AddArgumentGroup(title);
   }
   internal::SubCommandGroup* AddSubCommandGroupImpl(
       std::unique_ptr<internal::SubCommandGroup> group) {

@@ -29,7 +29,7 @@ class ArgumentController final {
   // Methods forwarded from ArgumentContainer.
   void AddArgument(std::unique_ptr<Argument> arg);
 
-  ArgumentGroup* AddArgumentGroup(std::string title);
+  ArgumentGroup* AddArgumentGroup(absl::string_view title);
 
   SubCommandGroup* AddSubCommandGroup(std::unique_ptr<SubCommandGroup> group) {
     return nullptr;

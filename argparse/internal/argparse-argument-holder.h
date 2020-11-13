@@ -80,7 +80,7 @@ class ArgumentHolder final : private ArgumentGroup::Delegate {
     return GetArgumentGroup(index);
   }
 
-  ArgumentGroup* AddArgumentGroup(std::string title);
+  ArgumentGroup* AddArgumentGroup(absl::string_view title);
 
   // method to add arg to default group (inferred from arg).
   void AddArgument(std::unique_ptr<Argument> arg);
