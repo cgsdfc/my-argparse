@@ -64,13 +64,13 @@ TEST(NonTypedAnyTest, CanHoldMoveOnlyType) {
   EXPECT_EQ(AnyCast<MoveOnly>(*any).str(), kDataToStream);
 }
 
-TYPED_TEST(AnyTest, TakeValueAndDiscard) {
-  auto any = MakeAny<TypeParam>();
-  auto copy = AnyCast<TypeParam>(*any);
-  auto value = TakeValueAndDiscard<TypeParam>(&any);
-  EXPECT_TRUE(!any);
-  EXPECT_EQ(copy, value);
-}
+// TYPED_TEST(AnyTest, TakeValueAndDiscard) {
+//   auto any = MakeAny<TypeParam>();
+//   auto copy = AnyCast<TypeParam>(*any);
+//   auto value = TakeValueAndDiscard<TypeParam>(&any);
+//   EXPECT_TRUE(!any);
+//   EXPECT_EQ(copy, value);
+// }
 
 }  // namespace testing_internal
 }  // namespace internal

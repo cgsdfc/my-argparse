@@ -105,6 +105,12 @@ struct IsOpsSupported<OpsKind::kOpen, T> : IsOpenDefined<T> {};
 // Put the code used only in this module here.
 namespace operations_internal {
 
+template <typename T>
+ABSL_MUST_USE_RESULT T TakeValueAndDiscard(std::unique_ptr<Any> any) {
+  ARGPARSE_INTERNAL_DCHECK(any, "");
+  return std::move_if_noexcept(AnyCast<T>(*any));
+}
+
 template <OpsKind Ops, typename T, bool = IsOpsSupported<Ops, T>{}>
 struct OpsMethod;
 
@@ -117,10 +123,7 @@ struct OpsMethod<Ops, T, false> {
 template <typename T>
 struct OpsMethod<OpsKind::kStore, T, true> {
   static void Run(OpaquePtr dest, std::unique_ptr<Any> data) {
-    if (data) {
-      // auto value = AnyCast<T>(std::move(data));
-      // dest.PutValue(std::move_if_noexcept(value));
-    }
+    if (data) dest.PutValue(TakeValueAndDiscard<T>(std::move(data)));
   }
 };
 
