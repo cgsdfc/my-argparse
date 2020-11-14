@@ -11,14 +11,6 @@
 namespace argparse {
 namespace internal {
 
-enum class ParserOptions {
-  kDescription,
-  kProgramVersion,
-  kProgramName,
-  kProgramUsage,
-  kBugReportEmail,
-};
-
 // This combines the functionality of ArgumentContainer and ArgumentParser and
 // connects them. It exposes an interface that is directly usable by the wrapper
 // layers.

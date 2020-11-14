@@ -62,12 +62,18 @@ GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
 GflagsParser::GflagsParser()
     : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
 
-void GflagsParser::SetProgramVersion(absl::string_view val) {
-  gflags::SetVersionString(val);
-}
-
-void GflagsParser::SetDescription(absl::string_view val) {
-  gflags::SetUsageMessage(val);
+void GflagsParser::SetOption(ParserOptions key, absl::string_view value) {
+  auto val = static_cast<std::string>(value);
+  switch (key) {
+    case ParserOptions::kProgramVersion:
+      gflags::SetVersionString(val);
+      break;
+    case ParserOptions::kDescription:
+      gflags::SetUsageMessage(val);
+      break;
+    default:
+      break;
+  }
 }
 
 bool GflagsParser::ParseKnownArgs(ArgArray args,
@@ -126,7 +132,6 @@ void GflagsParser::Initialize(ArgumentContainer* container) {
 GflagsParser::~GflagsParser() { gflags::ShutDownCommandLineFlags(); }
 
 }  // namespace gflags_parser_internal
-
 
 std::unique_ptr<ArgumentParser> ArgumentParser::CreateDefault() {
   return absl::make_unique<gflags_parser_internal::GflagsParser>();

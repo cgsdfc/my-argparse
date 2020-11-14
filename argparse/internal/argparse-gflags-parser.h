@@ -29,14 +29,10 @@ using GflagsRegisterMap = std::map<std::type_index, GflagRegisterFunc>;
 class GflagsParser final : public ArgumentParser {
  public:
   GflagsParser();
-
-  void SetProgramVersion(absl::string_view val) override;
-  void SetDescription(absl::string_view val) override;
-
+  void SetOption(ParserOptions key, absl::string_view value) override;
   void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args,
                       std::vector<std::string>* unparsed_args) override;
-
   ~GflagsParser() override;
 
  private:

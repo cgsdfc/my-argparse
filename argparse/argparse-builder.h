@@ -304,7 +304,7 @@ class SupportAddArgumentGroup : public SupportAddArgument<Derived> {
 };
 
 class SubCommandProxy final
-    : public builder_internal::SupportAddArgumentGroup<SubCommandProxy> {
+    : public SupportAddArgumentGroup<SubCommandProxy> {
  public:
   SubCommandProxy(internal::SubCommand* sub) : sub_(sub) {}
 
@@ -322,7 +322,7 @@ class SubCommandProxy final
 };
 
 class SubCommand final
-    : private builder_internal::SimpleBuilder<internal::SubCommand> {
+    : private SimpleBuilder<internal::SubCommand> {
  public:
   explicit SubCommand(std::string name, const char* help = {}) {
     this->SetObject(internal::SubCommand::Create(std::move(name)));
@@ -338,7 +338,7 @@ class SubCommand final
   }
 
  private:
-  friend class builder_internal::BuilderAccessor;
+  friend class BuilderAccessor;
 };
 
 class SubCommandGroupProxy final {
@@ -354,7 +354,7 @@ class SubCommandGroupProxy final {
 };
 
 class SubCommandGroup final
-    : private builder_internal::SimpleBuilder<internal::SubCommandGroup> {
+    : private SimpleBuilder<internal::SubCommandGroup> {
  public:
   SubCommandGroup() { this->SetObject(internal::SubCommandGroup::Create()); }
   SubCommandGroup& Title(absl::string_view val) {
@@ -380,11 +380,11 @@ class SubCommandGroup final
   }
 
  private:
-  friend class builder_internal::BuilderAccessor;
+  friend class BuilderAccessor;
 };
 
 class ArgumentParser final
-    : public builder_internal::SupportAddArgumentGroup<ArgumentParser> {
+    : public SupportAddArgumentGroup<ArgumentParser> {
  public:
   ArgumentParser() = default;
 

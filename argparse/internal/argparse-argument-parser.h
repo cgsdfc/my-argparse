@@ -12,8 +12,17 @@
 
 namespace argparse {
 namespace internal {
+
 class SubCommand;
 class ArgumentContainer;
+
+enum class ParserOptions {
+  kDescription,
+  kProgramVersion,
+  kProgramName,
+  kProgramUsage,
+  kBugReportEmail,
+};
 
 // internal::ArgumentParser is the analogy of argparse::ArgumentParser,
 // except that its methods take internal objects as inputs.
@@ -24,13 +33,8 @@ class ArgumentContainer;
 class ArgumentParser {
  public:
   virtual ~ArgumentParser() {}
-  // TODO: use setoption().
   // Receive various options from user.
-  virtual void SetDescription(absl::string_view val) {}
-  virtual void SetBugReportEmail(absl::string_view val) {}
-  virtual void SetProgramName(absl::string_view val) {}
-  virtual void SetProgramUsage(absl::string_view val) {}
-  virtual void SetProgramVersion(absl::string_view val) {}
+  virtual void SetOption(ParserOptions key, absl::string_view value) {}
 
   // Read the content of the ArgumentContainer and prepare for parsing.
   // The container is guaranteed to have longer lifetime than the parser.

@@ -65,23 +65,7 @@ void ArgumentController::Shutdown() {
 
 void ArgumentController::SetOption(ParserOptions key, absl::string_view value) {
   ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
-  switch (key) {
-    case ParserOptions::kDescription:
-      parser_->SetDescription(std::move(value));
-      break;
-    case ParserOptions::kProgramName:
-      parser_->SetProgramName(std::move(value));
-      break;
-    case ParserOptions::kProgramVersion:
-      parser_->SetProgramVersion(std::move(value));
-      break;
-    case ParserOptions::kProgramUsage:
-      parser_->SetProgramUsage(std::move(value));
-      break;
-    case ParserOptions::kBugReportEmail:
-      parser_->SetBugReportEmail(std::move(value));
-      break;
-  }
+  parser_->SetOption(key, value);
 }
 
 }  // namespace internal

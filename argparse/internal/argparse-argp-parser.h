@@ -1,5 +1,5 @@
 // Copyright (c) 2020 Feng Cong
-// 
+//
 // This software is released under the MIT License.
 // https://opensource.org/licenses/MIT
 
@@ -22,14 +22,15 @@ class ArgpParser final : public ArgumentParser {
   ArgpParser();
   void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) override;
-
-  void SetDescription(absl::string_view value) override;
-  void SetProgramVersion(absl::string_view value) override;
-  void SetBugReportEmail(absl::string_view value) override;
+  void SetOption(ParserOptions key, absl::string_view value) override;
 
   ~ArgpParser();
 
  private:
+  void SetDescription(absl::string_view value);
+  void SetProgramVersion(absl::string_view value);
+  void SetBugReportEmail(absl::string_view value);
+
   // Actual handling of each argument.
   error_t Parse(int key, char* arg, struct argp_state* state);
 

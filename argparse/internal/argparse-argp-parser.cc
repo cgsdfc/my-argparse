@@ -88,19 +88,34 @@ void ArgpParser::Initialize(ArgumentContainer* container) {
   parser_.options = options_.data();
 }
 
+void ArgpParser::SetOption(ParserOptions key, absl::string_view value) {
+  switch (key) {
+    case ParserOptions::kBugReportEmail:
+      SetBugReportEmail(value);
+      break;
+    case ParserOptions::kProgramVersion:
+      SetProgramVersion(value);
+      break;
+    case ParserOptions::kDescription:
+      SetDescription(value);
+    default:
+      break;
+  }
+}
+
 void ArgpParser::SetBugReportEmail(absl::string_view value) {
-  bug_address_ = std::move(value);
+  bug_address_ = static_cast<std::string>(value);
   argp_program_bug_address = bug_address_.data();
 }
 
 void ArgpParser::SetProgramVersion(absl::string_view value) {
   // Make sure these two variable syn'ed.
-  program_version_ = std::move(value);
+  program_version_ = static_cast<std::string>(value);
   argp_program_version = program_version_.data();
 }
 
 void ArgpParser::SetDescription(absl::string_view value) {
-  description_ = std::move(value);
+  description_ = static_cast<std::string>(value);
 }
 
 bool ArgpParser::ParseKnownArgs(ArgArray args, std::vector<std::string>* out) {
