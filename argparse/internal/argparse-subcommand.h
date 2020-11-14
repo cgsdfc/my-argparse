@@ -25,49 +25,54 @@ class SubCommand final {
     // Append the aliases to names.
     std::move(val.begin(), val.end(), std::back_inserter(names_));
   }
-  void SetHelp(std::string val) { help_ = std::move(val); }
-  void SetName(std::string val) { names_.front() = std::move(val); }
+  void SetHelp(absl::string_view val) {
+    help_ = static_cast<std::string>(val);  //
+  }
+
+  void SetName(absl::string_view val) {
+    names_.front() = static_cast<std::string>(val);  //
+  }
 
   std::size_t GetNameOrAliasCount() const { return names_.size(); }
   absl::string_view GetNameOrAlias(std::size_t i) const {
     ARGPARSE_DCHECK(i < GetNameOrAliasCount());
     return names_[i];
-  }
-  absl::string_view GetName() const { return GetNameOrAlias(kNameIndex); }
-  absl::string_view GetHelp() const { return help_; }
-  ArgumentHolder* GetHolder() { return &holder_; }
+    }
+    absl::string_view GetName() const { return GetNameOrAlias(kNameIndex); }
+    absl::string_view GetHelp() const { return help_; }
+    ArgumentHolder* GetHolder() { return &holder_; }
 
-  static std::unique_ptr<SubCommand> Create(std::string name) {
-    auto cmd = Create();
-    cmd->SetName(std::move(name));
-    return cmd;
-  }
+    static std::unique_ptr<SubCommand> Create(std::string name) {
+      auto cmd = Create();
+      cmd->SetName(std::move(name));
+      return cmd;
+    }
 
-  static std::unique_ptr<SubCommand> Create() {
-    return absl::WrapUnique(new SubCommand);
-  }
+    static std::unique_ptr<SubCommand> Create() {
+      return absl::WrapUnique(new SubCommand);
+    }
 
- private:
-  SubCommand();
+   private:
+    SubCommand();
 
-  ArgumentHolder holder_;
-  // Name as well as aliases.
-  absl::InlinedVector<std::string, 1> names_;
-  std::string help_;
-};
+    ArgumentHolder holder_;
+    // Name as well as aliases.
+    absl::InlinedVector<std::string, 1> names_;
+    std::string help_;
+  };
 
 // A group of SubCommands, which can have things like description...
 class SubCommandGroup {
  public:
   SubCommand* AddSubCommand(std::unique_ptr<SubCommand> cmd);
 
-  void SetTitle(std::string val);
-  void SetDescription(std::string val);
+  void SetTitle(absl::string_view val);
+  void SetDescription(absl::string_view val);
   void SetAction(std::unique_ptr<ActionInfo> info);
   void SetDest(std::unique_ptr<DestInfo> info);
   void SetRequired(bool val);
-  void SetHelpDoc(std::string val);
-  void SetMetaVar(std::string val);
+  void SetHelpDoc(absl::string_view val);
+  void SetMetaVar(absl::string_view val);
 
   absl::string_view GetTitle();
   absl::string_view GetDescription();

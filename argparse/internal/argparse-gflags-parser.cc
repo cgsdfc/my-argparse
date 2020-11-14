@@ -62,11 +62,11 @@ GflagsRegisterMap CreateRegisterMap(TypeList<Types...>) {
 GflagsParser::GflagsParser()
     : register_map_(CreateRegisterMap(GflagsTypeList{})) {}
 
-void GflagsParser::SetProgramVersion(std::string val) {
+void GflagsParser::SetProgramVersion(absl::string_view val) {
   gflags::SetVersionString(val);
 }
 
-void GflagsParser::SetDescription(std::string val) {
+void GflagsParser::SetDescription(absl::string_view val) {
   gflags::SetUsageMessage(val);
 }
 

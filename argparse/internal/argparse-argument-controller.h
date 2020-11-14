@@ -37,7 +37,7 @@ class ArgumentController final {
 
   // Forward to ArgumentParser.
 
-  void SetOption(ParserOptions key, std::string value);
+  void SetOption(ParserOptions key, absl::string_view value);
 
   // TODO: make API more clear.
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out);

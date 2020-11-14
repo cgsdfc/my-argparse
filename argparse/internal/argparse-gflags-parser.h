@@ -30,8 +30,8 @@ class GflagsParser final : public ArgumentParser {
  public:
   GflagsParser();
 
-  void SetProgramVersion(std::string val) override;
-  void SetDescription(std::string val) override;
+  void SetProgramVersion(absl::string_view val) override;
+  void SetDescription(absl::string_view val) override;
 
   void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args,

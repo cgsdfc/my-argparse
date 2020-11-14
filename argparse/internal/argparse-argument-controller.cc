@@ -63,7 +63,7 @@ void ArgumentController::Shutdown() {
   parser_.reset();
 }
 
-void ArgumentController::SetOption(ParserOptions key, std::string value) {
+void ArgumentController::SetOption(ParserOptions key, absl::string_view value) {
   ARGPARSE_ARGUMENT_CONTROLLER_CHECK_STATE(kActiveState);
   switch (key) {
     case ParserOptions::kDescription:

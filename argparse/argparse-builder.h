@@ -119,14 +119,14 @@ class AnyValue : private SimpleBuilder<internal::Any> {
 template <typename Derived>
 class NonTypeMethodsBase {
  public:
-  Derived& Help(std::string val) {
-    return Invoke(&ArgumentBuilder::SetHelp, std::move(val));
+  Derived& Help(absl::string_view val) {
+    return Invoke(&ArgumentBuilder::SetHelp, val);
   }
   Derived& Required(bool val) {
     return Invoke(&ArgumentBuilder::SetRequired, val);
   }
-  Derived& MetaVar(std::string val) {
-    return Invoke(&ArgumentBuilder::SetMetaVar, std::move(val));
+  Derived& MetaVar(absl::string_view val) {
+    return Invoke(&ArgumentBuilder::SetMetaVar, val);
   }
   Derived& NumArgs(FlagOrNumber num_args) {
     return Invoke(&ArgumentBuilder::SetNumArgs,
@@ -332,8 +332,8 @@ class SubCommand final
     this->GetObject()->SetAliases(std::move(als));
     return *this;
   }
-  SubCommand& Help(std::string val) {
-    this->GetObject()->SetHelp(std::move(val));
+  SubCommand& Help(absl::string_view val) {
+    this->GetObject()->SetHelp(val);
     return *this;
   }
 
@@ -357,20 +357,20 @@ class SubCommandGroup final
     : private builder_internal::SimpleBuilder<internal::SubCommandGroup> {
  public:
   SubCommandGroup() { this->SetObject(internal::SubCommandGroup::Create()); }
-  SubCommandGroup& Title(std::string val) {
-    this->GetObject()->SetTitle(std::move(val));
+  SubCommandGroup& Title(absl::string_view val) {
+    this->GetObject()->SetTitle(val);
     return *this;
   }
-  SubCommandGroup& Description(std::string val) {
-    this->GetObject()->SetDescription(std::move(val));
+  SubCommandGroup& Description(absl::string_view val) {
+    this->GetObject()->SetDescription(val);
     return *this;
   }
-  SubCommandGroup& MetaVar(std::string val) {
-    this->GetObject()->SetMetaVar(std::move(val));
+  SubCommandGroup& MetaVar(absl::string_view val) {
+    this->GetObject()->SetMetaVar(val);
     return *this;
   }
-  SubCommandGroup& Help(std::string val) {
-    this->GetObject()->SetHelpDoc(std::move(val));
+  SubCommandGroup& Help(absl::string_view val) {
+    this->GetObject()->SetHelpDoc(val);
     return *this;
   }
   // TODO: this should be stronge-typed.
@@ -388,29 +388,29 @@ class ArgumentParser final
  public:
   ArgumentParser() = default;
 
-  ArgumentParser& Description(std::string val) {
+  ArgumentParser& Description(absl::string_view val) {
     controller_.SetOption(internal::ParserOptions::kDescription,
-                          std::move(val));
+                          val);
     return *this;
   }
-  ArgumentParser& ProgramVersion(std::string val) {
+  ArgumentParser& ProgramVersion(absl::string_view val) {
     controller_.SetOption(internal::ParserOptions::kProgramVersion,
-                          std::move(val));
+                          val);
     return *this;
   }
-  ArgumentParser& BugReportEmail(std::string val) {
+  ArgumentParser& BugReportEmail(absl::string_view val) {
     controller_.SetOption(internal::ParserOptions::kBugReportEmail,
-                          std::move(val));
+                          val);
     return *this;
   }
   ArgumentParser& ProgramName(std::string& val) {
     controller_.SetOption(internal::ParserOptions::kProgramName,
-                          std::move(val));
+                          val);
     return *this;
   }
   ArgumentParser& ProgramUsage(std::string& val) {
     controller_.SetOption(internal::ParserOptions::kProgramUsage,
-                          std::move(val));
+                          val);
     return *this;
   }
   void ParseArgs(int argc, const char** argv) {

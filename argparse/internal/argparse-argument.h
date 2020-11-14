@@ -58,8 +58,12 @@ class Argument final : public SupportUserData {
     names_info_ = std::move(info);
   }
   void SetRequired(bool required) { is_required_ = required; }
-  void SetHelpDoc(std::string help_doc) { help_doc_ = std::move(help_doc); }
-  void SetMetaVar(std::string meta_var) { meta_var_ = std::move(meta_var); }
+  void SetHelpDoc(absl::string_view value) {
+    help_doc_ = static_cast<std::string>(value);
+  }
+  void SetMetaVar(absl::string_view value) {
+    meta_var_ = static_cast<std::string>(value);
+  }
   void SetDest(std::unique_ptr<DestInfo> info) {
     if (info) dest_info_ = std::move(info);
   }

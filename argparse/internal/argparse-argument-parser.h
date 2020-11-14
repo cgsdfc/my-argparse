@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "absl/strings/string_view.h"
 #include "argparse/internal/argparse-arg-array.h"
 
 namespace argparse {
@@ -25,11 +26,11 @@ class ArgumentParser {
   virtual ~ArgumentParser() {}
   // TODO: use setoption().
   // Receive various options from user.
-  virtual void SetDescription(std::string val) {}
-  virtual void SetBugReportEmail(std::string val) {}
-  virtual void SetProgramName(std::string val) {}
-  virtual void SetProgramUsage(std::string usage) {}
-  virtual void SetProgramVersion(std::string val) {}
+  virtual void SetDescription(absl::string_view val) {}
+  virtual void SetBugReportEmail(absl::string_view val) {}
+  virtual void SetProgramName(absl::string_view val) {}
+  virtual void SetProgramUsage(absl::string_view val) {}
+  virtual void SetProgramVersion(absl::string_view val) {}
 
   // Read the content of the ArgumentContainer and prepare for parsing.
   // The container is guaranteed to have longer lifetime than the parser.

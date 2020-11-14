@@ -57,13 +57,13 @@ class ArgumentBuilder final {
     arg_->SetDefaultValue(std::move(val));
   }
 
-  void SetMetaVar(std::string val) {
-    meta_var_ = absl::make_unique<std::string>(std::move(val));
+  void SetMetaVar(absl::string_view val) {
+    meta_var_ = absl::make_unique<std::string>(val);
   }
 
   void SetRequired(bool val) { arg_->SetRequired(val); }
 
-  void SetHelp(std::string val) { arg_->SetHelpDoc(std::move(val)); }
+  void SetHelp(absl::string_view val) { arg_->SetHelpDoc(val); }
 
   std::unique_ptr<Argument> Build();
 

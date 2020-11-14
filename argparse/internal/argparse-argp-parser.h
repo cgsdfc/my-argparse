@@ -23,9 +23,9 @@ class ArgpParser final : public ArgumentParser {
   void Initialize(ArgumentContainer* container) override;
   bool ParseKnownArgs(ArgArray args, std::vector<std::string>* out) override;
 
-  void SetDescription(std::string value) override;
-  void SetProgramVersion(std::string value) override;
-  void SetBugReportEmail(std::string value) override;
+  void SetDescription(absl::string_view value) override;
+  void SetProgramVersion(absl::string_view value) override;
+  void SetBugReportEmail(absl::string_view value) override;
 
   ~ArgpParser();
 

@@ -88,18 +88,18 @@ void ArgpParser::Initialize(ArgumentContainer* container) {
   parser_.options = options_.data();
 }
 
-void ArgpParser::SetBugReportEmail(std::string value) {
+void ArgpParser::SetBugReportEmail(absl::string_view value) {
   bug_address_ = std::move(value);
   argp_program_bug_address = bug_address_.data();
 }
 
-void ArgpParser::SetProgramVersion(std::string value) {
+void ArgpParser::SetProgramVersion(absl::string_view value) {
   // Make sure these two variable syn'ed.
   program_version_ = std::move(value);
   argp_program_version = program_version_.data();
 }
 
-void ArgpParser::SetDescription(std::string value) {
+void ArgpParser::SetDescription(absl::string_view value) {
   description_ = std::move(value);
 }
 
